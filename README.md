@@ -535,18 +535,18 @@ class MyExtension {
 
 ## Project Structure
 ```
-Arduino2JS/                # Arduino code
-├── Arduino2JS.ino         # Main Arduino sketch
+Pardalote/                # Arduino code
+├── Pardalote.ino         # Main Arduino sketch
 ├── defs.h                 # Protocol definitions and action codes
 ├── NeoPixelExtension.h    # NeoPixel support (up to 8 strips)
 ├── ServoExtension.h       # Servo support (up to 12 servos)
 ├── UltrasonicExtension.h  # Ultrasonic support (up to 8 sensors)
 └── secrets.h              # Your WiFi credentials (create this file)
 
-JS2Arduino/                # Web interface code  
+JavaScript/                # Web interface code  
 ├── index.html             # Main web page template
 ├── sketch.js              # Your project code (edit this!)
-├── arduinoComs.js         # Arduino communication system
+├── pardalote.js         # Arduino communication system
 ├── neoPixel.js            # NeoPixel JavaScript extension
 ├── servo.js               # Servo JavaScript extension
 ├── ultrasonic.js          # Ultrasonic JavaScript extension
