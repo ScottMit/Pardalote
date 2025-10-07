@@ -546,7 +546,7 @@ Pardalote/                # Arduino code
 JavaScript/                # Web interface code  
 ├── index.html             # Main web page template
 ├── sketch.js              # Your project code (edit this!)
-├── pardalote.js         # Arduino communication system
+├── pardalote.js           # Arduino communication system
 ├── neoPixel.js            # NeoPixel JavaScript extension
 ├── servo.js               # Servo JavaScript extension
 ├── ultrasonic.js          # Ultrasonic JavaScript extension
