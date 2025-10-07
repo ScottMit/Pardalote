@@ -1,6 +1,6 @@
 # Simple LED Control Example
 
-A minimal example showing how to control an Arduino LED from a web browser using the Arduino2JS WebSocket communication system.
+A minimal example showing how to control an Arduino LED from a web browser using the Pardalote WebSocket communication system.
 
 ## What This Example Does
 
@@ -25,7 +25,7 @@ This is the simplest possible example of Arduino-to-web communication. It create
 
 ### 1. Set Up Arduino
 
-1. Download the Arduino2JS folder and open the `Arduino2JS.ino` file in the Arduino IDE
+1. Download the Pardalote folder and open the `Pardalote.ino` file in the Arduino IDE
 2. Update your WiFi credentials in the `secrets.h` tab.
 3. Upload the sketch to your Arduino.
 4. Open the Arduino IDE Serial Monitor and make a note of the IP address shown. If you are using an Arduino UNO R4 the address is also shown on the boards LED matrix.
@@ -103,16 +103,16 @@ Once this basic example works, you can:
 
 ## File Structure
 ```
-JS2Arduino/
+Simple LED example/
 ├── index.html      # Web interface
 ├── sketch.js       # Your example code (edit the IP here!)
-├── arduinoComs.js  # Arduino communication library
+├── pardalote.js    # Arduino communication library
 └── README.md       # This file
 ```
 
 ## Learn More
 
-This example uses the Arduino2JS system. See the main project README for:
+This example uses the Pardalote system. See the main project README for:
 - More complex examples
 - NeoPixel LED strip control  
 - Sensor reading examples

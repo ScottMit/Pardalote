@@ -1,6 +1,6 @@
 # P5js Bouncing Circle Example
 
-An interactive p5.js example showing how to control an Arduino LED based on mouse position and read sensor data to control graphics using the Arduino2JS WebSocket communication system.
+An interactive p5.js example showing how to control an Arduino LED based on mouse position and read sensor data to control graphics using the Pardalote WebSocket communication system.
 
 ## What This Example Does
 
@@ -47,7 +47,7 @@ This example demonstrates bidirectional Arduino-to-web communication by creating
 
 ### 2. Set Up Arduino Software
 
-1. Download the Arduino2JS folder and open the `Arduino2JS.ino` file in the Arduino IDE
+1. Download the Pardalote folder and open the `Pardalote.ino` file in the Arduino IDE
 2. Update your WiFi credentials in the `secrets.h` tab
 3. Upload the sketch to your Arduino
 4. Open the Arduino IDE Serial Monitor and note the IP address shown
@@ -160,17 +160,17 @@ Once this example works, you can:
 
 ## File Structure
 ```
-JS2Arduino/
+p5js example/
 ├── index.html      # Web interface with p5.js
 ├── sketch.js       # Your example code (edit the IP here!)
 ├── style.css       # Basic styling
-├── arduinoComs.js  # Arduino communication library
+├── pardalote.js  # Arduino communication library
 └── README.md       # This file
 ```
 
 ## Learn More
 
-This example uses the Arduino2JS system. See the main project README for:
+This example uses the Pardalote system. See the main project README for:
 - More complex examples
 - NeoPixel LED strip control
 - Complete sensor reading examples  

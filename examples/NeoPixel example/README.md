@@ -1,6 +1,6 @@
 # NeoPixel Color Control Example
 
-An interactive p5.js example demonstrating real-time NeoPixel LED strip control using the Arduino2JS WebSocket communication system. Control colorful LED strips directly from your web browser with mouse interaction.
+An interactive p5.js example demonstrating real-time NeoPixel LED strip control using the Pardalote WebSocket communication system. Control colorful LED strips directly from your web browser with mouse interaction.
 
 ## What This Example Does
 
@@ -67,7 +67,7 @@ Install via Arduino IDE: Tools → Manage Libraries
 
 ### 2. Set Up Arduino Software
 
-1. Download the Arduino2JS folder and open `Arduino2JS.ino` in Arduino IDE
+1. Download the Pardalote folder and open `Pardalote.ino` in Arduino IDE
 2. Install the required libraries (WebSocketsServer, ArduinoJson, Adafruit_NeoPixel)
 3. Update your WiFi credentials in the `secrets.h` tab:
    ```cpp
@@ -258,15 +258,14 @@ examples/neopixel-control/
 ├── index.html          # Web interface with p5.js
 ├── sketch.js           # NeoPixel control code (edit IP here!)
 ├── style.css           # Basic styling  
-├── ../../JS2Arduino/   # Arduino communication libraries
-│   ├── arduinoComs.js  # Core communication
-│   └── neoPixel.js     # NeoPixel extension
+├── pardalote.js        # Core communication
+├── neoPixel.js         # NeoPixel extension
 └── README.md           # This file
 ```
 
 ## Learn More
 
-This example uses the Arduino2JS system's NeoPixel extension. See the main project README for:
+This example uses the Pardalote system's NeoPixel extension. See the main project README for:
 - Complete API documentation
 - Multiple device support examples
 - Advanced animation techniques
