@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Arduino LED Control Demo</title>
+    <meta charset="utf-8" />
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 40px;
+            background-color: #f0f0f0;
+        }
+
+        .container {
+            max-width: 500px;
+            margin: 0 auto;
+            background: white;
+            padding: 40px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 30px;
+        }
+
+        .info {
+            background: #e7f3ff;
+            padding: 20px;
+            border-radius: 5px;
+            margin-bottom: 30px;
+            text-align: left;
+        }
+
+        button {
+            font-size: 18px;
+            padding: 15px 30px;
+            margin: 10px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        #led-on {
+            background-color: #28a745;
+            color: white;
+        }
+
+        #led-on:hover {
+            background-color: #218838;
+        }
+
+        #led-off {
+            background-color: #dc3545;
+            color: white;
+        }
+
+        #led-off:hover {
+            background-color: #c82333;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>Arduino LED Control Demo</h1>
+
+    <div class="info">
+        <p><strong>Hardware Setup:</strong> Make sure your Arduino is connected to WiFi and the built-in LED on pin 13 is available.</p>
+        <p><strong>Note:</strong> Update the IP address in sketch.js to match your Arduino's IP address.</p>
+    </div>
+
+    <h2>Control LED on Pin 13</h2>
+
+    <button id="led-on">Turn LED ON</button>
+    <button id="led-off">Turn LED OFF</button>
+</div>
+
+<script src="pardalote.js"></script>
+<script src="sketch.js"></script>
+</body>
+</html>
