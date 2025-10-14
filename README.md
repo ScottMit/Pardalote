@@ -590,7 +590,7 @@ To add support for new devices:
 
 ## License
 
-GNU General Public License v3.0 - free to use and modify for any purpose.
+GNU Lesser General Public License Version 2.1 - free to use and modify.
 
 ## Author
 
