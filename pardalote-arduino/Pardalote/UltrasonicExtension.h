@@ -12,6 +12,11 @@
 // blocking pulseIn() on the Arduino and sends the result back.
 // Periodic polling is driven by a JS-side timer.
 //
+// NOTE: pulseIn() blocks the loop for up to timeoutMs milliseconds.
+// Keep the JS poll interval at least 3-4× longer than the timeout,
+// e.g. setTimeout(30) with read(150) or setTimeout(40) with read(200).
+// Longer timeouts reduce the maximum WebSocket responsiveness.
+//
 // Response value is distance in tenths of the requested unit
 // (e.g. 235 = 23.5 cm, or 23.5 inches). -1 = timeout / no echo.
 // ==============================================================
@@ -55,12 +60,13 @@ private:
         unsigned long duration = pulseIn(echo, HIGH, timeout_us);
         if (duration == 0) return -1;
 
-        // Tenths of a cm:   duration(µs) × 0.343 cm/µs ÷ 2 × 10 = duration × 343 / 20000
-        // Tenths of an inch: duration(µs) × 0.135 in/µs ÷ 2 × 10 = duration × 135 / 20000
+        // Speed of sound: 343 m/s = 0.0343 cm/µs. Round trip ÷ 2, × 10 for tenths:
+        //   tenths_cm   = duration × 0.0343 / 2 × 10 = duration × 343  / 2000
+        //   tenths_inch = duration × 0.01350 / 2 × 10 = duration × 135 / 2000
         if (unit == UNIT_INCH)
-            return (int32_t)(duration * 135L / 20000L);
+            return (int32_t)(duration * 135L / 2000L);
         else
-            return (int32_t)(duration * 343L / 20000L);
+            return (int32_t)(duration * 343L / 2000L);
     }
 
 public:

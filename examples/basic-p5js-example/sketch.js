@@ -5,12 +5,12 @@
 // GPL-3.0 License
 // ==============================================================
 
-let ArduinoIP = '10.1.1.161';
+let ArduinoIP = '10.1.1.45';
 
 let arduino;
 
 // Arduino pins - Change this to match the pin you are using
-const POTPIN = 33;
+const POTPIN = 2;
 
 function setup() {
     createCanvas(600, 600);

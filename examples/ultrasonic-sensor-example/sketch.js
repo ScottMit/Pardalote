@@ -5,7 +5,7 @@
 // GPL-3.0 License
 // ==============================================================
 
-let ArduinoIP = '10.0.0.43';
+let ArduinoIP = '10.1.1.45';
 
 let arduino;
 let maxDistance = 200; // Maximum distance to display (cm)
@@ -24,7 +24,7 @@ function setup() {
     // Attach sensor: trig pin 7, echo pin 8
     arduino.ultrasonicSensor.attach(7, 8);
 
-    // Set timeout to 40ms to allow readings up to ~686cm
+    // Set timeout to 40ms to allow readings up to ~600cm
     arduino.ultrasonicSensor.setTimeout(40);
 
     // Configure poll in ms and unit in CM or INCH

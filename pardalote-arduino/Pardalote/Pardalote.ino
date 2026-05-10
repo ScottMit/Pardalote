@@ -52,9 +52,9 @@
 // Extension includes — each self-registers via INSTALL_EXTENSION.
 // Add or remove lines here to include/exclude hardware support.
 // -------------------------------------------------------------------
-#include "ServoExtension.h"
+// #include "ServoExtension.h"
 // #include "NeoPixelExtension.h"
-// #include "UltrasonicExtension.h"
+#include "UltrasonicExtension.h"
 
 // -------------------------------------------------------------------
 // Forward declarations
