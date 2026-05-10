@@ -43,10 +43,8 @@ class Servo extends Extension {
 
         // Write throttling
         this.writeThrottle  = 20;   // min ms between sends
-        this.threshold      = 1;    // min degrees change to send
         this._lastWriteTime = 0;
         this._pendingWrite  = null;
-        this._sentAngle     = null; // last angle THIS client actually sent (null = never sent)
 
         // Periodic read
         this._readTimer    = null;
@@ -105,7 +103,7 @@ class Servo extends Extension {
 
     // -------------------------------------------------------------------
     // write(angle)
-    // Move servo to angle (0–180°). Respects threshold and throttle.
+    // Move servo to angle (0–180°). Respects throttle.
     // Any call to write() cancels an in-progress sweep.
     // -------------------------------------------------------------------
     write(angle) {
@@ -116,7 +114,6 @@ class Servo extends Extension {
         }
 
         angle = Math.max(0, Math.min(180, Math.round(angle)));
-        if (this._sentAngle !== null && Math.abs(angle - this._sentAngle) < this.threshold) return this;
 
         const now = Date.now();
         const wait = this.writeThrottle - (now - this._lastWriteTime);
@@ -140,7 +137,6 @@ class Servo extends Extension {
             [this.logicalId, angle]
         ));
         this.angle          = angle;
-        this._sentAngle     = angle;
         this.micros         = this._angleToMicros(angle);
         this._lastWriteTime = Date.now();
         this._emit('write', { angle });
@@ -155,16 +151,13 @@ class Servo extends Extension {
         if (!this.isAttached) return this;
 
         us = Math.max(this.minPulse, Math.min(this.maxPulse, Math.round(us)));
-        const microThreshold = this.threshold * (this.maxPulse - this.minPulse) / 180;
-        if (Math.abs(us - this.micros) < microThreshold) return this;
 
         this.arduino.send(encodeFrame(
             CMD_SERVO_WRITE_MICROSECONDS, DEVICE_SERVO,
             [this.logicalId, us]
         ));
-        this.micros         = us;
-        this.angle          = this._microsToAngle(us);
-        this._sentAngle     = this.angle;
+        this.micros = us;
+        this.angle  = this._microsToAngle(us);
         this._emit('write', { angle: this.angle, micros: us });
         return this;
     }
@@ -265,8 +258,7 @@ class Servo extends Extension {
     // -------------------------------------------------------------------
     // Configuration
     // -------------------------------------------------------------------
-    setThrottle(ms)       { this.writeThrottle = Math.max(0, ms);      return this; }
-    setThreshold(degrees) { this.threshold = Math.max(0, degrees);     return this; }
+    setThrottle(ms) { this.writeThrottle = Math.max(0, ms); return this; }
 
     // -------------------------------------------------------------------
     // State snapshot
@@ -277,11 +269,9 @@ class Servo extends Extension {
             pin:        this.pin,
             attached:   this.isAttached,
             angle:      this.angle,
-            sentAngle:  this._sentAngle,
             micros:     this.micros,
             minPulse:   this.minPulse,
             maxPulse:   this.maxPulse,
-            threshold:  this.threshold,
             throttle:   this.writeThrottle
         };
     }
