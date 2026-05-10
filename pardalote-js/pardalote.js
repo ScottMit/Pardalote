@@ -226,6 +226,14 @@ class Arduino {
         this._pingMs        = 3000;   // send a ping every 3 s
         this._pongTimeoutMs = 5000;   // force-disconnect if no pong within 5 s
 
+        // Output-pin write callbacks: fired when CMD_DIGITAL_WRITE arrives post-sync.
+        // Map<pin, fn[]> — keyed by pin number, populated via onWrite().
+        this._writeCbs = new Map();
+
+        // True after CMD_SYNC_COMPLETE; false during the announce phase.
+        // Guards against write callbacks firing on announce state-sync frames.
+        this._synced   = false;
+
         // Extensions: keyed by name and by deviceId
         this._extensions  = {};
         this._extByDevice = new Map();
@@ -412,6 +420,12 @@ class Arduino {
         }
         if (frame.cmd === CMD_DIGITAL_WRITE) {
             this._pinValues.set(pin, frame.params[0]);
+            // Post-announce: fire write callbacks so all browsers stay in sync.
+            if (this._synced) {
+                const cbs = this._writeCbs.get(pin);
+                if (cbs) cbs.forEach(fn => fn(frame.params[0], pin));
+                this._emit('change', { pin, value: frame.params[0] });
+            }
             return;
         }
 
@@ -467,6 +481,7 @@ class Arduino {
         this._aliases  = BOARD_ALIASES[this._board] || {};
         this.analogMax = (1 << adcBits) - 1;
         this.connected          = true;
+        this._synced            = false;  // re-entering announce phase
         this._reconnectAttempts = 0;  // genuine connection established
         this._startHeartbeat();
         console.log(`Pardalote: connected to ${this._board}, protocol v${major}.${minor}, analogMax=${this.analogMax}`);
@@ -512,6 +527,7 @@ class Arduino {
         // its state (running) or not (reset) and acts accordingly.
         Object.values(this._extensions).forEach(ext => ext._reRegister());
 
+        this._synced = true;  // announce phase complete — write broadcasts now fire callbacks
         this._flush();
         this._emit('ready');
         console.log('Pardalote: ready');
@@ -656,6 +672,24 @@ class Arduino {
             this.send(encodeFrame(CMD_DIGITAL_READ, pin, [read.interval]));
         }
         read.callbacks.push(callback);
+        return this;
+    }
+
+    // Register a callback fired whenever an output pin's value changes.
+    // The callback receives (value, pin) — value is HIGH (1) or LOW (0).
+    // Callbacks fire for writes from any connected browser (including this one),
+    // but only after the announce phase is complete (not during state sync).
+    onWrite(pin, callback) {
+        pin = this._resolvePin(pin);
+        if (!this._writeCbs.has(pin)) this._writeCbs.set(pin, []);
+        this._writeCbs.get(pin).push(callback);
+        return this;
+    }
+
+    // Remove all onWrite callbacks for a pin.
+    offWrite(pin) {
+        pin = this._resolvePin(pin);
+        this._writeCbs.delete(pin);
         return this;
     }
 

@@ -38,6 +38,7 @@ function buildControlPanel(arduino, boardName, boards) {
         const prev = pinState.get(pin);
         if (prev?.timerId) clearInterval(prev.timerId);
         arduino.end(pin);
+        arduino.offWrite(pin);
         controlsEl.innerHTML = '';
 
         const state = { mode, timerId: null, controlsEl };
@@ -76,8 +77,21 @@ function buildControlPanel(arduino, boardName, boards) {
                 const hiBtn = el('button', 'h-btn h-btn-hi'); hiBtn.textContent = 'HI';
                 const loBtn = el('button', 'h-btn h-btn-lo'); loBtn.textContent = 'LO';
                 const ind   = el('span',  'h-state');          ind.textContent = '—';
-                hiBtn.onclick = () => { arduino.digitalWrite(pin, HIGH); ind.textContent = 'HIGH'; ind.className = 'h-state h-st-hi'; };
-                loBtn.onclick = () => { arduino.digitalWrite(pin, LOW);  ind.textContent = 'LOW';  ind.className = 'h-state h-st-lo'; };
+                hiBtn.onclick = () => arduino.digitalWrite(pin, HIGH);
+                loBtn.onclick = () => arduino.digitalWrite(pin, LOW);
+                // Update indicator whenever any browser writes this pin.
+                // The Arduino echoes every CMD_DIGITAL_WRITE back as a broadcast,
+                // so this callback fires for both local and remote writes.
+                arduino.onWrite(pin, val => {
+                    ind.textContent = val ? 'HIGH' : 'LOW';
+                    ind.className   = 'h-state ' + (val ? 'h-st-hi' : 'h-st-lo');
+                });
+                // Sync indicator with the last known state (set before ready).
+                const known = arduino._pinValues.get(pin);
+                if (known !== undefined) {
+                    ind.textContent = known ? 'HIGH' : 'LOW';
+                    ind.className   = 'h-state ' + (known ? 'h-st-hi' : 'h-st-lo');
+                }
                 // LHS: value → buttons (reads away from board: label | mode | buttons | value)
                 isLeft ? controlsEl.append(ind, hiBtn, loBtn)
                        : controlsEl.append(hiBtn, loBtn, ind);
@@ -103,12 +117,13 @@ function buildControlPanel(arduino, boardName, boards) {
                 const val = el('span', 'h-val'); val.textContent = '0';
                 isLeft ? controlsEl.append(val, bar)
                        : controlsEl.append(bar, val);
+                // Poll at 50 ms; onChange fires on every new value received from Arduino.
+                // All connected browsers get the same broadcast, so bars stay in sync.
                 arduino.analogRead(pin, 50);
-                state.timerId = setInterval(() => {
-                    const v = arduino.analogRead(pin, 50);
+                arduino.onChange(pin, v => {
                     fill.style.width = (v / arduino.analogMax * 100).toFixed(1) + '%';
                     val.textContent = v;
-                }, 100);
+                });
                 break;
             }
         }

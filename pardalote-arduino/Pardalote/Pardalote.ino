@@ -269,12 +269,19 @@ void handleCoreFrame(uint8_t clientNum, const Frame& f) {
             break;
         }
 
-        case CMD_DIGITAL_WRITE:
+        case CMD_DIGITAL_WRITE: {
             if (f.nparams < 1) return;
-            digitalWrite(pin, (int)paramInt(f.params, 0));
+            int32_t wval = paramInt(f.params, 0);
+            digitalWrite(pin, (int)wval);
             if (pin >= 0 && pin < MAX_PIN_NUMBER)
-                _corePinValues[pin] = (uint8_t)paramInt(f.params, 0);
+                _corePinValues[pin] = (uint8_t)wval;
+            // Echo back to all clients so every browser sees the new state.
+            FrameBuilder fb;
+            fb.begin(CMD_DIGITAL_WRITE, (uint16_t)pin);
+            fb.addInt(wval);
+            broadcastFrame(fb);
             break;
+        }
 
         case CMD_ANALOG_WRITE:
             if (f.nparams < 1) return;
