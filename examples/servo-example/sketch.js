@@ -28,7 +28,7 @@ function setup() {
     // Move to center position
     arduino.myServo.center();
 
-    console.log("Servo attached to pin 5");
+    console.log("Servo attached to pin 7");
 }
 
 function draw() {
