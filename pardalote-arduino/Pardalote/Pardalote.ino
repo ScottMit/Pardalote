@@ -61,7 +61,8 @@
 // -------------------------------------------------------------------
 void webSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length);
 void handleCoreFrame(uint8_t clientNum, const Frame& f);
-void performRead(uint8_t clientNum, int pin, uint8_t cmd);
+void performRead(int pin, uint8_t cmd);
+void broadcastFrame(FrameBuilder& fb);
 void sendHello(uint8_t clientNum);
 void announcePins(uint8_t clientNum);
 void sendSyncComplete(uint8_t clientNum);
@@ -112,16 +113,18 @@ Action actions[NUM_ACTIONS];
 uint8_t _corePinModes[MAX_PIN_NUMBER];   // 0xFF = not configured
 uint8_t _corePinValues[MAX_PIN_NUMBER];  // last digitalWrite value (OUTPUT pins)
 
-// Single connected client (WebSocketsServer supports multiple but
-// a typical Pardalote session uses one browser tab).
-uint8_t connectedClient = 255;
+// Connected client bitmask — bit N set means client N is connected.
+// WebSocketsServer supports up to 4 simultaneous clients.
+#define MAX_WS_CLIENTS 4
+uint8_t connectedClients = 0;
+static inline bool anyConnected() { return connectedClients != 0; }
 
 // HELLO is deferred out of the WStype_CONNECTED callback and sent after
 // a short settling delay. This ensures the WebSocket handshake has fully
 // completed on all platforms (critical on ESP32) before any application
-// data flows in either direction.
-bool     pendingHello  = false;
-uint32_t helloAfter    = 0;
+// data flows in either direction. Tracked per-client.
+bool     pendingHello[MAX_WS_CLIENTS] = {};
+uint32_t helloAfter[MAX_WS_CLIENTS]   = {};
 const uint32_t HELLO_DELAY_MS = 50;
 
 // -------------------------------------------------------------------
@@ -164,21 +167,26 @@ void loop() {
     delay(1);   // yield to FreeRTOS idle task — prevents TG0WDT watchdog reset
 #endif
 
-    if (connectedClient == 255) return;
-
-    if (pendingHello && millis() >= helloAfter) {
-        pendingHello = false;
-        sendHello(connectedClient);
-        announcePins(connectedClient);
-        announceAll(connectedClient);
-        sendSyncComplete(connectedClient);
-    }
+    if (!anyConnected()) return;
 
     unsigned long now = millis();
+
+    // Send deferred HELLO + announce to any newly connected client.
+    for (int c = 0; c < MAX_WS_CLIENTS; c++) {
+        if (!(connectedClients & (1 << c))) continue;
+        if (!pendingHello[c] || now < helloAfter[c]) continue;
+        pendingHello[c] = false;
+        sendHello(c);
+        announcePins(c);
+        announceAll(c);
+        sendSyncComplete(c);
+    }
+
+    // Broadcast periodic reads to all connected clients.
     for (int i = 0; i < NUM_ACTIONS; i++) {
         if (actions[i].id == -1) continue;
         if (now - actions[i].lastUpdate < actions[i].interval) continue;
-        performRead(connectedClient, actions[i].id, actions[i].cmd);
+        performRead(actions[i].id, actions[i].cmd);
         actions[i].lastUpdate = now;
     }
 }
@@ -190,18 +198,19 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length)
     switch (type) {
 
         case WStype_DISCONNECTED:
-            if (connectedClient == num) {
-                connectedClient = 255;
-                pendingHello    = false;
+            connectedClients  &= ~(1 << num);
+            pendingHello[num]  = false;
+            // Only clear actions when the last client disconnects.
+            if (!anyConnected()) {
                 for (int i = 0; i < NUM_ACTIONS; i++) actions[i].id = -1;
-                Serial.print('['); Serial.print(num); Serial.println(F("] Disconnected"));
             }
+            Serial.print('['); Serial.print(num); Serial.println(F("] Disconnected"));
             break;
 
         case WStype_CONNECTED:
-            connectedClient = num;
-            pendingHello    = true;
-            helloAfter      = millis() + HELLO_DELAY_MS;
+            connectedClients |= (1 << num);
+            pendingHello[num]  = true;
+            helloAfter[num]    = millis() + HELLO_DELAY_MS;
             Serial.print('['); Serial.print(num); Serial.println(F("] Connected"));
             break;
 
@@ -273,7 +282,7 @@ void handleCoreFrame(uint8_t clientNum, const Frame& f) {
             break;
 
         case CMD_DIGITAL_READ:
-            performRead(clientNum, pin, CMD_DIGITAL_READ);
+            performRead(pin, CMD_DIGITAL_READ);
             if (f.nparams > 0 && paramInt(f.params, 0) > 0) {
                 int slot = getSlot(pin);
                 if (slot >= 0) {
@@ -286,7 +295,7 @@ void handleCoreFrame(uint8_t clientNum, const Frame& f) {
             break;
 
         case CMD_ANALOG_READ:
-            performRead(clientNum, pin, CMD_ANALOG_READ);
+            performRead(pin, CMD_ANALOG_READ);
             if (f.nparams > 0 && paramInt(f.params, 0) > 0) {
                 int slot = getSlot(pin);
                 if (slot >= 0) {
@@ -312,15 +321,15 @@ void handleCoreFrame(uint8_t clientNum, const Frame& f) {
 }
 
 // -------------------------------------------------------------------
-// Read a pin and send the value back
+// Read a pin and broadcast the value to all connected clients.
 // -------------------------------------------------------------------
-void performRead(uint8_t clientNum, int pin, uint8_t cmd) {
+void performRead(int pin, uint8_t cmd) {
     int32_t val = (cmd == CMD_ANALOG_READ) ? analogRead(pin) : digitalRead(pin);
 
     FrameBuilder fb;
     fb.begin(cmd, (uint16_t)pin);
     fb.addInt(val);
-    sendFrame(clientNum, fb);
+    broadcastFrame(fb);
 }
 
 // -------------------------------------------------------------------
@@ -370,12 +379,21 @@ void sendSyncComplete(uint8_t clientNum) {
 }
 
 // -------------------------------------------------------------------
-// sendFrame — the single egress point for all outgoing binary frames.
-// Declared extern in protocol.h so extension headers can call it.
+// sendFrame     — send to one specific client (announce, ping/pong).
+// broadcastFrame — send to all currently connected clients.
+// Both declared extern in protocol.h so extension headers can call them.
 // -------------------------------------------------------------------
 void sendFrame(uint8_t clientNum, FrameBuilder& fb) {
     size_t len = fb.finish();
     webSocket.sendBIN(clientNum, fb.buf, len);
+}
+
+void broadcastFrame(FrameBuilder& fb) {
+    size_t len = fb.finish();
+    for (int c = 0; c < MAX_WS_CLIENTS; c++) {
+        if (connectedClients & (1 << c))
+            webSocket.sendBIN((uint8_t)c, fb.buf, len);
+    }
 }
 
 // -------------------------------------------------------------------

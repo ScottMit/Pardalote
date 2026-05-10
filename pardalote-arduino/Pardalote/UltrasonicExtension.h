@@ -120,7 +120,7 @@ public:
                 fb.begin(CMD_ULTRASONIC_READ, DEVICE_ULTRASONIC);
                 fb.addInt(id);
                 fb.addInt(dist);
-                sendFrame(clientNum, fb);
+                broadcastFrame(fb);
                 break;
             }
 

@@ -157,8 +157,11 @@ public:
 };
 
 // -------------------------------------------------------------------
-// sendFrame — defined in Pardalote.ino, called by extension handlers.
+// sendFrame     — send to one specific client (announce, ping/pong).
+// broadcastFrame — send to all currently connected clients (read responses).
+// Both defined in Pardalote.ino; extern so extension headers can call them.
 // -------------------------------------------------------------------
 extern void sendFrame(uint8_t clientNum, FrameBuilder& fb);
+extern void broadcastFrame(FrameBuilder& fb);
 
 #endif

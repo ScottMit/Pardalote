@@ -109,7 +109,7 @@ public:
                 fb.begin(CMD_SERVO_READ, DEVICE_SERVO);
                 fb.addInt(id);
                 fb.addInt(angle);
-                sendFrame(clientNum, fb);
+                broadcastFrame(fb);
                 break;
             }
 
@@ -120,7 +120,7 @@ public:
                 fb.begin(CMD_SERVO_ATTACHED, DEVICE_SERVO);
                 fb.addInt(id);
                 fb.addInt(isAttached ? 1 : 0);
-                sendFrame(clientNum, fb);
+                broadcastFrame(fb);
                 break;
             }
 
