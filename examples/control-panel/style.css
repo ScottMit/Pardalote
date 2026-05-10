@@ -1,0 +1,195 @@
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: monospace;
+    background: #1a1a1a;
+    color: #ccc;
+    padding: 10px;
+}
+
+/* ── Pinout layout container ── */
+
+.pinout-container {
+    /* dimensions set by JS */
+}
+
+/* ── Horizontal pin card ── */
+
+.h-card {
+    position: absolute;        /* set by JS */
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 0 7px;
+    background: #232323;
+    border: 1px solid #303030;
+}
+
+/* Left cards: controls on far-left, name flush against board */
+.left-card {
+    border-right: none;
+    border-radius: 5px 0 0 5px;
+    padding-right: 5px;
+}
+
+/* Right cards: name flush against board, controls on far-right */
+.right-card {
+    border-left: none;
+    border-radius: 0 5px 5px 0;
+    padding-left: 5px;
+}
+
+/* ── Label-only cards (GND, 3.3V, AREF, etc.) ── */
+
+.label-card {
+    background: transparent;
+    border-color: transparent;
+}
+
+.label-card .h-pin-name {
+    flex: 1;        /* fill card so text-align has room to work */
+}
+
+/* ── Pin name label ── */
+
+.h-pin-name {
+    color: #fff;
+    font-size: 12px;
+    font-weight: bold;
+    white-space: nowrap;
+    min-width: 30px;
+    flex-shrink: 0;
+}
+
+/* For left cards the name is last in DOM → it sits at the right (board) edge.
+   Align it right so it feels flush against the board. */
+.left-card .h-pin-name {
+    text-align: right;
+}
+
+/* ── Pin number badge (IO09 etc.) ── */
+
+.h-pin-num {
+    font-size: 9px;
+    color: #555;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+/* ── Mode selector ── */
+
+.h-mode-select {
+    background: #2c2c2c;
+    color: #999;
+    border: 1px solid #3a3a3a;
+    border-radius: 3px;
+    font-family: monospace;
+    font-size: 10px;
+    padding: 1px 2px;
+    height: 20px;
+    width: 76px;
+    flex-shrink: 0;
+    cursor: pointer;
+}
+
+.h-mode-select:focus { outline: none; border-color: #555; }
+
+/* ── Controls area — fills remaining space ── */
+
+.h-controls {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+}
+
+/* Left card: controls fill leftward → push content to the right */
+.left-card .h-controls {
+    justify-content: flex-end;
+}
+
+/* ── Input mode indicator ── */
+
+.h-indicator {
+    font-size: 11px;
+    font-weight: bold;
+    padding: 1px 7px;
+    border-radius: 3px;
+    background: #2a2a2a;
+    color: #555;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.h-high { background: #1c3a1c; color: #5d5; }
+.h-low  { background: #3a1c1c; color: #e55; }
+
+/* ── Output mode ── */
+
+.h-btn {
+    font-family: monospace;
+    font-size: 10px;
+    border: none;
+    border-radius: 3px;
+    padding: 0 6px;
+    height: 18px;
+    cursor: pointer;
+    flex-shrink: 0;
+    line-height: 18px;
+}
+
+.h-btn:active { filter: brightness(1.3); }
+
+.h-btn-hi { background: #2a4a2a; color: #5d5; }
+.h-btn-hi:hover { background: #3a6a3a; }
+.h-btn-lo { background: #4a2222; color: #e55; }
+.h-btn-lo:hover { background: #6a3030; }
+
+.h-state        { font-size: 10px; color: #444; flex-shrink: 0; }
+.h-st-hi        { color: #5d5; }
+.h-st-lo        { color: #e55; }
+
+/* ── PWM slider ── */
+
+.h-slider {
+    flex: 1;
+    min-width: 60px;
+    max-width: 140px;
+    accent-color: #fa0;
+    cursor: pointer;
+    height: 14px;
+}
+
+.h-val {
+    font-size: 10px;
+    color: #aaa;
+    min-width: 26px;
+    text-align: right;
+    flex-shrink: 0;
+}
+
+/* ── Analog bar ── */
+
+.h-bar {
+    flex: 1;
+    min-width: 60px;
+    max-width: 150px;
+    height: 9px;
+    background: #2a2a2a;
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.h-fill {
+    height: 100%;
+    background: #46a;
+    width: 0%;
+    border-radius: 3px;
+    transition: width 0.08s linear;
+}
