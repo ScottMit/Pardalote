@@ -107,4 +107,22 @@
 #define UNIT_CM   0
 #define UNIT_INCH 1
 
+// -------------------------------------------------------------------
+// MPU (6-DOF IMU) Device ID and Commands (0x28–0x2F)
+// Designed for MPU-6050; adaptable to other I2C IMUs by swapping the
+// I2C register reads in MPUExtension.h (see comments there).
+// -------------------------------------------------------------------
+#define DEVICE_MPU  203
+
+#define CMD_MPU_ATTACH          0x28  // JS→Ar: [id, addr, modelCode, sda?, scl?]
+#define CMD_MPU_DETACH          0x29  // JS→Ar: [id]
+#define CMD_MPU_READ            0x2A  // JS→Ar: [id]
+                                      // Ar→JS: [id, ax, ay, az, gx, gy, gz, temp]  (floats, g and °/s)
+#define CMD_MPU_SET_ACCEL_RANGE 0x2B  // JS→Ar: [id, range]  0=±2g, 1=±4g, 2=±8g, 3=±16g
+#define CMD_MPU_SET_GYRO_RANGE  0x2C  // JS→Ar: [id, range]  0=±250, 1=±500, 2=±1000, 3=±2000 °/s
+#define CMD_MPU_CALIBRATE       0x2D  // JS→Ar: [id, samples?]
+                                      // Ar→JS: [id, ax, ay, az, gx, gy, gz]  offset floats
+// modelCode values are assigned by MPUExtension.h's SENSORS[] table (0-based index).
+// See mpu.js MPU_MODELS for the JS-side name → code mapping.
+
 #endif

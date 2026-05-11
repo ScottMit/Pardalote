@@ -5,7 +5,7 @@
 // GPL-3.0 License
 // ==============================================================
 
-let ArduinoIP = '10.1.1.45'; // Change this to your Arduino's IP
+let ArduinoIP = '172.20.10.12'; // Change this to your Arduino's IP
 
 let arduino;
 let angle = 90; // Starting angle

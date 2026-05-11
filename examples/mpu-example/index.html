@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MPU-6050 Orientation</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div id="hud">
+        <div id="status" class="disconnected">● DISCONNECTED</div>
+
+        <div class="section">
+            <div class="label">ORIENTATION</div>
+            <div id="angles">Roll&nbsp;&nbsp; —°&nbsp;&nbsp;&nbsp; Pitch —°</div>
+        </div>
+
+        <div class="section">
+            <div class="label">ACCEL (g)</div>
+            <div id="accel">X — &nbsp; Y — &nbsp; Z —</div>
+        </div>
+
+        <div class="section">
+            <div class="label">GYRO (°/s)</div>
+            <div id="gyro">X — &nbsp; Y — &nbsp; Z —</div>
+        </div>
+
+        <div class="section">
+            <div id="temp">TEMP —</div>
+        </div>
+
+        <button id="cal-btn" onclick="doCalibrate()">CALIBRATE &nbsp;[C]</button>
+        <div id="cal-msg"></div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/p5@1.11.10/lib/p5.js"></script>
+    <script src="../../pardalote-js/pardalote.js"></script>
+    <script src="../../pardalote-js/mpu.js"></script>
+    <script src="sketch.js"></script>
+</body>
+</html>

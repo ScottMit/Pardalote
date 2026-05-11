@@ -49,6 +49,7 @@ function buildControlPanel(arduino, boardName, boards) {
             (cardRegistry.get(pin) || []).forEach(({ select, controls }) => {
                 if (controls !== controlsEl) {
                     select.value = 'off';
+                    select.classList.remove('active');
                     controls.innerHTML = '';
                 }
             });
@@ -163,7 +164,10 @@ function buildControlPanel(arduino, boardName, boards) {
         });
 
         const controls = el('div', 'h-controls');
-        select.onchange = () => applyMode(num, select.value, controls);
+        select.onchange = () => {
+            select.classList.toggle('active', select.value !== 'off');
+            applyMode(num, select.value, controls);
+        };
 
         // Register this card UI under its pin num (duplicates accumulate here)
         if (!cardRegistry.has(num)) cardRegistry.set(num, []);

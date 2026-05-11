@@ -1,0 +1,77 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+    background: #10121a;
+    overflow: hidden;
+}
+
+canvas { display: block; }
+
+/* ── HUD overlay ─────────────────────────────────────────────── */
+#hud {
+    position: fixed;
+    top: 20px;
+    left: 20px;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 13px;
+    color: #bbb;
+    background: rgba(0, 0, 0, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 6px;
+    padding: 16px 20px;
+    min-width: 240px;
+    line-height: 1.5;
+    pointer-events: none;   /* let clicks fall through to canvas */
+    user-select: none;
+}
+
+/* re-enable pointer events only where needed */
+#hud button { pointer-events: all; }
+
+#status {
+    font-size: 11px;
+    letter-spacing: 1.5px;
+    margin-bottom: 14px;
+}
+#status.connected    { color: #4caf50; }
+#status.disconnected { color: #e53935; }
+
+.section { margin-bottom: 10px; }
+
+.label {
+    font-size: 9px;
+    letter-spacing: 2px;
+    color: #555;
+    margin-bottom: 3px;
+}
+
+#angles {
+    font-size: 16px;
+    color: #fff;
+    letter-spacing: 0.5px;
+}
+
+/* ── Calibrate button ────────────────────────────────────────── */
+#cal-btn {
+    display: block;
+    margin-top: 14px;
+    padding: 6px 14px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 4px;
+    color: #999;
+    font-family: inherit;
+    font-size: 11px;
+    letter-spacing: 1.5px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+}
+#cal-btn:hover  { background: rgba(255, 255, 255, 0.12); color: #eee; }
+#cal-btn:active { background: rgba(255, 255, 255, 0.03); }
+
+#cal-msg {
+    margin-top: 8px;
+    font-size: 11px;
+    color: #666;
+    min-height: 16px;
+}

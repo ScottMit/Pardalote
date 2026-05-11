@@ -22,6 +22,8 @@ Designed for creative coders, design students, and makers who want to connect ph
 - `Adafruit NeoPixel` (if using LED strips)
 - `ESP32Servo` (if using servos on ESP32)
 
+No extra library is needed for the MPU / IMU extension — it reads sensor registers directly over I2C.
+
 ---
 
 ## Quick start
@@ -238,6 +240,7 @@ Each extension automatically gets a logical ID based on its type. Multiple insta
 <script src="servo.js"></script>       <!-- optional extensions -->
 <script src="neoPixel.js"></script>
 <script src="ultrasonic.js"></script>
+<script src="mpu.js"></script>
 <script src="sketch.js"></script>
 ```
 
@@ -437,6 +440,89 @@ arduino.front.getState();  // { trigPin, echoPin, attached, timeoutMs, distance,
 
 ---
 
+## MPU / IMU
+
+Up to **2 IMU sensors** simultaneously. Supports multiple InvenSense MPU and STMicroelectronics LSM6 sensor families with a single extension file. No third-party Arduino library required.
+
+| Model string | Chip | DOF | Default address |
+|---|---|---|---|
+| `'6050'` | InvenSense MPU-6050 | 6 | 0x68 |
+| `'6500'` | InvenSense MPU-6500 | 6 | 0x68 |
+| `'9250'` | InvenSense MPU-9250 | 9 | 0x68 |
+| `'9255'` | InvenSense MPU-9255 | 9 | 0x68 |
+| `'LSM6DS3'`  | STMicro LSM6DS3  | 6 | 0x6A |
+| `'LSM6DSOX'` | STMicro LSM6DSOX | 6 | 0x6A |
+
+```javascript
+arduino.add('imu', new MPU('6050'));
+
+arduino.on('ready', () => {
+    arduino.imu.attach(0x68);           // default I2C address
+    arduino.imu.attach(0x69);           // AD0 pin HIGH
+    arduino.imu.attach(0x68, 21, 22);   // ESP32 custom SDA/SCL pins
+
+    arduino.imu.onRead(({ accel, gyro, temp }) => {
+        // accel: { x, y, z }  in g
+        // gyro:  { x, y, z }  in °/s
+        // temp:                in °C
+        console.log(accel, gyro, temp);
+    });
+
+    arduino.imu.read(20);   // poll every 20 ms (50 Hz)
+    arduino.imu.read(END);  // stop polling
+});
+```
+
+#### Range configuration
+
+```javascript
+// Accel range — 0=±2g (default)  1=±4g  2=±8g  3=±16g
+arduino.imu.setAccelRange(0);
+arduino.imu.setAccelRange(4);   // pass ±g value directly
+
+// Gyro range — 0=±250°/s (default)  1=±500°/s  2=±1000°/s  3=±2000°/s
+arduino.imu.setGyroRange(0);
+arduino.imu.setGyroRange(500);  // pass °/s value directly
+```
+
+Higher accel range handles larger accelerations but reduces resolution. Higher gyro range handles faster rotation but reduces resolution.
+
+#### Calibration
+
+```javascript
+// Place the sensor flat with Z pointing up, then call:
+arduino.imu.calibrate(200);  // 200 samples ≈ 400 ms
+
+arduino.imu.onCalibrate(offsets => {
+    // offsets: { ax, ay, az, gx, gy, gz }  — applied automatically
+    // After calibration: accel.z ≈ +1g  gyro ≈ 0
+});
+```
+
+Calibration offsets are stored on the Arduino and re-sent to any browser that reconnects — no need to recalibrate after a page reload.
+
+#### Events
+
+```javascript
+arduino.imu.on('read',      ({ accel, gyro, temp }) => { });
+arduino.imu.on('calibrate', ({ ax, ay, az, gx, gy, gz }) => { });
+
+// Shorthand
+arduino.imu.onRead(fn);
+arduino.imu.onCalibrate(fn);
+```
+
+#### State snapshot
+
+```javascript
+arduino.imu.getState();
+// { logicalId, model, dof, address, attached,
+//   accelRange, gyroRange, accel, gyro, temp,
+//   calibrated, calibration }
+```
+
+---
+
 ## Enabling extensions in the firmware
 
 Extensions are opt-in. Uncomment the lines you need in `Pardalote.ino`:
@@ -445,6 +531,7 @@ Extensions are opt-in. Uncomment the lines you need in `Pardalote.ino`:
 #include "ServoExtension.h"
 // #include "NeoPixelExtension.h"
 // #include "UltrasonicExtension.h"
+// #include "MPUExtension.h"
 ```
 
 That's all — extensions self-register and require no other changes to the sketch.
@@ -465,13 +552,15 @@ Pardalote_v18/
 │       ├── secrets.h               # Your WiFi credentials (create this file)
 │       ├── ServoExtension.h        # Servo support (up to 8)
 │       ├── NeoPixelExtension.h     # NeoPixel support (up to 4 strips)
-│       └── UltrasonicExtension.h   # Ultrasonic support (up to 4 sensors)
+│       ├── UltrasonicExtension.h   # Ultrasonic support (up to 4 sensors)
+│       └── MPUExtension.h          # IMU support — MPU-6050/6500/9250/9255, LSM6DS3/DSOX
 │
 ├── pardalote-js/
 │   ├── pardalote.js                       # Core library — always include first
 │   ├── servo.js                           # Servo extension
 │   ├── neoPixel.js                        # NeoPixel extension
 │   ├── ultrasonic.js                      # Ultrasonic extension
+│   ├── mpu.js                             # MPU / IMU extension
 │   ├── pardalote-pins-uno-r4-wifi.js      # Pin aliases for UNO R4 WiFi
 │   ├── pardalote-pins-esp32-wrover-dev.js # Pin aliases for ESP32-WROVER-DEV
 │   └── pardalote-pins-firebeetle2-esp32-c5.js
@@ -483,6 +572,7 @@ Pardalote_v18/
     ├── servo-test/                 # Servo angle control
     ├── neopixel-example/           # NeoPixel colour picker
     ├── ultrasonic-sensor-example/  # Distance visualisation
+    ├── mpu-example/                # IMU 3D orientation visualiser
     └── control-panel/              # Multi-device dashboard
 ```
 
@@ -523,6 +613,15 @@ On connect, the Arduino sends its full current state — pin modes, output value
 - Verify the pixel type: `NEO_GRB` works for most WS2812B strips, `NEO_RGB` for some others
 - Call `setBrightness()` — default is 255 but strips vary
 - Always call `show()` after setting pixel colours
+
+**"IMU not responding"**
+- Check SDA and SCL wiring and confirm the I2C address (AD0/SA0 pin state)
+- Check Serial Monitor for `[MPU] WHO_AM_I mismatch` — the model string or wiring is wrong
+- Verify `MPUExtension.h` is uncommented in `Pardalote.ino`
+
+**"IMU readings drift when stationary"**
+- Run calibration with the sensor flat and still: `arduino.imu.calibrate(200)`
+- The complementary filter's `ALPHA` parameter gradually pulls angles back; lower it for faster drift correction
 
 **"Servo jitters"**
 - Use `setThrottle()` to limit write frequency
