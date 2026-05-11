@@ -6,6 +6,7 @@
 // ==============================================================
 
 let ArduinoIP = '172.20.10.12'; // Change this to your Arduino's IP
+const SERVO_PIN = 5;
 
 let arduino;
 let angle = 90; // Starting angle
@@ -23,12 +24,12 @@ function setup() {
     arduino.add('myServo', new Servo());
 
     // Attach servo to pin 5 (common servo pin)
-    arduino.myServo.attach(7);
+    arduino.myServo.attach(SERVO_PIN);
 
     // Move to center position
     arduino.myServo.center();
 
-    console.log("Servo attached to pin 7");
+    console.log("Servo attached to pin " + SERVO_PIN);
 }
 
 function draw() {

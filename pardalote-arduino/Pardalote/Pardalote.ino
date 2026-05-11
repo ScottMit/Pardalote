@@ -55,7 +55,7 @@
 // #include "ServoExtension.h"
 // #include "NeoPixelExtension.h"
 // #include "UltrasonicExtension.h"
-#include "MPUExtension.h"
+// #include "MPUExtension.h"
 
 // -------------------------------------------------------------------
 // Forward declarations
