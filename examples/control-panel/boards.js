@@ -118,6 +118,52 @@ const BOARDS = {
         ],
     },
 
+    'XIAO ESP32-C3': {
+        image:  'boards/xiao-esp32-c3.png',
+        imageW: 300,
+        pins: [
+            // ── Left side (top → bottom) ─────────────────────── x      y
+            { name: 'D0/A0', num:  2, x: 0.069, y: 0.223, modes: ['off', 'input', 'output', 'pwm out', 'analog in'] },
+            { name: 'D1/A1', num:  3, x: 0.069, y: 0.332, modes: ['off', 'input', 'output', 'pwm out', 'analog in'] },
+            { name: 'D2/A2', num:  4, x: 0.069, y: 0.44, modes: ['off', 'input', 'output', 'pwm out', 'analog in'] },
+            { name: 'D3/A3*', num:  5, x: 0.069, y: 0.549, modes: ['off', 'input', 'output', 'pwm out', 'analog in'] },
+            { name: 'D4/SDA', num: 6, x: 0.069, y: 0.658, modes: ['off', 'input', 'output', 'pwm out'] },
+            { name: 'D5/SCL', num:  7, x: 0.069, y: 0.766, modes: ['off', 'input', 'output', 'pwm out'] },
+            { name: 'D6/TX', num:  21, x: 0.069, y: 0.875, modes: ['off', 'input', 'output', 'pwm out'] },
+            // ── Right side (top → bottom) ────────────────────── x      y
+            { name: 'VUSB', x: 0.922, y: 0.223 },
+            { name: 'GND', x: 0.922, y: 0.332 },
+            { name: '3V3', x: 0.922, y: 0.44 },
+            { name: 'D10/MOSI', num:  10, x: 0.922, y: 0.549, modes: ['off', 'input', 'output', 'pwm out'] },
+            { name: 'D9/MISO',   num:  9, x: 0.922, y: 0.658, modes: ['off', 'input', 'output', 'pwm out'] },
+            { name: 'D8/SCK',   num:  8, x: 0.922, y: 0.766, modes: ['off', 'input', 'output', 'pwm out'] },
+            { name: 'D7/RX',   num:  20, x: 0.922, y: 0.875, modes: ['off', 'input', 'output', 'pwm out'] },
+        ],
+    },
+
+    'XIAO ESP32-S3': {
+        image:  'boards/xiao-esp32-s3.png',
+        imageW: 300,
+        pins: [
+            // ── Left side (top → bottom) ─────────────────────── x      y
+            { name: 'D0/A0', num:  1, x: 0.069, y: 0.223, modes: ['off', 'input', 'output', 'pwm out', 'analog in'] },
+            { name: 'D1/A1', num:  2, x: 0.069, y: 0.332, modes: ['off', 'input', 'output', 'pwm out', 'analog in'] },
+            { name: 'D2/A2', num:  3, x: 0.069, y: 0.44, modes: ['off', 'input', 'output', 'pwm out', 'analog in'] },
+            { name: 'D3/A3', num:  4, x: 0.069, y: 0.549, modes: ['off', 'input', 'output', 'pwm out', 'analog in'] },
+            { name: 'D4/A4/SDA', num: 5, x: 0.069, y: 0.658, modes: ['off', 'input', 'output', 'pwm out', 'analog in'] },
+            { name: 'D5/A5/SCL', num:  6, x: 0.069, y: 0.766, modes: ['off', 'input', 'output', 'pwm out', 'analog in'] },
+            { name: 'D6/TX', num:  43, x: 0.069, y: 0.875, modes: ['off', 'input', 'output', 'pwm out'] },
+            // ── Right side (top → bottom) ────────────────────── x      y
+            { name: 'VUSB', x: 0.922, y: 0.223 },
+            { name: 'GND', x: 0.922, y: 0.332 },
+            { name: '3V3', x: 0.922, y: 0.44 },
+            { name: 'D10/A10/MOSI', num:  9, x: 0.922, y: 0.549, modes: ['off', 'input', 'output', 'pwm out', 'analog in'] },
+            { name: 'D9/A9/MISO',   num:  8, x: 0.922, y: 0.658, modes: ['off', 'input', 'output', 'pwm out', 'analog in'] },
+            { name: 'D8/A8/SCK',   num:  7, x: 0.922, y: 0.766, modes: ['off', 'input', 'output', 'pwm out', 'analog in'] },
+            { name: 'D7/RX',   num:  44, x: 0.922, y: 0.875, modes: ['off', 'input', 'output', 'pwm out'] },
+        ],
+    },
+
     'FireBeetle 2 ESP32-C5': {
         image:  'boards/firebeetle2-esp32-c5.png',
         imageW: 300,

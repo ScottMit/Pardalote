@@ -675,6 +675,10 @@ arduino.cam.getState();
 // { logicalId, port, streamUrl, snapshotUrl, framesize, quality }
 ```
 
+#### Limitations
+
+Only one browser can receive the MJPEG stream at a time. This is a fundamental limitation of the ESP32 camera driver — `esp_camera_fb_get()` is single-consumer by design. A second browser connecting will see a black screen and only receives the feed once the first disconnects. This behaviour is identical to Espressif's own CameraWebServer example.
+
 ---
 
 ## Enabling extensions in the firmware

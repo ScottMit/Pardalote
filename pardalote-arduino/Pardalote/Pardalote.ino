@@ -36,6 +36,10 @@
     #define PARDALOTE_BOARD "FireBeetle 2 ESP32-C5"
   #elif defined(ARDUINO_ESP32_WROVER_KIT) || defined(ARDUINO_UPESY_WROVER) || defined(ARDUINO_ESP32_DEV)
     #define PARDALOTE_BOARD "ESP32-WROVER-DEV"
+  #elif defined(ARDUINO_XIAO_ESP32C3)
+    #define PARDALOTE_BOARD "XIAO ESP32-C3"
+  #elif defined(ARDUINO_XIAO_ESP32S3) || defined(ARDUINO_XIAO_ESP32S3_PLUS)
+    #define PARDALOTE_BOARD "XIAO ESP32-S3"
   #else
     #define PARDALOTE_BOARD "unknown"
     #warning "PARDALOTE_BOARD not recognised — add '#define PARDALOTE_BOARD \"Your Board\"' at the top of your sketch"
@@ -55,10 +59,10 @@
 // #include "ServoExtension.h"
 // #include "NeoPixelExtension.h"
 // #include "UltrasonicExtension.h"
-// #include "MPUExtension.h"
+#include "MPUExtension.h"
 // Camera — uncomment ONE board define, then uncomment the include.
 // Define names match the ESP CameraWebServer example (camera_pins.h).
-#define CAMERA_MODEL_WROVER_KIT
+// #define CAMERA_MODEL_WROVER_KIT
 // #define CAMERA_MODEL_ESP_EYE
 // #define CAMERA_MODEL_M5STACK_PSRAM
 // #define CAMERA_MODEL_M5STACK_V2_PSRAM
@@ -75,7 +79,7 @@
 // #define CAMERA_MODEL_ESP32S3_EYE
 // #define CAMERA_MODEL_DFRobot_FireBeetle2_ESP32S3
 // #define CAMERA_MODEL_DFRobot_Romeo_ESP32S3
-#include "CameraExtension.h"
+// #include "CameraExtension.h"
 
 // -------------------------------------------------------------------
 // Forward declarations
@@ -169,6 +173,8 @@ void setup() {
     while (WiFi.localIP() == IPAddress(0, 0, 0, 0)) delay(100);
 #endif
 
+    Serial.print(F("Board: "));
+    Serial.println(F(PARDALOTE_BOARD));
     Serial.print(F("IP: "));
     Serial.println(WiFi.localIP());
 

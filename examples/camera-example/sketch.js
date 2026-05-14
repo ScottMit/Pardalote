@@ -5,7 +5,7 @@
 // GPL-3.0 License
 // ==============================================================
 
-const ARDUINO_IP  = '10.1.1.128';  // update to match your Arduino
+const ARDUINO_IP  = '10.1.1.149';  // update to match your Arduino
 const CAMERA_PORT = 82;
 
 let arduino;

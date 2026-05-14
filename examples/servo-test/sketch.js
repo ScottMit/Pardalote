@@ -3,7 +3,7 @@
 // =============================================
 
 // ── Pin assignments — update when changing boards ──
-const PIN_SERVO = D9;   // servo signal wire
+const PIN_SERVO = 9;   // servo signal wire
 // ──────────────────────────────────────────────────
 
 let arduino, servo;
@@ -12,9 +12,7 @@ let attachBtn, detachBtn;
 let angleSlider;
 let sweepFromInput, sweepToInput, sweepTimeInput;
 
-let confirmedAngle = 90;
-let targetAngle    = 90;
-let isAttached     = false;
+let targetAngle = 90;
 
 const CX = 210;
 const CY = 185;
@@ -79,12 +77,10 @@ function setup() {
     servo   = new Servo();
     arduino.add('servo', servo);
 
-    servo.onWrite(({ angle }) => {
-        confirmedAngle = angle;
-    });
-
-    servo.onAttached(({ attached }) => {
-        isAttached = attached;
+    // Sync slider to the servo's restored angle after (re)connect
+    arduino.on('ready', () => {
+        targetAngle = servo.angle;
+        angleSlider.value(servo.angle);
     });
 }
 
@@ -112,7 +108,7 @@ function draw() {
     // — Active arc (0 to confirmed, orange) —
     stroke(255, 160, 0);
     strokeWeight(4);
-    drawServoArc(0, confirmedAngle);
+    drawServoArc(0, servo.angle);
 
     // — Target tick (blue) —
     const ta = servoToRad(targetAngle);
@@ -126,7 +122,7 @@ function draw() {
     );
 
     // — Confirmed needle —
-    const ca = servoToRad(confirmedAngle);
+    const ca = servoToRad(servo.angle);
     stroke(255, 160, 0);
     strokeWeight(2.5);
     line(CX, CY, CX + cos(ca) * R, CY - sin(ca) * R);
@@ -141,12 +137,12 @@ function draw() {
     noStroke();
     textSize(30);
     textAlign(CENTER, TOP);
-    text(`${confirmedAngle}°`, CX, CY + 18);
+    text(`${servo.angle}°`, CX, CY + 18);
 
     // — Attach status —
     textSize(11);
-    fill(isAttached ? color(60, 200, 80) : color(180, 50, 50));
-    text(isAttached ? 'ATTACHED' : 'DETACHED', CX, CY + 52);
+    fill(servo.isAttached ? color(60, 200, 80) : color(180, 50, 50));
+    text(servo.isAttached ? 'ATTACHED' : 'DETACHED', CX, CY + 52);
 
     // — 0° / 180° labels —
     fill(100);

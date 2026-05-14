@@ -181,3 +181,6 @@ Note: `loadPixels()` on every frame is CPU-intensive. For heavy processing, cons
 
 **Canvas size doesn't match stream**
 - The canvas size and stream resolution are independent. `image(camEl, 0, 0, width, height)` scales the stream to fill the canvas. Adjust `createCanvas()` dimensions to match your desired aspect ratio.
+
+**Only one browser can receive the stream at a time**
+- This is a fundamental limitation of the ESP32 camera driver. The camera's `esp_camera_fb_get()` function is single-consumer by design — only one HTTP client can receive MJPEG frames at a time. A second browser connecting will see a black screen and will only get the feed once the first disconnects. This behaviour is identical to Espressif's own CameraWebServer example. Multi-client streaming requires a dedicated FreeRTOS task that owns the camera, copies each frame to a shared PSRAM buffer, and fans it out to all connected clients — this is not currently implemented in Pardalote.

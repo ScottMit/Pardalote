@@ -11,7 +11,7 @@
 // ==============================================================
 
 // ── Change this to your Arduino's IP address ─────────────────
-const ARDUINO_IP = '172.20.10.12';
+const ARDUINO_IP = '10.1.1.161';
 
 // ── Tuning ───────────────────────────────────────────────────
 const POLL_MS = 20;    // sensor poll interval ms (50 Hz)

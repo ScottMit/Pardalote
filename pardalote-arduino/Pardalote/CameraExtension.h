@@ -416,6 +416,7 @@ private:
 
         while (res == ESP_OK) {
             delay(1);  // yield to main loop so WebSocket events are processed between frames
+
             camera_fb_t* fb = esp_camera_fb_get();
             if (!fb) {
                 Serial.println(F("[Camera] Frame capture failed"));
@@ -514,7 +515,6 @@ private:
         cfg.server_port      = port;
         cfg.max_open_sockets = 4;                        // stream + snapshot + headroom
         cfg.uri_match_fn     = httpd_uri_match_wildcard; // strip query strings before routing
-        cfg.task_priority    = 1;                        // match Arduino main loop — prevents starving WebSocket
 
         if (httpd_start(&_server, &cfg) != ESP_OK) {
             Serial.println(F("[Camera] HTTP server start failed"));
@@ -547,21 +547,25 @@ private:
     }
 
     // ----------------------------------------------------------------
-    // Stop the HTTP server and release the camera hardware.
-    // Called automatically after CAMERA_IDLE_TIMEOUT_MS with no clients.
+    // Stop the HTTP server immediately — frees WiFi bandwidth so
+    // WebSocket clients can reconnect without competing with MJPEG.
     // ----------------------------------------------------------------
-    static void _stopStream() {
-        if (_serverRunning) {
-            httpd_stop(_server);
-            _server        = nullptr;
-            _serverRunning = false;
-            Serial.println(F("[Camera] HTTP server stopped"));
-        }
-        if (_cameraReady) {
-            esp_camera_deinit();
-            _cameraReady = false;
-            Serial.println(F("[Camera] Camera deinit"));
-        }
+    static void _stopHttpServer() {
+        if (!_serverRunning) return;
+        httpd_stop(_server);
+        _server        = nullptr;
+        _serverRunning = false;
+        Serial.println(F("[Camera] HTTP server stopped"));
+    }
+
+    // ----------------------------------------------------------------
+    // Deinit the camera hardware — saves power after a longer idle.
+    // ----------------------------------------------------------------
+    static void _stopCamera() {
+        if (!_cameraReady) return;
+        esp_camera_deinit();
+        _cameraReady = false;
+        Serial.println(F("[Camera] Camera deinit"));
     }
 
 public:
@@ -650,28 +654,33 @@ public:
 
     // ----------------------------------------------------------------
     // Called by the extension registry when any WebSocket client drops.
-    // Starts the idle-shutdown countdown when the last client leaves.
+    // HTTP server stops immediately so WiFi is free for reconnection.
+    // Camera hardware stays warm for CAMERA_IDLE_TIMEOUT_MS in case
+    // a client reconnects quickly — only then is it fully deinited.
     // ----------------------------------------------------------------
     static void disconnect(uint8_t /*clientNum*/) {
         if (_clientCount > 0) _clientCount--;
-        if (_clientCount == 0 && (_serverRunning || _cameraReady)) {
-            _shutdownPending = true;
-            _shutdownStart   = millis();
-            Serial.print(F("[Camera] No clients — stopping in "));
-            Serial.print(CAMERA_IDLE_TIMEOUT_MS / 1000);
-            Serial.println(F("s"));
+        if (_clientCount == 0) {
+            _stopHttpServer();
+            if (_cameraReady) {
+                _shutdownPending = true;
+                _shutdownStart   = millis();
+                Serial.print(F("[Camera] Camera warm for "));
+                Serial.print(CAMERA_IDLE_TIMEOUT_MS / 1000);
+                Serial.println(F("s"));
+            }
         }
     }
 
     // ----------------------------------------------------------------
-    // Called every loop() iteration. Fires the idle shutdown once the
-    // timeout has elapsed with no clients reconnecting.
+    // Called every loop() iteration. Deinits the camera hardware once
+    // the timeout has elapsed with no clients reconnecting.
     // ----------------------------------------------------------------
     static void loop() {
         if (!_shutdownPending) return;
         if (millis() - _shutdownStart < CAMERA_IDLE_TIMEOUT_MS) return;
         _shutdownPending = false;
-        _stopStream();
+        _stopCamera();
     }
 };
 
