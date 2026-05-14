@@ -6,8 +6,7 @@
 // ==============================================================
 
 // UPDATE THIS IP ADDRESS TO MATCH YOUR ARDUINO
-let ArduinoIP = '172.20.10.12';
-let LED_PIN = 13;
+let ArduinoIP = '10.1.1.45';
 
 let arduino;
 
@@ -21,15 +20,15 @@ window.addEventListener('load', function() {
     // connection is established, not before, as the frame would otherwise
     // be sent before the WebSocket is open and silently dropped.
     arduino.on('ready', function() {
-        arduino.pinMode(LED_PIN, OUTPUT);  // Built-in LED
+        arduino.pinMode(15, OUTPUT);  // Built-in LED
     });
 
     // Set up button event listeners
     document.getElementById('led-on').addEventListener('click', function() {
-        arduino.digitalWrite(LED_PIN, HIGH);
+        arduino.digitalWrite(15, HIGH);
     });
 
     document.getElementById('led-off').addEventListener('click', function() {
-        arduino.digitalWrite(LED_PIN, LOW);
+        arduino.digitalWrite(15, LOW);
     });
 });

@@ -114,6 +114,17 @@
 // -------------------------------------------------------------------
 #define DEVICE_MPU  203
 
+// -------------------------------------------------------------------
+// Camera Device ID and Commands (0x30–0x32)
+// ESP32-S3 only — MJPEG stream and JPEG snapshot served over HTTP.
+// -------------------------------------------------------------------
+#define DEVICE_CAMERA          204
+
+#define CMD_CAMERA_INIT        0x30  // JS→Ar: [id, port] — start camera + HTTP server
+                                     // Ar→JS: [id, port] — confirms stream is live
+#define CMD_CAMERA_SET_RES     0x31  // JS→Ar: [id, framesize]  (framesize_t enum value)
+#define CMD_CAMERA_SET_QUALITY 0x32  // JS→Ar: [id, quality]    0 = best, 63 = worst
+
 #define CMD_MPU_ATTACH          0x28  // JS→Ar: [id, addr, modelCode, sda?, scl?]
 #define CMD_MPU_DETACH          0x29  // JS→Ar: [id]
 #define CMD_MPU_READ            0x2A  // JS→Ar: [id]

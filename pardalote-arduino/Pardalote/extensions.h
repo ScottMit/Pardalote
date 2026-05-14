@@ -41,10 +41,18 @@ typedef void (*ExtHandler)(uint8_t clientNum,
 // announce itself and re-send any persistent state.
 typedef void (*ExtAnnouncer)(uint8_t clientNum);
 
+// Called when a WebSocket client disconnects.
+typedef void (*ExtDisconnecter)(uint8_t clientNum);
+
+// Called every Arduino loop() iteration for time-based housekeeping.
+typedef void (*ExtLooper)();
+
 struct ExtEntry {
-    uint16_t     deviceId;
-    ExtHandler   handle;
-    ExtAnnouncer announce;
+    uint16_t        deviceId;
+    ExtHandler      handle;
+    ExtAnnouncer    announce;
+    ExtDisconnecter disconnect;  // nullptr if not needed
+    ExtLooper       loop;        // nullptr if not needed
 };
 
 // -------------------------------------------------------------------
@@ -54,11 +62,13 @@ static ExtEntry _extRegistry[MAX_EXTENSIONS];
 static uint8_t  _numExtensions  = 0;
 static bool     _wireInitialised = false;
 
-inline void registerExtension(uint16_t deviceId,
-                               ExtHandler   handle,
-                               ExtAnnouncer announce) {
+inline void registerExtension(uint16_t        deviceId,
+                               ExtHandler      handle,
+                               ExtAnnouncer    announce,
+                               ExtDisconnecter disconnect = nullptr,
+                               ExtLooper       loop       = nullptr) {
     if (_numExtensions < MAX_EXTENSIONS) {
-        _extRegistry[_numExtensions++] = { deviceId, handle, announce };
+        _extRegistry[_numExtensions++] = { deviceId, handle, announce, disconnect, loop };
     } else {
         // Can't use Serial here (may not be initialised yet)
     }
@@ -94,6 +104,28 @@ inline void announceAll(uint8_t clientNum) {
 }
 
 // -------------------------------------------------------------------
+// Notify all extensions that a client has disconnected.
+// -------------------------------------------------------------------
+inline void disconnectAll(uint8_t clientNum) {
+    for (uint8_t i = 0; i < _numExtensions; i++) {
+        if (_extRegistry[i].disconnect) {
+            _extRegistry[i].disconnect(clientNum);
+        }
+    }
+}
+
+// -------------------------------------------------------------------
+// Run per-loop housekeeping for all extensions.
+// -------------------------------------------------------------------
+inline void loopAll() {
+    for (uint8_t i = 0; i < _numExtensions; i++) {
+        if (_extRegistry[i].loop) {
+            _extRegistry[i].loop();
+        }
+    }
+}
+
+// -------------------------------------------------------------------
 // Call before using Wire.begin() in any extension.
 // Prevents double-initialisation when multiple I2C extensions coexist.
 // -------------------------------------------------------------------
@@ -115,8 +147,13 @@ inline void ensureWire() {
 // Example (at the bottom of ServoExtension.h):
 //   INSTALL_EXTENSION(DEVICE_SERVO, ServoExt::handle, ServoExt::announce)
 // -------------------------------------------------------------------
-#define INSTALL_EXTENSION(deviceId, handlerFn, announcerFn)             \
+// Variadic so existing 3-argument extensions need no changes:
+//   INSTALL_EXTENSION(DEVICE_SERVO, ServoExt::handle, ServoExt::announce)
+// Camera passes all four:
+//   INSTALL_EXTENSION(DEVICE_CAMERA, ..., CameraExt::disconnect, CameraExt::loop)
+#define INSTALL_EXTENSION(deviceId, handlerFn, announcerFn, ...)        \
     static bool _ext_reg_##deviceId =                                   \
-        (registerExtension(deviceId, handlerFn, announcerFn), true);
+        (registerExtension(deviceId, handlerFn, announcerFn,            \
+                           ##__VA_ARGS__), true);
 
 #endif

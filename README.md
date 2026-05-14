@@ -69,7 +69,7 @@ If `SECRET_SSID` is defined and EEPROM networks are also stored, Pardalote tries
    - **UNO R4 WiFi:** scrolls across the LED matrix
    - **ESP32:** printed in Serial Monitor at 115200 baud
 
-### 2. Open an example
+### 3. Open an example
 
 Navigate to the `examples/` folder, and pick an example. Update the IP address in `sketch.js` to match your Arduino, and open `index.html` in a browser.
 
@@ -137,7 +137,7 @@ let val = arduino.analogRead(A0, 50);  // already running at 50 ms — just retu
 
 #### ADC range
 
-The analog range depends on the board. Use `arduino.analogMax` — it's set automatically from the HELLO handshake:
+The analog range depends on the board. Use `arduino.analogMax` to get the maximum value — it's set automatically from the HELLO handshake:
 
 | Board | `arduino.analogMax` |
 |---|---|
@@ -188,7 +188,7 @@ Rather than using raw numbers, include the pin file for your board and use named
 // Then in sketch.js
 arduino.pinMode(A0, ANALOG_INPUT, 50);
 arduino.digitalWrite(LED_BUILTIN, HIGH);
-arduino.attach(SDA);
+arduino.imu.attach(SDA);
 ```
 
 Available pin files (in `pardalote-js/`):
@@ -523,6 +523,160 @@ arduino.imu.getState();
 
 ---
 
+## Camera
+
+Streams MJPEG video and serves JPEG snapshots over a separate HTTP server — video never flows through the WebSocket, so it doesn't compete with control messages.
+
+Requires no third-party library beyond the ESP32 Arduino core (which includes `esp_camera` and `esp_http_server`). PSRAM must be present on the board.
+
+### Hardware
+
+Board define names match the ESP CameraWebServer example:
+
+| Board | Define |
+|---|---|
+| Freenove ESP32-WROVER-DEV | `CAMERA_MODEL_WROVER_KIT` |
+| AI-Thinker ESP32-CAM | `CAMERA_MODEL_AI_THINKER` |
+| Seeed Studio XIAO ESP32S3 Sense | `CAMERA_MODEL_XIAO_ESP32S3` |
+| Espressif ESP32-S3-EYE | `CAMERA_MODEL_ESP32S3_EYE` |
+| Espressif ESP-EYE | `CAMERA_MODEL_ESP_EYE` |
+| M5Stack PSRAM | `CAMERA_MODEL_M5STACK_PSRAM` |
+| M5Stack V2 PSRAM | `CAMERA_MODEL_M5STACK_V2_PSRAM` |
+| M5Stack Wide | `CAMERA_MODEL_M5STACK_WIDE` |
+| M5Stack ESP32CAM | `CAMERA_MODEL_M5STACK_ESP32CAM` |
+| M5Stack UnitCam | `CAMERA_MODEL_M5STACK_UNITCAM` |
+| M5Stack CamS3 Unit | `CAMERA_MODEL_M5STACK_CAMS3_UNIT` |
+| TTGO T-Journal | `CAMERA_MODEL_TTGO_T_JOURNAL` |
+| ESP32-CAM Board | `CAMERA_MODEL_ESP32_CAM_BOARD` |
+| ESP32-S3 CAM LCD | `CAMERA_MODEL_ESP32S3_CAM_LCD` |
+| ESP32-S2 CAM Board | `CAMERA_MODEL_ESP32S2_CAM_BOARD` |
+| DFRobot FireBeetle 2 ESP32-S3 | `CAMERA_MODEL_DFRobot_FireBeetle2_ESP32S3` |
+| DFRobot Romeo ESP32-S3 | `CAMERA_MODEL_DFRobot_Romeo_ESP32S3` |
+
+### Arduino setup
+
+Define your board model **before** including the extension in `Pardalote.ino`:
+
+```cpp
+#define CAMERA_MODEL_WROVER_KIT
+#include "CameraExtension.h"
+```
+
+### JavaScript usage
+
+```javascript
+const arduino = new Arduino();
+arduino.add('cam', new Camera());
+arduino.connect('192.168.1.42');
+
+arduino.on('ready', () => {
+    arduino.cam.attach(82);   // start camera HTTP server on port 82
+});
+
+arduino.cam.on('stream', ({ url, element }) => {
+    // element is a live <img> — append to DOM or use url with p5.js createImg()
+    document.body.appendChild(element);
+});
+```
+
+#### Script loading
+
+```html
+<script src="pardalote.js"></script>
+<script src="camera.js"></script>
+<script src="sketch.js"></script>
+```
+
+#### p5.js integration
+
+```javascript
+let camEl;
+
+arduino.cam.on('stream', ({ url }) => {
+    if (camEl) camEl.remove();
+    camEl = createImg(url, '');  // wrap in p5.Element so image() accepts it
+    camEl.hide();                // keep it out of the DOM layout
+});
+
+function draw() {
+    if (camEl) {
+        image(camEl, 0, 0, width, height);  // draw MJPEG frame to canvas
+        loadPixels();                        // pixels[] available for manipulation
+    }
+}
+```
+
+`loadPixels()` works because `CameraExtension.h` sets `Access-Control-Allow-Origin: *` on both HTTP endpoints automatically.
+
+#### Resolution and quality
+
+```javascript
+// Framesize constants (match ESP32 camera framesize_t enum)
+arduino.cam.setResolution(FRAMESIZE_QVGA);   // 320×240  ← default
+arduino.cam.setResolution(FRAMESIZE_VGA);    // 640×480
+arduino.cam.setResolution(FRAMESIZE_HD);     // 1280×720
+
+// JPEG quality: 0 = best image / highest bandwidth
+//              63 = worst image / lowest bandwidth
+arduino.cam.setQuality(12);   // default — good balance for streaming
+```
+
+Available framesize constants:
+
+| Constant | Resolution |
+|---|---|
+| `FRAMESIZE_QQVGA` | 160×120 |
+| `FRAMESIZE_QVGA` | 320×240 |
+| `FRAMESIZE_HVGA` | 480×320 |
+| `FRAMESIZE_VGA` | 640×480 |
+| `FRAMESIZE_SVGA` | 800×600 |
+| `FRAMESIZE_HD` | 1280×720 |
+
+#### Snapshots
+
+```javascript
+// Fetch a single JPEG still over HTTP — returns a blob: URL
+const url = await arduino.cam.snapshot();
+// use as an image src, or revoke when done:
+URL.revokeObjectURL(url);
+
+// Or listen for the event:
+arduino.cam.on('snapshot', ({ url, blob }) => { ... });
+```
+
+#### HTTP endpoints
+
+Once `attach()` is called, the Arduino serves two endpoints on the chosen port:
+
+| Endpoint | Description |
+|---|---|
+| `http://<ip>:<port>/stream` | MJPEG stream |
+| `http://<ip>:<port>/snapshot` | Single JPEG |
+
+#### Events and API
+
+```javascript
+arduino.cam.on('stream',   ({ url, element }) => { });  // stream confirmed live
+arduino.cam.on('snapshot', ({ url, blob })    => { });  // still received
+arduino.cam.on('error',    ({ message })      => { });  // fetch failed
+
+// Shortcuts
+arduino.cam.onStream(fn);
+arduino.cam.onSnapshot(fn);
+arduino.cam.onError(fn);
+
+// Detach (clears local stream reference; HTTP server keeps running)
+arduino.cam.detach();
+
+// Access the <img> element directly
+const el = arduino.cam.getElement();
+
+arduino.cam.getState();
+// { logicalId, port, streamUrl, snapshotUrl, framesize, quality }
+```
+
+---
+
 ## Enabling extensions in the firmware
 
 Extensions are opt-in. Uncomment the lines you need in `Pardalote.ino`:
@@ -532,6 +686,8 @@ Extensions are opt-in. Uncomment the lines you need in `Pardalote.ino`:
 // #include "NeoPixelExtension.h"
 // #include "UltrasonicExtension.h"
 // #include "MPUExtension.h"
+// #define CAMERA_MODEL_XIAO_ESP32S3
+// #include "CameraExtension.h"
 ```
 
 That's all — extensions self-register and require no other changes to the sketch.
@@ -541,7 +697,7 @@ That's all — extensions self-register and require no other changes to the sket
 ## Project structure
 
 ```
-Pardalote_v18/
+Pardalote_v20/
 ├── pardalote-arduino/
 │   └── Pardalote/
 │       ├── Pardalote.ino           # Main Arduino sketch
@@ -553,7 +709,8 @@ Pardalote_v18/
 │       ├── ServoExtension.h        # Servo support (up to 8)
 │       ├── NeoPixelExtension.h     # NeoPixel support (up to 4 strips)
 │       ├── UltrasonicExtension.h   # Ultrasonic support (up to 4 sensors)
-│       └── MPUExtension.h          # IMU support — MPU-6050/6500/9250/9255, LSM6DS3/DSOX
+│       ├── MPUExtension.h          # IMU support — MPU-6050/6500/9250/9255, LSM6DS3/DSOX
+│       └── CameraExtension.h       # MJPEG camera stream (ESP32-S3 only)
 │
 ├── pardalote-js/
 │   ├── pardalote.js                       # Core library — always include first
@@ -561,6 +718,7 @@ Pardalote_v18/
 │   ├── neoPixel.js                        # NeoPixel extension
 │   ├── ultrasonic.js                      # Ultrasonic extension
 │   ├── mpu.js                             # MPU / IMU extension
+│   ├── camera.js                          # Camera extension (ESP32-S3)
 │   ├── pardalote-pins-uno-r4-wifi.js      # Pin aliases for UNO R4 WiFi
 │   ├── pardalote-pins-esp32-wrover-dev.js # Pin aliases for ESP32-WROVER-DEV
 │   └── pardalote-pins-firebeetle2-esp32-c5.js
@@ -573,6 +731,7 @@ Pardalote_v18/
     ├── neopixel-example/           # NeoPixel colour picker
     ├── ultrasonic-sensor-example/  # Distance visualisation
     ├── mpu-example/                # IMU 3D orientation visualiser
+    ├── camera-example/             # MJPEG camera stream in p5.js
     └── control-panel/              # Multi-device dashboard
 ```
 

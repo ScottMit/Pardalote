@@ -449,6 +449,7 @@ class Arduino {
         this._stopHeartbeat();
         this._pingInterval = setInterval(() => {
             try { this.socket.send(encodeFrame(CMD_PING, 0, [])); } catch (_) {}
+            clearTimeout(this._pongTimeout);   // clear any orphaned timeout from the previous tick
             this._pongTimeout = setTimeout(() => {
                 console.warn('Pardalote: pong timeout — forcing disconnect');
                 const deadSocket = this.socket;

@@ -56,6 +56,26 @@
 // #include "NeoPixelExtension.h"
 // #include "UltrasonicExtension.h"
 // #include "MPUExtension.h"
+// Camera — uncomment ONE board define, then uncomment the include.
+// Define names match the ESP CameraWebServer example (camera_pins.h).
+#define CAMERA_MODEL_WROVER_KIT
+// #define CAMERA_MODEL_ESP_EYE
+// #define CAMERA_MODEL_M5STACK_PSRAM
+// #define CAMERA_MODEL_M5STACK_V2_PSRAM
+// #define CAMERA_MODEL_M5STACK_WIDE
+// #define CAMERA_MODEL_M5STACK_ESP32CAM
+// #define CAMERA_MODEL_M5STACK_UNITCAM
+// #define CAMERA_MODEL_M5STACK_CAMS3_UNIT
+// #define CAMERA_MODEL_AI_THINKER
+// #define CAMERA_MODEL_TTGO_T_JOURNAL
+// #define CAMERA_MODEL_XIAO_ESP32S3
+// #define CAMERA_MODEL_ESP32_CAM_BOARD
+// #define CAMERA_MODEL_ESP32S3_CAM_LCD
+// #define CAMERA_MODEL_ESP32S2_CAM_BOARD
+// #define CAMERA_MODEL_ESP32S3_EYE
+// #define CAMERA_MODEL_DFRobot_FireBeetle2_ESP32S3
+// #define CAMERA_MODEL_DFRobot_Romeo_ESP32S3
+#include "CameraExtension.h"
 
 // -------------------------------------------------------------------
 // Forward declarations
@@ -155,6 +175,10 @@ void setup() {
     webSocket.begin();
     webSocket.onEvent(webSocketEvent);
     Serial.println(F("WebSocket server started on port 81"));
+
+#ifdef PLATFORM_ESP32
+    WiFi.setSleep(false);   // disable modem sleep — prevents latency on incoming frames
+#endif
 }
 
 // -------------------------------------------------------------------
@@ -163,6 +187,7 @@ void setup() {
 void loop() {
     webSocket.loop();
     platformLoop();
+    loopAll();
 
 #ifdef PLATFORM_ESP32
     delay(1);   // yield to FreeRTOS idle task — prevents TG0WDT watchdog reset
@@ -205,6 +230,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length)
             if (!anyConnected()) {
                 for (int i = 0; i < NUM_ACTIONS; i++) actions[i].id = -1;
             }
+            disconnectAll(num);
             Serial.print('['); Serial.print(num); Serial.println(F("] Disconnected"));
             break;
 

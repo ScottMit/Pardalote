@@ -10,7 +10,7 @@ let ArduinoIP = '172.20.10.12';
 let arduino;
 
 // Arduino pins - Change this to match the pin you are using
-const POTPIN = 34;
+const POTPIN = 2;
 
 function setup() {
     createCanvas(600, 600);
