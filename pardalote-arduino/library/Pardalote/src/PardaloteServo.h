@@ -1,20 +1,20 @@
 // ==============================================================
-// ServoExtension.h
+// PardaloteServo.h
 // Pardalote Servo Extension
 // Version v1.0
 // by Scott Mitchell
 // GPL-3.0 License
 //
-// Include this file in Pardalote.ino to add servo support.
-// No other changes to the sketch are required.
+// Add #include <PardaloteServo.h> to your sketch — the extension
+// self-registers, no further setup is required.
 //
 // Supports up to MAX_SERVOS simultaneously attached servos.
 // Each servo is addressed by a logical instance ID assigned by
 // the JS side when calling arduino.add('name', new Servo(arduino)).
 // ==============================================================
 
-#ifndef SERVO_EXTENSION_H
-#define SERVO_EXTENSION_H
+#ifndef PARDALOTE_SERVO_H
+#define PARDALOTE_SERVO_H
 
 #if defined(ESP32)
   #include <ESP32Servo.h>
@@ -22,20 +22,18 @@
   #include <Servo.h>
 #endif
 
-#include "defs.h"
-#include "protocol.h"
-#include "extensions.h"
+#include "Pardalote.h"
 
 #define MAX_SERVOS 8
 
 class ServoExt {
 private:
-    static Servo   _servos[MAX_SERVOS];
-    static int16_t _pins[MAX_SERVOS];
-    static int16_t _angles[MAX_SERVOS];
-    static int16_t _minPulse[MAX_SERVOS];
-    static int16_t _maxPulse[MAX_SERVOS];
-    static bool    _attached[MAX_SERVOS];
+    inline static Servo   _servos[MAX_SERVOS];
+    inline static int16_t _pins[MAX_SERVOS]     = { -1,-1,-1,-1,-1,-1,-1,-1 };
+    inline static int16_t _angles[MAX_SERVOS]   = { 90,90,90,90,90,90,90,90 };
+    inline static int16_t _minPulse[MAX_SERVOS] = { 544,544,544,544,544,544,544,544 };
+    inline static int16_t _maxPulse[MAX_SERVOS] = { 2400,2400,2400,2400,2400,2400,2400,2400 };
+    inline static bool    _attached[MAX_SERVOS] = {};
 
     static bool validId(int id) { return id >= 0 && id < MAX_SERVOS; }
 
@@ -62,6 +60,17 @@ public:
                 int pin  = (int)paramInt(params, 1);
                 int minP = (nparams > 2) ? (int)paramInt(params, 2) : 544;
                 int maxP = (nparams > 3) ? (int)paramInt(params, 3) : 2400;
+
+                // Skip the detach/attach cycle (and the Serial print) when the
+                // state is already what was requested. JS's reconnect logic and
+                // 'ready' handlers can both call attach() with identical params;
+                // treating those as no-ops avoids redundant PWM glitches and
+                // duplicate Serial output.
+                bool stateChanged = !_attached[id]
+                                    || _pins[id]     != pin
+                                    || _minPulse[id] != minP
+                                    || _maxPulse[id] != maxP;
+                if (!stateChanged) break;
 
                 if (_attached[id]) _servos[id].detach();
                 _servos[id].attach(pin, minP, maxP);
@@ -102,6 +111,15 @@ public:
             }
 
             case CMD_SERVO_READ: {
+                // Delegate to the underlying Servo library's read().
+                //   - Arduino Servo (UNO R4): returns the last written angle
+                //   - ESP32Servo: reads back from the LEDC PWM duty register
+                // The ESP32 path can return values slightly different from
+                // the commanded angle — that's the library's actual behavior
+                // and we forward it faithfully. Sketches that just want to
+                // know "what did I last command?" should track that locally
+                // (or read arduino.myServo.angle on the JS side) instead of
+                // round-tripping through read().
                 int angle = _attached[id] ? _servos[id].read() : -1;
                 if (_attached[id]) _angles[id] = (int16_t)angle;
 
@@ -109,7 +127,7 @@ public:
                 fb.begin(CMD_SERVO_READ, DEVICE_SERVO);
                 fb.addInt(id);
                 fb.addInt(angle);
-                broadcastFrame(fb);
+                Pardalote.broadcastFrame(fb);
                 break;
             }
 
@@ -120,7 +138,7 @@ public:
                 fb.begin(CMD_SERVO_ATTACHED, DEVICE_SERVO);
                 fb.addInt(id);
                 fb.addInt(isAttached ? 1 : 0);
-                broadcastFrame(fb);
+                Pardalote.broadcastFrame(fb);
                 break;
             }
 
@@ -142,7 +160,7 @@ public:
         fb.begin(CMD_ANNOUNCE, DEVICE_SERVO);
         fb.addInt(PROTOCOL_VERSION_MAJOR);
         fb.addInt(MAX_SERVOS);
-        sendFrame(clientNum, fb);
+        Pardalote.sendFrame(clientNum, fb);
 
         // Send full attach state for any currently attached servos:
         // pin, pulse range, and last known angle.
@@ -155,24 +173,16 @@ public:
             fa.addInt(_pins[i]);
             fa.addInt(_minPulse[i]);
             fa.addInt(_maxPulse[i]);
-            sendFrame(clientNum, fa);
+            Pardalote.sendFrame(clientNum, fa);
 
             FrameBuilder fw;
             fw.begin(CMD_SERVO_WRITE, DEVICE_SERVO);
             fw.addInt(i);
             fw.addInt(_angles[i]);
-            sendFrame(clientNum, fw);
+            Pardalote.sendFrame(clientNum, fw);
         }
     }
 };
-
-// Static member definitions
-Servo   ServoExt::_servos[MAX_SERVOS];
-int16_t ServoExt::_pins[MAX_SERVOS]     = { -1,-1,-1,-1,-1,-1,-1,-1 };
-int16_t ServoExt::_angles[MAX_SERVOS]   = { 90,90,90,90,90,90,90,90 };
-int16_t ServoExt::_minPulse[MAX_SERVOS] = { 544,544,544,544,544,544,544,544 };
-int16_t ServoExt::_maxPulse[MAX_SERVOS] = { 2400,2400,2400,2400,2400,2400,2400,2400 };
-bool    ServoExt::_attached[MAX_SERVOS] = {};
 
 // Self-register — runs before setup(), no manual call needed.
 INSTALL_EXTENSION(DEVICE_SERVO, ServoExt::handle, ServoExt::announce)

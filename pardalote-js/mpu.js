@@ -7,7 +7,7 @@
 //
 // Supports MPU-6050, MPU-6500, MPU-9250, MPU-9255,
 //          LSM6DS3, LSM6DSOX (and future sensors added to
-//          the SENSORS[] table in MPUExtension.h).
+//          the SENSORS[] table in PardaloteMPU.h).
 //
 // Usage:
 //   const arduino = new Arduino();
@@ -28,9 +28,11 @@
 //       arduino.imu.read(20);              // poll every 20 ms (50 Hz)
 //   });
 //
-// The modelCode sent to the firmware is the 0-based index of the
-// sensor entry in the SENSORS[] table in MPUExtension.h.
-// Both files must be kept in sync if you add a new sensor.
+// The model name string is sent in the payload of CMD_MPU_ATTACH and
+// matched against SENSORS[i].name on the firmware side. Row order in
+// SENSORS[] does not affect anything — the two tables are coupled only
+// by the name string, so adding or reordering sensors on either side
+// is safe.
 // ==============================================================
 
 const DEVICE_MPU = 203;
@@ -47,24 +49,24 @@ const MPU_ACCEL_RANGES = [2, 4, 8, 16];          // ± g
 const MPU_GYRO_RANGES  = [250, 500, 1000, 2000];  // ± °/s
 
 // -------------------------------------------------------------------
-// MPU_MODELS — maps model name/number to firmware descriptor index.
+// MPU_MODELS — maps model name string to its DOF and default I2C address.
 //
-// code — 0-based index into the SENSORS[] table in MPUExtension.h.
-//         Must match exactly; the firmware will use the wrong sensor
-//         descriptor if these diverge.
-// dof  — degrees of freedom (6 or 9) for display purposes.
+// The key is the wire identifier sent in the payload of CMD_MPU_ATTACH.
+// It must match a SENSORS[i].name on the firmware side.
+//
+// dof  — degrees of freedom (6 or 9), for display only.
 // addr — default I2C address used when attach() is called without
 //         an address argument.
 // -------------------------------------------------------------------
 const MPU_MODELS = {
     // InvenSense / TDK MPU family
-    '6050':     { code: 0, dof: 6, addr: 0x68 },
-    '6500':     { code: 1, dof: 6, addr: 0x68 },
-    '9250':     { code: 2, dof: 9, addr: 0x68 },
-    '9255':     { code: 3, dof: 9, addr: 0x68 },
+    '6050':     { dof: 6, addr: 0x68 },
+    '6500':     { dof: 6, addr: 0x68 },
+    '9250':     { dof: 9, addr: 0x68 },
+    '9255':     { dof: 9, addr: 0x68 },
     // STMicroelectronics LSM6 family
-    'LSM6DS3':  { code: 4, dof: 6, addr: 0x6A },
-    'LSM6DSOX': { code: 5, dof: 6, addr: 0x6A },
+    'LSM6DS3':  { dof: 6, addr: 0x6A },
+    'LSM6DSOX': { dof: 6, addr: 0x6A },
 };
 
 class MPU extends Extension {
@@ -94,10 +96,9 @@ class MPU extends Extension {
             );
         }
 
-        this.model      = model;
-        this.dof        = def.dof;
-        this._modelCode = def.code;
-        this._defAddr   = def.addr;
+        this.model    = model;
+        this.dof      = def.dof;
+        this._defAddr = def.addr;
 
         // Hardware state
         this.isAttached = false;
@@ -117,6 +118,11 @@ class MPU extends Extension {
         // Periodic read
         this._readTimer    = null;
         this._readInterval = 0;
+
+        // Set true when Arduino announces this MPU's attach state on connect.
+        // _reRegister() uses this to skip re-sending CMD_MPU_ATTACH when the
+        // Arduino is already in sync — only replay when it has reset.
+        this._announcedByArduino = false;
     }
 
     // -------------------------------------------------------------------
@@ -133,9 +139,10 @@ class MPU extends Extension {
         this.address  = address;
         this.isAttached = true;
 
-        const params = [this.logicalId, address, this._modelCode];
+        // Model name travels in the payload; SDA/SCL (ESP32 only) are params 2/3.
+        const params = [this.logicalId, address];
         if (sda >= 0 && scl >= 0) params.push(sda, scl);
-        this.arduino.send(encodeFrame(CMD_MPU_ATTACH, DEVICE_MPU, params));
+        this.arduino.send(encodeFrame(CMD_MPU_ATTACH, DEVICE_MPU, params, this.model));
         return this;
     }
 
@@ -187,38 +194,46 @@ class MPU extends Extension {
     }
 
     // -------------------------------------------------------------------
-    // setAccelRange(range)
+    // setAccelRange(g)
     //
-    // range — 0=±2g, 1=±4g, 2=±8g, 3=±16g
-    //         or pass the ±g value directly: 2, 4, 8, or 16
+    // g — one of 2, 4, 8, 16. Sets the accelerometer ±g range.
     //
     // Higher range → less sensitivity but handles larger accelerations.
     // Default ±2g gives the finest resolution for gentle motion.
+    // Unknown values are rejected with a console warning; the current
+    // range is left unchanged.
     // -------------------------------------------------------------------
-    setAccelRange(range) {
-        if (range > 3) range = MPU_ACCEL_RANGES.indexOf(range);
-        range = Math.max(0, Math.min(3, range));
-        this.accelRange = range;
+    setAccelRange(g) {
+        const idx = MPU_ACCEL_RANGES.indexOf(g);
+        if (idx === -1) {
+            console.warn(`MPU ${this.logicalId}: invalid accel range ±${g}g — valid values: ${MPU_ACCEL_RANGES.join(', ')}`);
+            return this;
+        }
+        this.accelRange = idx;
         this.arduino.send(encodeFrame(CMD_MPU_SET_ACCEL_RANGE, DEVICE_MPU,
-            [this.logicalId, range]));
+            [this.logicalId, idx]));
         return this;
     }
 
     // -------------------------------------------------------------------
-    // setGyroRange(range)
+    // setGyroRange(dps)
     //
-    // range — 0=±250°/s, 1=±500°/s, 2=±1000°/s, 3=±2000°/s
-    //         or pass the °/s value directly: 250, 500, 1000, or 2000
+    // dps — one of 250, 500, 1000, 2000. Sets the gyroscope ±°/s range.
     //
     // Default ±250°/s gives the finest resolution for slow rotation.
     // Use ±2000°/s for fast spins (e.g. RC vehicles, drones).
+    // Unknown values are rejected with a console warning; the current
+    // range is left unchanged.
     // -------------------------------------------------------------------
-    setGyroRange(range) {
-        if (range > 3) range = MPU_GYRO_RANGES.indexOf(range);
-        range = Math.max(0, Math.min(3, range));
-        this.gyroRange = range;
+    setGyroRange(dps) {
+        const idx = MPU_GYRO_RANGES.indexOf(dps);
+        if (idx === -1) {
+            console.warn(`MPU ${this.logicalId}: invalid gyro range ±${dps}°/s — valid values: ${MPU_GYRO_RANGES.join(', ')}`);
+            return this;
+        }
+        this.gyroRange = idx;
         this.arduino.send(encodeFrame(CMD_MPU_SET_GYRO_RANGE, DEVICE_MPU,
-            [this.logicalId, range]));
+            [this.logicalId, idx]));
         return this;
     }
 
@@ -262,24 +277,58 @@ class MPU extends Extension {
     get gyroRangeDps() { return MPU_GYRO_RANGES[this.gyroRange]; }
 
     // -------------------------------------------------------------------
+    // Board switch — called by Arduino.connect() to wipe per-board state.
+    // Identity fields (model, _defAddr, dof) are constructor-set
+    // and preserved; the announce-drift handler in handleMessage refreshes
+    // them if the new board reports a different sensor.
+    // -------------------------------------------------------------------
+    _reset() {
+        this._stopRead();
+        this.isAttached          = false;
+        this.address             = this._defAddr;
+        this.accelRange          = 0;
+        this.gyroRange           = 0;
+        this.accel               = { x: 0, y: 0, z: 0 };
+        this.gyro                = { x: 0, y: 0, z: 0 };
+        this.temp                = 0;
+        this.calibration         = { ax: 0, ay: 0, az: 0, gx: 0, gy: 0, gz: 0 };
+        this.isCalibrated        = false;
+        this._announcedByArduino = false;
+    }
+
+    // -------------------------------------------------------------------
     // Reconnect — restores attach and range state on Arduino reset.
     // Calibration offsets are stored on the Arduino and re-sent during
     // announce — they do not need to be replayed from JS.
     // -------------------------------------------------------------------
     _reRegister() {
-        if (!this.isAttached) return;
-        // Include modelCode so the firmware re-initialises the correct sensor.
-        this.arduino.send(encodeFrame(CMD_MPU_ATTACH, DEVICE_MPU,
-            [this.logicalId, this.address, this._modelCode]));
-        if (this.accelRange !== 0)
-            this.arduino.send(encodeFrame(CMD_MPU_SET_ACCEL_RANGE, DEVICE_MPU,
-                [this.logicalId, this.accelRange]));
-        if (this.gyroRange !== 0)
-            this.arduino.send(encodeFrame(CMD_MPU_SET_GYRO_RANGE, DEVICE_MPU,
-                [this.logicalId, this.gyroRange]));
+        if (!this.isAttached) {
+            this._announcedByArduino = false;
+            return;
+        }
+
+        // Only replay attach/ranges if the Arduino didn't announce us — i.e.
+        // it has reset and lost state. If announce did sync us, skip the
+        // replay (avoids duplicate Serial output and redundant I2C init).
+        if (!this._announcedByArduino) {
+            // Model name in payload so the firmware re-initialises the correct sensor.
+            this.arduino.send(encodeFrame(CMD_MPU_ATTACH, DEVICE_MPU,
+                [this.logicalId, this.address], this.model));
+            if (this.accelRange !== 0)
+                this.arduino.send(encodeFrame(CMD_MPU_SET_ACCEL_RANGE, DEVICE_MPU,
+                    [this.logicalId, this.accelRange]));
+            if (this.gyroRange !== 0)
+                this.arduino.send(encodeFrame(CMD_MPU_SET_GYRO_RANGE, DEVICE_MPU,
+                    [this.logicalId, this.gyroRange]));
+        }
+
+        // Periodic read state lives on the Arduino's WebSocket-client tracking
+        // (cleared on disconnect), so always re-start polling if it was active.
         if (this._readInterval > 0) {
             this._sendReadRequest();
         }
+
+        this._announcedByArduino = false;  // reset for next reconnect cycle
     }
 
     // -------------------------------------------------------------------
@@ -289,14 +338,30 @@ class MPU extends Extension {
         switch (frame.cmd) {
 
             // State sync during announce — update local state silently.
-            // Params: [id, addr, modelCode]
+            // Params: [id, addr], payload: model name string.
             case CMD_MPU_ATTACH:
-                this.address    = frame.params[1];
-                this.isAttached = true;
-                // modelCode comes back in params[2]; update _modelCode in
-                // case the firmware was reset with a different sensor.
-                if (frame.params[2] !== undefined) {
-                    this._modelCode = frame.params[2];
+                this.address             = frame.params[1];
+                this.isAttached          = true;
+                this._announcedByArduino = true;
+                // If the firmware reports a different model than this instance
+                // was constructed with (different firmware build, board swap,
+                // multi-client race), refresh model/dof to match. Range and
+                // calibration settings are intentionally preserved.
+                if (frame.payload) {
+                    const newModel = new TextDecoder().decode(frame.payload);
+                    if (newModel !== this.model) {
+                        const entry = MPU_MODELS[newModel];
+                        if (entry) {
+                            this.model = newModel;
+                            this.dof   = entry.dof;
+                        } else {
+                            console.warn(
+                                `MPU ${this.logicalId}: firmware reports unknown model "${newModel}" — add it to MPU_MODELS in mpu.js`
+                            );
+                            this.model = newModel;
+                            this.dof   = 0;
+                        }
+                    }
                 }
                 break;
 

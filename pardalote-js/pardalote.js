@@ -83,9 +83,21 @@ const RESERVED_START = 200;
 // records which params are float so the Arduino can decode correctly.
 // -------------------------------------------------------------------
 function encodeFrame(cmd, target, params = [], payload = null) {
-    const payloadBytes = payload
-        ? (payload instanceof ArrayBuffer ? new Uint8Array(payload) : payload)
-        : null;
+    if (!Number.isInteger(target) || target < 0 || target > 0xFFFF) {
+        throw new RangeError(
+            `Pardalote: encodeFrame target must be an integer in [0, 65535], got ${target}`
+        );
+    }
+    let payloadBytes;
+    if (payload == null) {
+        payloadBytes = null;
+    } else if (typeof payload === 'string') {
+        payloadBytes = new TextEncoder().encode(payload);
+    } else if (payload instanceof ArrayBuffer) {
+        payloadBytes = new Uint8Array(payload);
+    } else {
+        payloadBytes = payload;   // assume Uint8Array
+    }
     const payloadLen = payloadBytes ? payloadBytes.length : 0;
 
     const buf = new ArrayBuffer(8 + params.length * 4 + payloadLen);
@@ -184,6 +196,11 @@ class Extension {
 
     _reRegister()       {}
     handleMessage(frame) {}
+
+    // Wipe board-specific state when the user calls arduino.connect() to
+    // switch sessions. Preserve user-tuned configuration. Default is a no-op;
+    // extensions override as needed.
+    _reset() {}
 }
 
 // -------------------------------------------------------------------
@@ -196,12 +213,14 @@ class Arduino {
         this.deviceIP  = null;
 
         // Reconnection state
-        this._reconnectAttempts    = 0;
-        this._maxReconnectAttempts = 10;
-        this._reconnectDelay       = 1000;
-        this._maxReconnectDelay    = 30000;
-        this._reconnectTimeout     = null;
-        this._isReconnecting       = false;
+        // Reconnects continue indefinitely (backoff capped at _maxReconnectDelay).
+        // disconnect() sets _reconnectDisabled; connect() clears it.
+        this._reconnectAttempts = 0;
+        this._reconnectDelay    = 1000;    // base delay before first retry
+        this._maxReconnectDelay = 30000;   // cap on per-attempt delay
+        this._reconnectTimeout  = null;
+        this._isReconnecting    = false;
+        this._reconnectDisabled = false;
 
         // Outgoing message queue (ArrayBuffers)
         this._queue    = [];
@@ -216,7 +235,7 @@ class Arduino {
         this._pinValues = new Map();   // Map<pin, value> — set by digitalWrite() and incoming announce
 
         // Board identity, alias table, and ADC range — populated from the HELLO handshake
-        this._board    = 'unknown';
+        this.board    = 'unknown';
         this._aliases  = {};
         this.analogMax = 1023;   // safe default; overwritten by HELLO
 
@@ -252,6 +271,19 @@ class Arduino {
     connect(ip, port = 81) {
         this.deviceIP = `ws://${ip}:${port}/`;
         this._reconnectAttempts = 0;
+        this._reconnectDisabled = false;   // re-enable after an earlier disconnect()
+
+        // Fresh session — drop any pin-keyed state from a previous board.
+        // Pin numbers (and the extensions Arduino announced) are board-specific,
+        // so replaying them on a new device would target the wrong hardware.
+        // Auto-reconnect goes through _connectSocket() directly and is unaffected.
+        this._pinModes.clear();
+        this._pinValues.clear();
+        this._reads.clear();
+        this._writeCbs.clear();
+        this._available.clear();
+        this._queue = [];                                       // drop frames queued for the old board
+        Object.values(this._extensions).forEach(ext => ext._reset());
 
         // Cancel any pending auto-reconnect timer
         if (this._reconnectTimeout) {
@@ -327,18 +359,22 @@ class Arduino {
     }
 
     _scheduleReconnect() {
-        if (this._isReconnecting) return;
-        if (this._reconnectAttempts >= this._maxReconnectAttempts) {
-            console.error('Max reconnection attempts reached');
-            return;
-        }
+        if (this._isReconnecting || this._reconnectDisabled) return;
         this._isReconnecting = true;
         this._reconnectAttempts++;
-        const delay = Math.min(
+        const delay = Math.round(Math.min(
             this._reconnectDelay * Math.pow(1.5, this._reconnectAttempts - 1),
             this._maxReconnectDelay
-        );
-        console.log(`Reconnecting in ${Math.round(delay)}ms (attempt ${this._reconnectAttempts})`);
+        ));
+        // Log the first few attempts in full; after that go quiet so a long
+        // outage doesn't flood the console. User code can subscribe to the
+        // 'reconnecting' event for per-attempt updates.
+        if (this._reconnectAttempts <= 10) {
+            console.log(`Reconnecting in ${delay}ms (attempt ${this._reconnectAttempts})`);
+        } else if (this._reconnectAttempts === 11) {
+            console.log(`Reconnecting silently — subscribe to 'reconnecting' for per-attempt updates`);
+        }
+        this._emit('reconnecting', { attempt: this._reconnectAttempts, delay });
         this._reconnectTimeout = setTimeout(() => {
             this._isReconnecting = false;
             this._connectSocket();
@@ -346,7 +382,7 @@ class Arduino {
     }
 
     disconnect() {
-        this._reconnectAttempts = this._maxReconnectAttempts; // prevent auto-reconnect
+        this._reconnectDisabled = true;   // suppress auto-reconnect until connect() is called again
         if (this._reconnectTimeout) {
             clearTimeout(this._reconnectTimeout);
             this._reconnectTimeout = null;
@@ -478,14 +514,14 @@ class Arduino {
         const major   = frame.params[0];
         const minor   = frame.params[1];
         const adcBits = frame.params[2] ?? 10;   // param added in protocol v1.0; default 10 for older firmware
-        this._board    = frame.payload ? new TextDecoder().decode(frame.payload) : 'unknown';
-        this._aliases  = BOARD_ALIASES[this._board] || {};
+        this.board    = frame.payload ? new TextDecoder().decode(frame.payload) : 'unknown';
+        this._aliases  = BOARD_ALIASES[this.board] || {};
         this.analogMax = (1 << adcBits) - 1;
         this.connected          = true;
         this._synced            = false;  // re-entering announce phase
         this._reconnectAttempts = 0;  // genuine connection established
         this._startHeartbeat();
-        console.log(`Pardalote: connected to ${this._board}, protocol v${major}.${minor}, analogMax=${this.analogMax}`);
+        console.log(`Pardalote: connected to ${this.board}, protocol v${major}.${minor}, analogMax=${this.analogMax}`);
 
         // Open the send queue so announce frames from extensions can be
         // received while we wait for CMD_SYNC_COMPLETE.
@@ -575,14 +611,19 @@ class Arduino {
     // -------------------------------------------------------------------
 
     // Resolve a string alias ('A0', 'SDA', 'G32' …) to its pin number.
-    // Plain numbers pass through unchanged. Unknown strings warn and pass through.
+    // Plain numbers pass through unchanged.
+    // Throws RangeError for unresolvable input so the call site fails
+    // loudly instead of silently writing to pin 0.
     _resolvePin(pin) {
         if (typeof pin === 'number') return pin;
         if (pin in this._aliases) return this._aliases[pin];
         const n = parseInt(pin, 10);
         if (!isNaN(n)) return n;
-        console.warn(`Pardalote: unknown pin alias "${pin}" for board "${this._board}"`);
-        return pin;
+        throw new RangeError(
+            `Pardalote: unknown pin alias "${pin}" for board "${this.board}". ` +
+            `Pin aliases are populated when the 'ready' event fires — call from inside arduino.on('ready', …) ` +
+            `or pass a numeric pin instead.`
+        );
     }
 
     pinMode(pin, mode, interval) {

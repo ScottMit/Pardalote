@@ -31,17 +31,20 @@ Install via Arduino IDE → Tools → Manage Libraries:
 - `WebSocketsServer` (by Markus Sattler)
 - `Adafruit NeoPixel` (by Adafruit)
 
-Also uncomment the NeoPixel include in `Pardalote.ino`:
-
-```cpp
-#include "NeoPixelExtension.h"
-```
+Install Pardalote itself by copying `pardalote-arduino/library/Pardalote/` into your Arduino libraries folder (see the [top-level README](../../README.md#pardalote-library)).
 
 ## Quick Start
 
 ### 1. Upload the firmware
 
-1. Open `pardalote-arduino/Pardalote/Pardalote.ino` in Arduino IDE
+1. In Arduino IDE: **File → Examples → Pardalote → neopixel**. The sketch is two lines:
+   ```cpp
+   #include <Pardalote.h>
+   #include <PardaloteNeoPixel.h>
+
+   void setup() { Pardalote.begin(); }
+   void loop()  { Pardalote.run();   }
+   ```
 2. Select your board and upload
 3. Open the Serial Monitor at 115200 baud — on first boot Pardalote asks for your WiFi credentials:
    ```
@@ -57,7 +60,7 @@ Also uncomment the NeoPixel include in `Pardalote.ino`:
    ```
    Credentials are saved to EEPROM and survive re-uploads. Press `w` within 5 seconds of any boot to update them.
 
-   **Prefer compile-time credentials?** Uncomment the two lines in `secrets.h`:
+   **Prefer compile-time credentials?** Create a `secrets.h` file in the sketch folder with:
    ```cpp
    #define SECRET_SSID "YourWiFiName"
    #define SECRET_PASS "YourWiFiPassword"
@@ -123,7 +126,7 @@ Changes are buffered locally until `show()` is called — this means you can set
 
 **"LEDs don't light up"**
 - Check VCC → 5 V, GND → GND, data → pin 6
-- Verify `NeoPixelExtension.h` is uncommented in `Pardalote.ino`
+- Verify the sketch has `#include <PardaloteNeoPixel.h>`
 - Try a lower brightness: `arduino.neoStrip1.setBrightness(20)`
 - Always call `show()` after setting colours
 
@@ -138,9 +141,10 @@ Changes are buffered locally until `show()` is called — this means you can set
 - Power issue — add an external 5 V supply for strips longer than ~30 LEDs
 - Add a 470 Ω resistor between the Arduino data pin and the strip for longer runs
 
-**"Performance is slow" (UNO R4)**
+**"Performance is slow" or "colours lag behind the cursor" (UNO R4)**
 - The UNO R4 WiFi WebSocket implementation occasionally drops connections — Pardalote reconnects automatically
-- Increase the threshold to reduce traffic: `arduino.neoStrip1.setThreshold(10)`
+- Raise the colour-distance threshold to skip tiny changes: `arduino.neoStrip1.setThreshold(10)`
+- Raise the show throttle to cap how often updates are sent: `arduino.neoStrip1.setThrottle(50)` (default 20 ms = ~50 Hz; 50 ms = ~20 Hz is gentler on slow WiFi)
 
 ## File Structure
 

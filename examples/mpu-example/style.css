@@ -46,10 +46,23 @@ canvas { display: block; }
 }
 
 #angles {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    column-gap: 12px;
+    row-gap: 4px;
+    align-items: baseline;
     font-size: 16px;
     color: #fff;
     letter-spacing: 0.5px;
 }
+#angles .axis-x { color: #d23737; letter-spacing: 1.5px; font-size: 11px; }
+#angles .axis-y { color: #37c34b; letter-spacing: 1.5px; font-size: 11px; }
+#angles .axis-z { color: #375fd2; letter-spacing: 1.5px; font-size: 11px; }
+#angles .angle-val {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+#angles .deg { color: #777; font-size: 13px; }
 
 /* ── Calibrate button ────────────────────────────────────────── */
 #cal-btn {

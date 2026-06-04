@@ -18,7 +18,7 @@ The simplest possible Pardalote sketch. A web page with two buttons that turn th
 
 ### 1. Upload the firmware
 
-1. Open `pardalote-arduino/Pardalote/Pardalote.ino` in Arduino IDE
+1. In Arduino IDE: **File → Examples → Pardalote → basic-LED**
 2. Select your board and upload
 3. Open the Serial Monitor at 115200 baud — on first boot Pardalote asks for your WiFi credentials:
    ```

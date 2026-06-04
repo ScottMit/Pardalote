@@ -1,12 +1,12 @@
 // ==============================================================
-// UltrasonicExtension.h
+// PardaloteUltrasonic.h
 // Pardalote Ultrasonic Sensor Extension
 // Version v1.0
 // by Scott Mitchell
 // GPL-3.0 License
 //
 // Supports 3-wire (trig+echo on one pin) and 4-wire (HC-SR04 style)
-// sensors. Include this file in Pardalote.ino to add support.
+// sensors. Add #include <PardaloteUltrasonic.h> to your sketch.
 //
 // Distance is measured on demand — CMD_ULTRASONIC_READ triggers a
 // blocking pulseIn() on the Arduino and sends the result back.
@@ -21,21 +21,19 @@
 // (e.g. 235 = 23.5 cm, or 23.5 inches). -1 = timeout / no echo.
 // ==============================================================
 
-#ifndef ULTRASONIC_EXTENSION_H
-#define ULTRASONIC_EXTENSION_H
+#ifndef PARDALOTE_ULTRASONIC_H
+#define PARDALOTE_ULTRASONIC_H
 
-#include "defs.h"
-#include "protocol.h"
-#include "extensions.h"
+#include "Pardalote.h"
 
 #define MAX_ULTRASONIC 4
 
 class UltrasonicExt {
 private:
-    static int16_t  _trigPins[MAX_ULTRASONIC];
-    static int16_t  _echoPins[MAX_ULTRASONIC];   // -1 = 3-wire
-    static uint16_t _timeoutMs[MAX_ULTRASONIC];
-    static bool     _attached[MAX_ULTRASONIC];
+    inline static int16_t  _trigPins[MAX_ULTRASONIC]  = { -1,-1,-1,-1 };
+    inline static int16_t  _echoPins[MAX_ULTRASONIC]  = { -1,-1,-1,-1 };  // -1 = 3-wire
+    inline static uint16_t _timeoutMs[MAX_ULTRASONIC] = { 30,30,30,30 };
+    inline static bool     _attached[MAX_ULTRASONIC]  = {};
 
     static bool validId(int id) { return id >= 0 && id < MAX_ULTRASONIC; }
 
@@ -91,6 +89,13 @@ public:
                 int trig = (int)paramInt(params, 1);
                 int echo = (nparams > 2) ? (int)paramInt(params, 2) : -1;
 
+                // Skip if already in the requested state — avoids duplicate
+                // Serial output on JS reconnect / 'ready' re-attach.
+                bool stateChanged = !_attached[id]
+                                    || _trigPins[id] != trig
+                                    || _echoPins[id] != echo;
+                if (!stateChanged) break;
+
                 _trigPins[id]  = (int16_t)trig;
                 _echoPins[id]  = (int16_t)echo;
                 _timeoutMs[id] = 30;
@@ -120,7 +125,7 @@ public:
                 fb.begin(CMD_ULTRASONIC_READ, DEVICE_ULTRASONIC);
                 fb.addInt(id);
                 fb.addInt(dist);
-                broadcastFrame(fb);
+                Pardalote.broadcastFrame(fb);
                 break;
             }
 
@@ -148,7 +153,7 @@ public:
         fb.begin(CMD_ANNOUNCE, DEVICE_ULTRASONIC);
         fb.addInt(PROTOCOL_VERSION_MAJOR);
         fb.addInt(MAX_ULTRASONIC);
-        sendFrame(clientNum, fb);
+        Pardalote.sendFrame(clientNum, fb);
 
         // Send full attach state for any currently attached sensors:
         // pins, and echo timeout.
@@ -160,22 +165,16 @@ public:
             fa.addInt(i);
             fa.addInt(_trigPins[i]);
             if (_echoPins[i] != -1) fa.addInt(_echoPins[i]);
-            sendFrame(clientNum, fa);
+            Pardalote.sendFrame(clientNum, fa);
 
             FrameBuilder ft;
             ft.begin(CMD_ULTRASONIC_SET_TIMEOUT, DEVICE_ULTRASONIC);
             ft.addInt(i);
             ft.addInt(_timeoutMs[i]);
-            sendFrame(clientNum, ft);
+            Pardalote.sendFrame(clientNum, ft);
         }
     }
 };
-
-// Static member definitions
-int16_t  UltrasonicExt::_trigPins[MAX_ULTRASONIC]  = { -1,-1,-1,-1 };
-int16_t  UltrasonicExt::_echoPins[MAX_ULTRASONIC]  = { -1,-1,-1,-1 };
-uint16_t UltrasonicExt::_timeoutMs[MAX_ULTRASONIC] = { 30,30,30,30 };
-bool     UltrasonicExt::_attached[MAX_ULTRASONIC]  = {};
 
 INSTALL_EXTENSION(DEVICE_ULTRASONIC, UltrasonicExt::handle, UltrasonicExt::announce)
 

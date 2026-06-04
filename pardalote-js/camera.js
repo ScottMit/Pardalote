@@ -35,7 +35,7 @@
 //   }
 //
 // Note: loadPixels() requires the ESP32 to send CORS headers, which
-// CameraExtension.h sets automatically on both HTTP endpoints.
+// PardaloteCamera.h sets automatically on both HTTP endpoints.
 // ==============================================================
 
 const DEVICE_CAMERA = 204;
@@ -75,6 +75,21 @@ class Camera extends Extension {
 
         this.framesize = FRAMESIZE_QVGA;
         this.quality   = 12;         // 0 = best, 63 = worst (ESP32 convention)
+    }
+
+    // -------------------------------------------------------------------
+    // Board switch — called by Arduino.connect() to wipe per-board state
+    // while preserving user-tuned configuration (framesize, quality).
+    // -------------------------------------------------------------------
+    _reset() {
+        if (this._el) {
+            this._el.src = '';
+            this._el     = null;
+        }
+        this._port        = null;
+        this._streamUrl   = null;
+        this._snapshotUrl = null;
+        this._pendingInit = false;
     }
 
     // -------------------------------------------------------------------
@@ -221,8 +236,11 @@ class Camera extends Extension {
     handleMessage(frame) {
         if (frame.cmd !== CMD_CAMERA_INIT) return;
 
-        // Only rebuild when we sent this init — not when another client's
-        // CMD_CAMERA_INIT causes the Arduino to broadcast to everyone.
+        // The Arduino broadcasts CMD_CAMERA_INIT to every connected client
+        // whenever any client calls attach(). _pendingInit lets us rebuild
+        // the URL only in response to OUR own attach() — without it, a
+        // second client joining would tear down and recreate this client's
+        // already-working <img> element (the cache-buster changes the URL).
         if (!this._pendingInit) return;
         this._pendingInit = false;
 

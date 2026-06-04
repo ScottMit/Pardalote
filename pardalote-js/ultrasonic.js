@@ -55,6 +55,25 @@ class Ultrasonic extends Extension {
         // Periodic read timer (JS-side)
         this._readTimer    = null;
         this._readInterval = 0;
+
+        // Set true when Arduino announces this sensor's attach state on connect.
+        // _reRegister() uses this to skip re-sending CMD_ULTRASONIC_ATTACH when
+        // the Arduino is already in sync — only replay when it has reset.
+        this._announcedByArduino = false;
+    }
+
+    // -------------------------------------------------------------------
+    // Board switch — called by Arduino.connect() to wipe per-board state.
+    // -------------------------------------------------------------------
+    _reset() {
+        this._stopRead();
+        this.trigPin             = -1;
+        this.echoPin             = -1;
+        this.isAttached          = false;
+        this.timeoutMs           = 30;
+        this.distance            = -1;
+        this.unit                = CM;
+        this._announcedByArduino = false;
     }
 
     // -------------------------------------------------------------------
@@ -62,14 +81,21 @@ class Ultrasonic extends Extension {
     // -------------------------------------------------------------------
     _reRegister() {
         if (this.isAttached) {
-            this._sendAttach();
-            // Restart periodic read if one was active
+            // Only replay attach if the Arduino didn't announce us (it reset).
+            // If announce did sync us, skip — avoids duplicate Serial output
+            // and redundant pin reconfiguration.
+            if (!this._announcedByArduino) {
+                this._sendAttach();
+            }
+            // Periodic read state is per-WS-client on the Arduino (cleared on
+            // disconnect), so always re-start polling if it was active.
             if (this._readInterval > 0) {
                 const interval = this._readInterval;
                 this._readInterval = 0;   // force re-registration
                 this.read(interval, this.unit);
             }
         }
+        this._announcedByArduino = false;  // reset for next reconnect cycle
     }
 
     // -------------------------------------------------------------------
@@ -172,10 +198,12 @@ class Ultrasonic extends Extension {
         switch (frame.cmd) {
 
             case CMD_ULTRASONIC_ATTACH:
-                // Sync attach state from Arduino announce
-                this.trigPin    = frame.params[1];
-                this.echoPin    = frame.params[2] ?? -1;
-                this.isAttached = true;
+                // Sync attach state from Arduino announce. The flag tells
+                // _reRegister() to skip its replay — Arduino already knows.
+                this.trigPin             = frame.params[1];
+                this.echoPin             = frame.params[2] ?? -1;
+                this.isAttached          = true;
+                this._announcedByArduino = true;
                 break;
 
             case CMD_ULTRASONIC_SET_TIMEOUT:

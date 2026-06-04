@@ -5,12 +5,12 @@
 // GPL-3.0 License
 // ==============================================================
 
-let ArduinoIP = '10.1.1.149';
+let ArduinoIP = '10.1.1.186';
 
 let arduino;
 
 // Arduino pins - Change this to match the pin you are using
-const POTPIN = 2;
+const POTPIN = 14;
 
 function setup() {
     createCanvas(600, 600);
@@ -28,7 +28,7 @@ function draw() {
 
     // get reading from the Arduino
     let dial = arduino.analogRead(POTPIN);
-    let circleRadius = map(dial, 0, 4095, 2, 100);
+    let circleRadius = map(dial, 0, 1023, 2, 100);
     // for UNO the ADC range is 0-1023
     // for ESP32 the ADC range is 0-4095
     // you can also use arduino.analogMax to automatically get the board's ADC range.

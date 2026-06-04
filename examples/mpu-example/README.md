@@ -1,13 +1,14 @@
 # MPU / IMU Example
 
-A p5.js sketch that reads a 6-DOF inertial measurement unit and renders a live 3D model of the sensor board. Roll and pitch are computed with a complementary filter and shown on a HUD overlay.
+A p5.js sketch that reads a 6-DOF inertial measurement unit and renders a live 3D model that rotates with the physical sensor in all three axes. Roll, pitch and yaw are shown on a HUD overlay.
 
 ## What This Example Does
 
-- Polls the IMU at 50 Hz (every 20 ms)
-- Applies a complementary filter combining gyroscope integration (fast response) and accelerometer tilt (drift correction)
-- Renders a 3D PCB model in WEBGL that rotates to match the physical sensor orientation
-- Displays roll, pitch, accelerometer, gyroscope, and temperature readings live
+- Polls the IMU at 20 Hz (every 50 ms by default — gentle on UNO R4 WiFi and older ESP32 boards)
+- Computes **roll** and **pitch** via a complementary filter that combines gyroscope integration (fast response) with accelerometer tilt (gravity-anchored drift correction)
+- Computes **yaw** via pure gyro integration. The MPU-6050 has no magnetometer, so there's no gravity-like reference for heading — yaw will drift a few degrees per minute and only `c`-calibration resets it
+- Renders a 3D model in WEBGL that rotates to match the physical sensor orientation in all three axes
+- Displays roll, pitch, yaw, accelerometer, gyroscope, and temperature readings live with color-coded axis labels (red/green/blue → X/Y/Z)
 - Supports in-browser calibration with a button or the `C` key
 
 ## Hardware Requirements
@@ -33,13 +34,9 @@ A p5.js sketch that reads a 6-DOF inertial measurement unit and renders a live 3
 Install via Arduino IDE → Tools → Manage Libraries:
 - `WebSocketsServer` (by Markus Sattler)
 
-No separate IMU library is required — `MPUExtension.h` reads the sensor registers directly over I2C.
+No separate IMU library is required — `PardaloteMPU.h` reads the sensor registers directly over I2C.
 
-Also uncomment the MPU include in `Pardalote.ino`:
-
-```cpp
-#include "MPUExtension.h"
-```
+Install Pardalote itself by copying `pardalote-arduino/library/Pardalote/` into your Arduino libraries folder (see the [top-level README](../../README.md#pardalote-library)).
 
 ## Supported Sensors
 
@@ -60,10 +57,16 @@ The I2C address can be changed with the AD0 (MPU) or SA0 (LSM6) pin — attach H
 
 ### 1. Upload the firmware
 
-1. Open `pardalote-arduino/Pardalote/Pardalote.ino` in Arduino IDE
-2. Uncomment `#include "MPUExtension.h"` near the top of the sketch
-3. Select your board and upload
-4. Open the Serial Monitor at 115200 baud — on first boot Pardalote asks for your WiFi credentials:
+1. In Arduino IDE: **File → Examples → Pardalote → mpu**. The sketch is two lines:
+   ```cpp
+   #include <Pardalote.h>
+   #include <PardaloteMPU.h>
+
+   void setup() { Pardalote.begin(); }
+   void loop()  { Pardalote.run();   }
+   ```
+2. Select your board and upload
+3. Open the Serial Monitor at 115200 baud — on first boot Pardalote asks for your WiFi credentials:
    ```
    === Pardalote ===
    No WiFi networks stored.
@@ -77,13 +80,13 @@ The I2C address can be changed with the AD0 (MPU) or SA0 (LSM6) pin — attach H
    ```
    Credentials are saved to EEPROM and survive re-uploads. Press `w` within 5 seconds of any boot to update them.
 
-   **Prefer compile-time credentials?** Uncomment the two lines in `secrets.h`:
+   **Prefer compile-time credentials?** Create a `secrets.h` file in the sketch folder with:
    ```cpp
    #define SECRET_SSID "YourWiFiName"
    #define SECRET_PASS "YourWiFiPassword"
    ```
 
-5. Find your Arduino's IP address:
+4. Find your Arduino's IP address:
    - **UNO R4 WiFi:** scrolls across the LED matrix
    - **ESP32:** printed in the Serial Monitor
 
@@ -134,9 +137,9 @@ function onRead({ accel, gyro, temp }) {
 }
 ```
 
-### Complementary filter
+### Complementary filter (roll & pitch)
 
-The raw accelerometer gives a stable tilt angle but is noisy during movement. The gyroscope gives smooth, fast response but drifts over time. The complementary filter blends them:
+The raw accelerometer gives a stable tilt angle but is noisy during movement. The gyroscope gives smooth, fast response but drifts over time. The complementary filter blends them — gyro integration dominates short-term response; accelerometer tilt slowly pulls the estimate back toward the true gravity-down direction:
 
 ```javascript
 const ALPHA = 0.96;  // 96% gyro, 4% accel correction
@@ -146,6 +149,14 @@ pitch = ALPHA * (pitch + gyro.y * toRad * dt) + (1 - ALPHA) * aPitch;
 ```
 
 Increase `ALPHA` for faster response (more gyro trust, more drift). Decrease it for more stability (more accel, noisier during motion).
+
+### Yaw (pure gyro integration)
+
+```javascript
+yaw += gyro.z * toRad * dt;
+```
+
+No accelerometer correction is possible — gravity tells you which way is down, but doesn't tell you which way is north. The MPU-6050 has no magnetometer, so yaw drifts. Press `C` to recalibrate and zero it back to its reference heading.
 
 ### Calibration
 
@@ -158,22 +169,23 @@ Offsets are stored on the Arduino and re-sent to any browser that reconnects —
 
 ## Tuning the orientation
 
-If the 3D model tilts in the wrong direction, adjust the signs in `draw()`:
+If the 3D model rotates in the wrong direction, flip the sign in `draw()`. The current sketch uses aerospace order (yaw → pitch → roll):
 
 ```javascript
-rotateX(pitch);   // → rotateX(-pitch)  to flip forward/back
-rotateZ(-roll);   // → rotateZ(roll)    to flip left/right
+rotateY(yaw);     // → rotateY(-yaw)    to flip heading direction
+rotateX(-roll);   // → rotateX(roll)    to flip left/right tilt
+rotateZ(pitch);   // → rotateZ(-pitch)  to flip forward/back tilt
 ```
 
-For non-standard sensor mounting, you may also need to swap axes in the filter calculation.
+For non-standard sensor mounting, you may also need to swap which gyro axis feeds which angle in the filter calculation.
 
 ## Changing the poll rate
 
 ```javascript
-const POLL_MS = 20;  // 20 ms = 50 Hz
+const POLL_MS = 50;  // 50 ms = 20 Hz
 ```
 
-Lower values give a smoother 3D view but use more CPU and I2C bandwidth. 20–50 ms is recommended for IMU visualisation.
+Lower values give smoother motion but use more I²C bandwidth and WiFi. **On the UNO R4 WiFi and older ESP32 boards (WROVER class) keep this at 50 ms or higher** — faster polling can hang the I²C bus on those chips. Newer ESP32-S3 / C3 boards can handle 20 ms (50 Hz) reliably.
 
 ## Script loading order
 
@@ -190,11 +202,14 @@ Lower values give a smoother 3D view but use more CPU and I2C bandwidth. 20–50
 **"IMU not responding"**
 - Check SDA and SCL wiring; confirm the I2C address (AD0/SA0 state)
 - Check Serial Monitor for `[MPU] WHO_AM_I mismatch` — this means the wrong model string was passed or the wiring is incorrect
-- Verify `MPUExtension.h` is uncommented in `Pardalote.ino`
+- Verify the sketch has `#include <PardaloteMPU.h>`
 
 **"3D model drifts over time when stationary"**
-- This is normal gyro drift — run calibration to zero out gyro bias
-- The accelerometer correction factor `ALPHA` gradually pulls the angle back; lowering it (e.g. to 0.90) makes correction faster at the cost of more noise
+- For roll/pitch drift: normal gyro bias — run calibration. The accelerometer correction factor `ALPHA` gradually pulls the angle back; lowering it (e.g. to 0.90) makes correction faster at the cost of more noise during motion
+- For yaw drift specifically: this is unavoidable on the MPU-6050 (no magnetometer). A few degrees per minute is normal. Press `C` to recalibrate and zero the heading
+
+**"Board hangs after a few seconds"**
+- Most common on UNO R4 WiFi and older ESP32 boards (WROVER class). The I²C peripheral can stall under sustained high-rate reads. Raise `POLL_MS` to 50 or higher
 
 **"Readings are noisy during fast motion"**
 - Normal — accelerometer tilt angles are unreliable when the board is accelerating
@@ -226,6 +241,6 @@ pardalote-js/
 
 - Change model: `new MPU('9250')` for a 9-DOF MPU-9250
 - Two sensors on the same bus: use different addresses (0x68 and 0x69) and `arduino.add('imu1', new MPU('6050'))`, `arduino.add('imu2', new MPU('6050'))`
-- Set accel/gyro range: `arduino.imu.setAccelRange(1)` (±4g), `arduino.imu.setGyroRange(2)` (±1000°/s)
+- Set accel/gyro range: `arduino.imu.setAccelRange(4)` (±4g), `arduino.imu.setGyroRange(1000)` (±1000°/s)
 - Use on ESP32 with custom I2C pins: `arduino.imu.attach(0x68, 21, 22)`
 - Build a full AHRS by adding a magnetometer reading from a 9-DOF variant

@@ -13,7 +13,11 @@
 
         <div class="section">
             <div class="label">ORIENTATION</div>
-            <div id="angles">Roll&nbsp;&nbsp; —°&nbsp;&nbsp;&nbsp; Pitch —°</div>
+            <div id="angles">
+                <span class="axis-x">ROLL</span>  <span id="roll-val" class="angle-val">—</span><span class="deg">°</span>
+                <span class="axis-y">PITCH</span> <span id="pitch-val" class="angle-val">—</span><span class="deg">°</span>
+                <span class="axis-z">YAW</span>   <span id="yaw-val" class="angle-val">—</span><span class="deg">°</span>
+            </div>
         </div>
 
         <div class="section">
@@ -37,6 +41,7 @@
     <script src="https://cdn.jsdelivr.net/npm/p5@1.11.10/lib/p5.js"></script>
     <script src="../../pardalote-js/pardalote.js"></script>
     <script src="../../pardalote-js/mpu.js"></script>
+    <!-- <script src="3DBenchy.stl"></script> -->
     <script src="sketch.js"></script>
 </body>
 </html>

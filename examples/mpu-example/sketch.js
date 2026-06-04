@@ -7,14 +7,14 @@
 //   SDA → SDA pin    SCL → SCL pin
 //   AD0 → GND        (sets I2C address to 0x68)
 //
-// Firmware: uncomment  #include "MPUExtension.h"  in Pardalote.ino
+// Firmware: sketch must `#include <PardaloteMPU.h>` (see examples/mpu in the Pardalote library).
 // ==============================================================
 
 // ── Change this to your Arduino's IP address ─────────────────
-const ARDUINO_IP = '10.1.1.161';
+const ARDUINO_IP = '10.1.1.186';
 
 // ── Tuning ───────────────────────────────────────────────────
-const POLL_MS = 20;    // sensor poll interval ms (50 Hz)
+const POLL_MS = 50;    // sensor poll interval ms (50 Hz)
 
 // Complementary filter blend factor.
 // Higher → trusts gyro more (responsive but drifts over time).
@@ -25,7 +25,16 @@ const ALPHA = 0.96;
 let arduino;
 let roll  = 0;   // radians — rotation about sensor X axis (left / right tilt)
 let pitch = 0;   // radians — rotation about sensor Y axis (forward / back tilt)
+let yaw   = 0;   // radians — rotation about sensor Z axis (heading; drifts over time)
 let lastT = 0;   // timestamp of the previous reading (ms)
+
+let myModel;
+
+function preload() {
+  // Load the 3D model and automatically normalize (scale) it
+  // Supported file formats are .obj and .stl
+  myModel = loadModel('lowest-poly-benchy-utkdesign.stl', true); 
+}
 
 // ── p5 setup ─────────────────────────────────────────────────
 function setup() {
@@ -62,39 +71,38 @@ function draw() {
     directionalLight(210, 220, 235, -0.4, -0.9, -0.5);  // soft top-left key
     pointLight(255, 235, 160, 220, -180, 280);            // warm front-right fill
 
-    // Apply sensor orientation.
-    // Adjust signs here if the board tilts the wrong way on screen:
+    // Apply sensor orientation. Aerospace convention: yaw → pitch → roll.
+    // Adjust signs here if the board rotates the wrong way on screen:
+    //   flip rotateY → rotateY(yaw)
     //   flip rotateX → rotateX(-pitch)
     //   flip rotateZ → rotateZ(roll)
+    rotateY(yaw);
     rotateX(-roll);
     rotateZ(pitch);
 
-    drawBoard();
-    drawAxes(80);
+    drawPlane();
+
+    // Render the loaded model
+    translate(0, -65, 0);
+    // rotate model to sit upright
+    rotateX(PI/2);
+    model(myModel);
+
+    drawAxes(200);
 }
 
 // ── 3D model ──────────────────────────────────────────────────
-function drawBoard() {
+function drawPlane() {
     push();
     noStroke();
 
-    // PCB substrate — flat green board
-    fill(32, 88, 52);
-    box(210, 12, 148);
-
-    // IC package (MPU-6050 QFN chip) centred on top surface
-    translate(0, -7, 0);
-    fill(42, 44, 54);
-    box(66, 4, 66);
-
-    // Pin-1 marker dot on chip surface (white dot, top-left of package)
-    translate(-24, -3, -24);
-    fill(210, 212, 225);
-    sphere(4);
+    // PCB substrate — flat blue surface
+    fill(50, 100, 200);
+    box(310, 12, 248);
 
     // Orientation marker — gold sphere at the +X edge of the board.
     // Represents the axis-1 direction printed on the MPU-6050 silkscreen.
-    translate(-70, 1, -30);
+    translate(130, -6, 80);
     fill(255, 205, 50);
     sphere(8);
 
@@ -144,13 +152,20 @@ function onRead({ accel, gyro, temp }) {
     const toRad = Math.PI / 180;
     roll  = ALPHA * (roll  + gyro.x * toRad * dt) + (1 - ALPHA) * aRoll;
     pitch = ALPHA * (pitch + gyro.y * toRad * dt) + (1 - ALPHA) * aPitch;
+    // Yaw — pure gyro integration. The MPU-6050 has no magnetometer, so
+    // there's no gravity-like reference to correct heading drift. Expect a
+    // few degrees per minute of drift; press 'c' to recalibrate and zero.
+    yaw  += gyro.z * toRad * dt;
 
     // Update HUD text
     const rollDeg  = degrees(roll);
     const pitchDeg = degrees(pitch);
+    // Wrap yaw to ±180° so it doesn't grow unbounded as the gyro integrates.
+    const yawDeg   = ((degrees(yaw) % 360) + 540) % 360 - 180;
 
-    id('angles').textContent =
-        `Roll ${fmt(rollDeg)}°   Pitch ${fmt(pitchDeg)}°`;
+    id('roll-val').textContent  = fmt(rollDeg);
+    id('pitch-val').textContent = fmt(pitchDeg);
+    id('yaw-val').textContent   = fmt(yawDeg);
     id('accel').textContent =
         `X ${fmtV(accel.x)}  Y ${fmtV(accel.y)}  Z ${fmtV(accel.z)}`;
     id('gyro').textContent =
@@ -160,8 +175,10 @@ function onRead({ accel, gyro, temp }) {
 }
 
 function onCalibrate() {
-    // Reset the filter so stale angles don't persist after calibration
-    roll = 0; pitch = 0; lastT = 0;
+    // Reset the filter so stale angles don't persist after calibration.
+    // Yaw gets zeroed too — it has no long-term reference, so 'c' is the
+    // only way to bring it back to a known heading.
+    roll = 0; pitch = 0; yaw = 0; lastT = 0;
     id('cal-msg').textContent = 'Calibration complete';
     setTimeout(() => { id('cal-msg').textContent = ''; }, 3000);
 }

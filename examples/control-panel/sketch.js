@@ -54,7 +54,7 @@ function setup() {
 
     // Auto-switch to the board reported in the HELLO handshake,
     // unless the user has manually chosen a different board.
-    arduino.on('ready', () => { if (!manualBoard) switchBoard(arduino._board); });
+    arduino.on('ready', () => { if (!manualBoard) switchBoard(arduino.board); });
 
     // — Initial control panel —
     panelEl = buildControlPanel(arduino, Object.keys(BOARDS)[0], BOARDS);

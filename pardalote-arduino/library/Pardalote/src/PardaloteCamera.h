@@ -1,5 +1,5 @@
 // ==============================================================
-// CameraExtension.h
+// PardaloteCamera.h
 // Pardalote Camera Extension
 // Version v1.0
 // by Scott Mitchell
@@ -9,9 +9,9 @@
 // an ESP32 camera module. The browser accesses the stream
 // directly via HTTP — no video data flows over the WebSocket.
 //
-// Usage in Pardalote.ino:
-//   #define CAMERA_MODEL_WROVER_KIT  // select your board
-//   #include "CameraExtension.h"     // self-registers, no other changes needed
+// Usage in your sketch:
+//   #define CAMERA_MODEL_WROVER_KIT   // select your board first
+//   #include <PardaloteCamera.h>      // self-registers, no other changes needed
 //
 // Supported board defines (same names as ESP CameraWebServer example):
 //   CAMERA_MODEL_WROVER_KIT
@@ -37,18 +37,16 @@
 //   http://<ip>:<port>/snapshot  — single JPEG (CORS enabled)
 // ==============================================================
 
-#ifndef CAMERA_EXTENSION_H
-#define CAMERA_EXTENSION_H
+#ifndef PARDALOTE_CAMERA_H
+#define PARDALOTE_CAMERA_H
 
 #if !defined(ESP32)
-  #error "CameraExtension requires an ESP32 board"
+  #error "PardaloteCamera requires an ESP32 board"
 #endif
 
 #include "esp_camera.h"
 #include "esp_http_server.h"
-#include "defs.h"
-#include "protocol.h"
-#include "extensions.h"
+#include "Pardalote.h"
 
 // -------------------------------------------------------------------
 // Camera pin configurations — define ONE before including this file.
@@ -369,7 +367,7 @@
 #define PCLK_GPIO_NUM   5
 
 #else
-  #error "CameraExtension: no camera model defined. Define one of the CAMERA_MODEL_* names before including CameraExtension.h"
+  #error "PardaloteCamera: no camera model defined. Define one of the CAMERA_MODEL_* names before including <PardaloteCamera.h>"
 #endif
 
 // -------------------------------------------------------------------
@@ -390,15 +388,15 @@
 // -------------------------------------------------------------------
 class CameraExt {
 private:
-    static bool           _cameraReady;
-    static bool           _serverRunning;
-    static httpd_handle_t _server;
-    static uint16_t       _port;
-    static uint8_t        _quality;
-    static framesize_t    _framesize;
-    static uint8_t        _clientCount;    // WebSocket clients currently connected
-    static bool           _shutdownPending;
-    static uint32_t       _shutdownStart;  // millis() when last client left
+    inline static bool           _cameraReady     = false;
+    inline static bool           _serverRunning   = false;
+    inline static httpd_handle_t _server          = nullptr;
+    inline static uint16_t       _port            = 82;
+    inline static uint8_t        _quality         = 12;
+    inline static framesize_t    _framesize       = FRAMESIZE_QVGA;
+    inline static uint8_t        _clientCount     = 0;     // WebSocket clients currently connected
+    inline static bool           _shutdownPending = false;
+    inline static uint32_t       _shutdownStart   = 0;     // millis() when last client left
 
     // ----------------------------------------------------------------
     // MJPEG stream handler — runs in its own FreeRTOS task per client.
@@ -512,9 +510,11 @@ private:
         if (_serverRunning) return true;
 
         httpd_config_t cfg = HTTPD_DEFAULT_CONFIG();
-        cfg.server_port      = port;
-        cfg.max_open_sockets = 4;                        // stream + snapshot + headroom
-        cfg.uri_match_fn     = httpd_uri_match_wildcard; // strip query strings before routing
+        cfg.server_port       = port;
+        cfg.max_open_sockets  = 4;                        // stream + snapshot + headroom
+        cfg.uri_match_fn      = httpd_uri_match_wildcard; // strip query strings before routing
+        cfg.send_wait_timeout = 15;                       // seconds — absorbs occasional WiFi
+        cfg.recv_wait_timeout = 15;                       // backpressure spikes on slower radios
 
         if (httpd_start(&_server, &cfg) != ESP_OK) {
             Serial.println(F("[Camera] HTTP server start failed"));
@@ -593,7 +593,7 @@ public:
                 fb.begin(CMD_CAMERA_INIT, DEVICE_CAMERA);
                 fb.addInt(id);
                 fb.addInt((int)_port);
-                broadcastFrame(fb);
+                Pardalote.broadcastFrame(fb);
                 break;
             }
 
@@ -626,9 +626,12 @@ public:
 
     // ----------------------------------------------------------------
     // Called on every new client connection.
-    // Announces the extension. If the HTTP server is already running
-    // (started by an earlier client), re-sends the stream port so the
-    // new client can connect without calling attach() again.
+    // Announces the extension. We do not re-send stream state here:
+    // the ESP32 camera hardware can only serve one MJPEG client at a
+    // time (esp_camera_fb_get() is single-consumer), so each client
+    // must call attach() itself if it wants a stream URL. When it
+    // does, the Arduino broadcasts CMD_CAMERA_INIT and the requesting
+    // client builds its URL via handleMessage().
     // ----------------------------------------------------------------
     static void announce(uint8_t clientNum) {
         _clientCount++;
@@ -638,18 +641,7 @@ public:
         fa.begin(CMD_ANNOUNCE, DEVICE_CAMERA);
         fa.addInt(PROTOCOL_VERSION_MAJOR);
         fa.addInt(1);   // max instances
-        sendFrame(clientNum, fa);
-
-        if (_serverRunning) {
-            // Instance ID 0 is used for announce-phase state sync.
-            // JS _reRegister() will resend with the correct logicalId,
-            // at which point the Arduino broadcasts with that ID.
-            FrameBuilder fi;
-            fi.begin(CMD_CAMERA_INIT, DEVICE_CAMERA);
-            fi.addInt(0);
-            fi.addInt((int)_port);
-            sendFrame(clientNum, fi);
-        }
+        Pardalote.sendFrame(clientNum, fa);
     }
 
     // ----------------------------------------------------------------
@@ -683,17 +675,6 @@ public:
         _stopCamera();
     }
 };
-
-// Static member definitions
-bool           CameraExt::_cameraReady    = false;
-bool           CameraExt::_serverRunning  = false;
-httpd_handle_t CameraExt::_server         = nullptr;
-uint16_t       CameraExt::_port           = 82;
-uint8_t        CameraExt::_quality        = 12;
-framesize_t    CameraExt::_framesize      = FRAMESIZE_QVGA;
-uint8_t        CameraExt::_clientCount    = 0;
-bool           CameraExt::_shutdownPending = false;
-uint32_t       CameraExt::_shutdownStart  = 0;
 
 INSTALL_EXTENSION(DEVICE_CAMERA, CameraExt::handle, CameraExt::announce,
                   CameraExt::disconnect, CameraExt::loop)

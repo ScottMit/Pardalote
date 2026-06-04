@@ -46,24 +46,62 @@ class Servo extends Extension {
         this._lastWriteTime = 0;
         this._pendingWrite  = null;
 
+        // Write threshold — skip sends below this many degrees of change.
+        // First send after attach always goes through (_lastSentAngle starts null)
+        // so the servo physically moves to its initial position.
+        this.writeThreshold = 1;
+        this._lastSentAngle = null;
+
         // Periodic read
         this._readTimer    = null;
         this._readInterval = 0;
 
         // Sweep cancellation
         this._sweepAbort = false;
+
+        // Set to true when the Arduino announces this servo's attach state
+        // on connect. _reRegister() uses this to skip re-sending CMD_SERVO_ATTACH
+        // when the Arduino is already in sync — only replay when it has reset.
+        this._announcedByArduino = false;
     }
 
     // -------------------------------------------------------------------
-    // Reconnection — called by Arduino core when HELLO is received.
-    // Restores attach state and last known angle on the Arduino.
+    // Board switch — called by Arduino.connect() to wipe per-board state
+    // while preserving user-tuned configuration (throttle, threshold).
+    // -------------------------------------------------------------------
+    _reset() {
+        if (this._pendingWrite) { clearTimeout(this._pendingWrite); this._pendingWrite = null; }
+        this._stopRead();
+        this._sweepAbort         = true;
+        this.pin                 = -1;
+        this.isAttached          = false;
+        this.angle               = 90;
+        this.micros              = 1500;
+        this.minPulse            = 544;
+        this.maxPulse            = 2400;
+        this._lastSentAngle      = null;
+        this._lastWriteTime      = 0;
+        this._announcedByArduino = false;
+    }
+
+    // -------------------------------------------------------------------
+    // Reconnection — called by Arduino core after CMD_SYNC_COMPLETE.
+    //
+    // Two cases:
+    //   Arduino reset  (_announcedByArduino = false):
+    //     Arduino has no record of this servo. Replay attach + last angle.
+    //   Arduino running (_announcedByArduino = true):
+    //     announce() already synced our state from the Arduino — skip the
+    //     replay (avoids the duplicate detach/attach cycle and Serial noise).
     // -------------------------------------------------------------------
     _reRegister() {
-        if (this.isAttached) {
+        if (this.isAttached && !this._announcedByArduino) {
             this._sendAttach();
             this.arduino.send(encodeFrame(CMD_SERVO_WRITE, DEVICE_SERVO,
                 [this.logicalId, this.angle]));  // raw send — no event, no throttle update
         }
+        // Reset for next disconnect/reconnect cycle.
+        this._announcedByArduino = false;
     }
 
     // -------------------------------------------------------------------
@@ -74,6 +112,7 @@ class Servo extends Extension {
         this.pin      = this.arduino._resolvePin(pin);
         this.minPulse = min;
         this.maxPulse = max;
+        this._lastSentAngle = null;   // first write after (re-)attach always sends
         this._sendAttach();
         this.isAttached = true;
         return this;
@@ -96,8 +135,9 @@ class Servo extends Extension {
             CMD_SERVO_DETACH, DEVICE_SERVO,
             [this.logicalId]
         ));
-        this.isAttached = false;
-        this.pin        = -1;
+        this.isAttached     = false;
+        this.pin            = -1;
+        this._lastSentAngle = null;
         return this;
     }
 
@@ -132,6 +172,10 @@ class Servo extends Extension {
 
     _sendAngle(angle) {
         angle = Math.max(0, Math.min(180, Math.round(angle)));
+        if (this._lastSentAngle !== null &&
+            Math.abs(angle - this._lastSentAngle) < this.writeThreshold) {
+            return;
+        }
         this.arduino.send(encodeFrame(
             CMD_SERVO_WRITE, DEVICE_SERVO,
             [this.logicalId, angle]
@@ -139,6 +183,7 @@ class Servo extends Extension {
         this.angle          = angle;
         this.micros         = this._angleToMicros(angle);
         this._lastWriteTime = Date.now();
+        this._lastSentAngle = angle;
         this._emit('write', { angle });
     }
 
@@ -260,6 +305,11 @@ class Servo extends Extension {
     // -------------------------------------------------------------------
     setThrottle(ms) { this.writeThrottle = Math.max(0, ms); return this; }
 
+    // Skip write() calls whose angle changes by less than `degrees` from the
+    // last sent angle. Useful for animation loops that produce tiny deltas.
+    // Set to 0 to disable. First write after attach is never filtered.
+    setThreshold(degrees) { this.writeThreshold = Math.max(0, degrees); return this; }
+
     // -------------------------------------------------------------------
     // State snapshot
     // -------------------------------------------------------------------
@@ -272,7 +322,8 @@ class Servo extends Extension {
             micros:     this.micros,
             minPulse:   this.minPulse,
             maxPulse:   this.maxPulse,
-            throttle:   this.writeThrottle
+            throttle:   this.writeThrottle,
+            threshold:  this.writeThreshold,
         };
     }
 
@@ -287,11 +338,13 @@ class Servo extends Extension {
         switch (frame.cmd) {
 
             case CMD_SERVO_ATTACH:
-                // Sync attach state from Arduino announce
-                this.pin        = frame.params[1];
-                this.minPulse   = frame.params[2] ?? 544;
-                this.maxPulse   = frame.params[3] ?? 2400;
-                this.isAttached = true;
+                // Sync attach state from Arduino announce. The flag tells
+                // _reRegister() to skip its replay — Arduino already knows.
+                this.pin                 = frame.params[1];
+                this.minPulse            = frame.params[2] ?? 544;
+                this.maxPulse            = frame.params[3] ?? 2400;
+                this.isAttached          = true;
+                this._announcedByArduino = true;
                 break;
 
             case CMD_SERVO_WRITE:

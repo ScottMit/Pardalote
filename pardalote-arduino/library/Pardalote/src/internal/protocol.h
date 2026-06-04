@@ -97,34 +97,57 @@ inline bool paramIsFloat(uint16_t typeMask, int i) {
 //   fb.begin(CMD_SERVO_READ, DEVICE_SERVO);
 //   fb.addInt(instanceId);
 //   fb.addInt(angle);
-//   sendFrame(clientNum, fb);
+//   Pardalote.sendFrame(clientNum, fb);
 // -------------------------------------------------------------------
 class FrameBuilder {
 public:
     uint8_t  buf[256];
-    uint8_t  nparams   = 0;
-    uint16_t typeMask  = 0;
+    uint8_t  nparams    = 0;
+    uint16_t typeMask   = 0;
     uint16_t payloadLen = 0;
+    bool     valid      = true;   // becomes false on overflow; finish() returns 0
 
     void begin(uint8_t cmd, uint16_t target) {
         nparams    = 0;
         typeMask   = 0;
         payloadLen = 0;
+        valid      = true;
         buf[0] = cmd;
         buf[1] = (target >> 8) & 0xFF;
         buf[2] =  target       & 0xFF;
     }
 
-    void addInt(int32_t v) {
+    bool addInt(int32_t v) {
+        if (!valid) return false;
+        if (nparams >= MAX_PARAMS) {
+            Serial.print(F("[FrameBuilder] addInt: param count exceeds MAX_PARAMS="));
+            Serial.println(MAX_PARAMS);
+            valid = false; return false;
+        }
+        if (FRAME_HEADER_SIZE + (nparams + 1) * 4 + payloadLen > sizeof(buf)) {
+            Serial.println(F("[FrameBuilder] addInt: buffer overflow"));
+            valid = false; return false;
+        }
         uint8_t* p = buf + FRAME_HEADER_SIZE + nparams * 4;
         p[0] = (v >> 24) & 0xFF;
         p[1] = (v >> 16) & 0xFF;
         p[2] = (v >>  8) & 0xFF;
         p[3] =  v        & 0xFF;
         nparams++;
+        return true;
     }
 
-    void addFloat(float v) {
+    bool addFloat(float v) {
+        if (!valid) return false;
+        if (nparams >= MAX_PARAMS) {
+            Serial.print(F("[FrameBuilder] addFloat: param count exceeds MAX_PARAMS="));
+            Serial.println(MAX_PARAMS);
+            valid = false; return false;
+        }
+        if (FRAME_HEADER_SIZE + (nparams + 1) * 4 + payloadLen > sizeof(buf)) {
+            Serial.println(F("[FrameBuilder] addFloat: buffer overflow"));
+            valid = false; return false;
+        }
         uint32_t raw;
         memcpy(&raw, &v, 4);
         uint8_t* p = buf + FRAME_HEADER_SIZE + nparams * 4;
@@ -132,21 +155,32 @@ public:
         p[1] = (raw >> 16) & 0xFF;
         p[2] = (raw >>  8) & 0xFF;
         p[3] =  raw        & 0xFF;
-        typeMask |= (1 << nparams);
+        typeMask |= (uint16_t)(1u << nparams);
         nparams++;
+        return true;
     }
 
     // Append a string into the payload section (no null terminator — JS reads payloadLen bytes).
     // Must be called after all addInt / addFloat calls.
-    void addString(const char* s) {
+    bool addString(const char* s) {
+        if (!valid) return false;
         uint16_t len = (uint16_t)strlen(s);
+        if ((size_t)FRAME_HEADER_SIZE + nparams * 4 + payloadLen + len > sizeof(buf)) {
+            Serial.print(F("[FrameBuilder] addString: buffer overflow ("));
+            Serial.print(len); Serial.println(F(" bytes)"));
+            valid = false; return false;
+        }
         uint8_t* p = buf + FRAME_HEADER_SIZE + nparams * 4 + payloadLen;
         memcpy(p, s, len);
         payloadLen += len;
+        return true;
     }
 
     // Call finish() to write the header fields and get the total frame size.
+    // Returns 0 if any addInt/addFloat/addString reported overflow — callers
+    // should treat 0 as "do not send."
     size_t finish() {
+        if (!valid) return 0;
         buf[3] =  nparams;
         buf[4] = (typeMask   >> 8) & 0xFF;
         buf[5] =  typeMask         & 0xFF;
@@ -156,12 +190,7 @@ public:
     }
 };
 
-// -------------------------------------------------------------------
-// sendFrame     — send to one specific client (announce, ping/pong).
-// broadcastFrame — send to all currently connected clients (read responses).
-// Both defined in Pardalote.ino; extern so extension headers can call them.
-// -------------------------------------------------------------------
-extern void sendFrame(uint8_t clientNum, FrameBuilder& fb);
-extern void broadcastFrame(FrameBuilder& fb);
+// Outgoing frames are sent via Pardalote.sendFrame(num, fb) or
+// Pardalote.broadcastFrame(fb) — see Pardalote.h.
 
 #endif

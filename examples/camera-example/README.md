@@ -9,7 +9,7 @@ Video is served over a separate HTTP connection — it does not flow through the
 ## What you need
 
 - An ESP32 board with a camera module and PSRAM (see supported boards below)
-- The board flashed with `Pardalote.ino` and `CameraExtension.h` enabled
+- The board flashed with a sketch that `#include`s `<PardaloteCamera.h>` (the bundled `camera` example fits the bill)
 - A web browser on the same WiFi network
 
 ---
@@ -26,9 +26,9 @@ Video is served over a separate HTTP connection — it does not flow through the
 
 ## Arduino setup
 
-### 1. Select your board
+### 1. Open the library example
 
-In `Pardalote.ino`, uncomment the define that matches your hardware:
+In Arduino IDE: **File → Examples → Pardalote → camera**. The sketch looks like:
 
 ```cpp
 // Uncomment ONE:
@@ -38,13 +38,20 @@ In `Pardalote.ino`, uncomment the define that matches your hardware:
 // #define CAMERA_MODEL_ESP32S3_EYE           // Espressif ESP32-S3-EYE
 // #define CAMERA_MODEL_M5STACK_PSRAM         // M5Stack PSRAM
 // #define CAMERA_MODEL_M5STACK_WIDE          // M5Stack Wide
-// ... (see CameraExtension.h for all supported models)
-#include "CameraExtension.h"
+// ... (see PardaloteCamera.h for all supported models)
+
+#include <Pardalote.h>
+#include <PardaloteCamera.h>
+
+void setup() { Pardalote.begin(); }
+void loop()  { Pardalote.run();   }
 ```
+
+Pick the `CAMERA_MODEL_*` define that matches your hardware before the include.
 
 ### 2. Upload
 
-Flash `Pardalote.ino` to your board. Once connected to WiFi, the IP address is printed in the Serial Monitor (115200 baud).
+Flash the sketch to your board. Once connected to WiFi, the IP address is printed in the Serial Monitor (115200 baud).
 
 ---
 

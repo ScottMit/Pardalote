@@ -15,7 +15,7 @@ Designed for creative coders, design students, and makers who want to connect ph
 ### Software
 - Arduino IDE (arduino.cc)
 - A web browser
-- A text editor
+- A code or text editor
 
 ### Arduino libraries (install via Arduino IDE → Tools → Manage Libraries)
 - `WebSocketsServer` (by Markus Sattler)
@@ -24,9 +24,42 @@ Designed for creative coders, design students, and makers who want to connect ph
 
 No extra library is needed for the MPU / IMU extension — it reads sensor registers directly over I2C.
 
+### Pardalote library
+
+Pardalote ships as an Arduino library. Install it by copying the `pardalote-arduino/library/Pardalote/` folder of this repo into your Arduino libraries folder:
+
+| OS | Libraries folder |
+|---|---|
+| macOS | `~/Documents/Arduino/libraries/` |
+| Windows | `Documents\Arduino\libraries\` |
+| Linux | `~/Arduino/libraries/` |
+
+Restart Arduino IDE — Pardalote should now appear under **File → Examples → Pardalote**.
+
 ---
 
 ## Quick start
+
+A minimal Pardalote sketch is two lines of setup() and one line of loop():
+
+```cpp
+#include <Pardalote.h>
+
+void setup() { Pardalote.begin(); }
+void loop()  { Pardalote.run();   }
+```
+
+Opt-in extensions self-register when included:
+
+```cpp
+#include <Pardalote.h>
+#include <PardaloteServo.h>
+#include <PardaloteNeoPixel.h>
+#include <PardaloteUltrasonic.h>
+
+void setup() { Pardalote.begin(); }
+void loop()  { Pardalote.run();   }
+```
 
 ### 1. Configure WiFi
 
@@ -34,16 +67,16 @@ There are two ways to give Pardalote your WiFi credentials — use either or bot
 
 **Option A — Compile-time (`secrets.h`)**
 
-Open `pardalote-arduino/Pardalote/secrets.h` and uncomment the two lines:
+Create a `secrets.h` file in the same folder as your sketch with:
 ```cpp
 #define SECRET_SSID "YourWiFiName"
 #define SECRET_PASS "YourWiFiPassword"
 ```
-The credentials are baked into the firmware. Simple, but if you share or publish your code, add `secrets.h` to `.gitignore` first.
+The credentials are baked into the firmware. Simple, but if you share or publish your code, add `secrets.h` to `.gitignore` first. Pardalote picks it up automatically via `__has_include` — no other changes needed.
 
 **Option B — EEPROM (Serial Monitor)**
 
-Leave `secrets.h` unchanged (both lines commented out). On first boot, Pardalote detects that no credentials are stored and prompts you via the Serial Monitor at 115200 baud:
+If no `secrets.h` is present, Pardalote detects that no credentials are stored on first boot and prompts you via the Serial Monitor at 115200 baud:
 ```
 === Pardalote ===
 No WiFi networks stored.
@@ -63,15 +96,15 @@ If `SECRET_SSID` is defined and EEPROM networks are also stored, Pardalote tries
 
 ### 2. Upload and find the IP
 
-1. Open `pardalote-arduino/Pardalote/Pardalote.ino` in Arduino IDE
+1. In Arduino IDE: **File → Examples → Pardalote → basic-LED** (or any other Pardalote example matching the hardware you want to use)
 2. Select your board and upload
 3. Find the IP address once connected:
    - **UNO R4 WiFi:** scrolls across the LED matrix
    - **ESP32:** printed in Serial Monitor at 115200 baud
 
-### 3. Open an example
+### 3. Open a browser example
 
-Navigate to the `examples/` folder, and pick an example. Update the IP address in `sketch.js` to match your Arduino, and open `index.html` in a browser.
+Navigate to the `examples/` folder in this repo, and pick an example. Update the IP address in `sketch.js` to match your Arduino, and open `index.html` in a browser.
 
 ---
 
@@ -85,16 +118,19 @@ arduino.connect('192.168.1.42');        // WebSocket on port 81
 arduino.connect('192.168.1.42', 8081);  // custom port
 
 // Events
-arduino.on('ready',      () => { /* Arduino connected and state synced */ });
-arduino.on('connect',    () => { /* WebSocket open — before ready */ });
-arduino.on('disconnect', () => { /* connection lost */ });
+arduino.on('ready',        () => { /* Arduino connected and state synced */ });
+arduino.on('connect',      () => { /* WebSocket open — before ready */ });
+arduino.on('disconnect',   () => { /* connection lost */ });
+arduino.on('reconnecting', ({ attempt, delay }) => { /* next retry in `delay` ms */ });
 
 arduino.disconnect();  // stop and disable auto-reconnect
 ```
 
 The `ready` event fires after the Arduino has sent its current state to the browser — pins, extensions, pixel colours. Any client connecting to a running system immediately sees the live state.
 
-Reconnection is automatic with exponential backoff. You don't need to do anything.
+Reconnection is automatic with exponential backoff and continues for as long as the page is open. You don't need to do anything. The first ten attempts are logged in the console; after that the library falls quiet — subscribe to the `'reconnecting'` event for per-attempt updates.
+
+Calling `connect()` again — for example, to switch to a different Arduino's IP — starts a fresh session: pin modes, polled reads, and write listeners from the previous board are cleared so they aren't replayed onto the new hardware. Each registered extension is reset to its just-constructed state, so any attached servos, initialised strips, MPU calibration, camera streams, and so on are released — call `attach()` / `init()` again inside the new `on('ready')` handler. Event listeners attached with `on('read', …)` etc. survive, as do user-tuned settings like `setThrottle`, `setThreshold`, `setQuality`. Silent auto-reconnect to the same Arduino preserves all of that state as before.
 
 ### Pin modes
 
@@ -168,6 +204,8 @@ arduino.endAll();   // stop all pins
 
 ```javascript
 arduino.connected   // boolean — true after 'ready'
+arduino.board       // string — board name from HELLO (e.g. 'UNO R4 WiFi')
+arduino.analogMax   // number — ADC range, e.g. 1023 (UNO R4) or 4095 (ESP32)
 
 arduino.getStatus() // { connected, isReconnecting, reconnectAttempts,
                     //   deviceIP, availableExtensions }
@@ -281,6 +319,13 @@ arduino.pan.read(END);       // stop poll
 let angle = arduino.pan.read();  // use in draw()
 ```
 
+What the Arduino returns depends on the platform:
+
+- **UNO R4 WiFi:** the last commanded angle (Arduino Servo library's `read()` is just a getter).
+- **ESP32:** the angle decoded from the LEDC PWM duty register. Usually matches the commanded angle, but the round-trip through hardware can return values slightly off, and a `write()` happening at the same time as a `read()` can briefly return a transitional value.
+
+If you just want "what did I tell the servo to do?" — track it yourself, or use `arduino.pan.angle` (the locally cached snapshot updated on every `write()`).
+
 #### Smooth sweep
 
 ```javascript
@@ -360,7 +405,8 @@ arduino.ceiling.show();
 
 ```javascript
 let color = arduino.ceiling.getPixelColor(5); // returns 32-bit colour
-arduino.ceiling.numPixelsCount();             // number of pixels
+arduino.ceiling.numPixels();                  // number of pixels
+arduino.ceiling.getState();                   // snapshot of all strip state
 ```
 
 #### Pixel type constants
@@ -377,12 +423,20 @@ NEO_KHZ400  // older strips
 arduino.strip.init(6, 30, NEO_GRB + NEO_KHZ800);
 ```
 
-#### Threshold
+#### Threshold and throttle
 
 Pixel changes below the colour distance threshold are ignored — useful for animation loops that might send identical values:
 
 ```javascript
 arduino.ceiling.setThreshold(5);  // default 5
+```
+
+`show()` is debounced so rapid draw-loop calls coalesce into a single send (the latest pending state wins). Default 20 ms (~50 Hz max). Raise if you still see queue-buildup lag on a slow link; set to 0 to disable debouncing:
+
+```javascript
+arduino.ceiling.setThrottle(20);  // min ms between show() flushes (default 20)
+arduino.ceiling.setThrottle(50);  // gentler on the UNO R4's WiFi
+arduino.ceiling.setThrottle(0);   // disable debouncing — every show() flushes
 ```
 
 ---
@@ -476,16 +530,16 @@ arduino.on('ready', () => {
 #### Range configuration
 
 ```javascript
-// Accel range — 0=±2g (default)  1=±4g  2=±8g  3=±16g
-arduino.imu.setAccelRange(0);
-arduino.imu.setAccelRange(4);   // pass ±g value directly
+// Accel range — pass the ±g value: 2 (default), 4, 8, or 16
+arduino.imu.setAccelRange(2);
+arduino.imu.setAccelRange(4);
 
-// Gyro range — 0=±250°/s (default)  1=±500°/s  2=±1000°/s  3=±2000°/s
-arduino.imu.setGyroRange(0);
-arduino.imu.setGyroRange(500);  // pass °/s value directly
+// Gyro range — pass the ±°/s value: 250 (default), 500, 1000, or 2000
+arduino.imu.setGyroRange(250);
+arduino.imu.setGyroRange(500);
 ```
 
-Higher accel range handles larger accelerations but reduces resolution. Higher gyro range handles faster rotation but reduces resolution.
+Higher accel range handles larger accelerations but reduces resolution. Higher gyro range handles faster rotation but reduces resolution. Unknown values are rejected with a console warning; the current range is left unchanged.
 
 #### Calibration
 
@@ -555,11 +609,11 @@ Board define names match the ESP CameraWebServer example:
 
 ### Arduino setup
 
-Define your board model **before** including the extension in `Pardalote.ino`:
+Define your board model **before** including the camera header in your sketch:
 
 ```cpp
 #define CAMERA_MODEL_WROVER_KIT
-#include "CameraExtension.h"
+#include <PardaloteCamera.h>
 ```
 
 ### JavaScript usage
@@ -606,7 +660,7 @@ function draw() {
 }
 ```
 
-`loadPixels()` works because `CameraExtension.h` sets `Access-Control-Allow-Origin: *` on both HTTP endpoints automatically.
+`loadPixels()` works because `PardaloteCamera.h` sets `Access-Control-Allow-Origin: *` on both HTTP endpoints automatically.
 
 #### Resolution and quality
 
@@ -683,38 +737,59 @@ Only one browser can receive the MJPEG stream at a time. This is a fundamental l
 
 ## Enabling extensions in the firmware
 
-Extensions are opt-in. Uncomment the lines you need in `Pardalote.ino`:
+Extensions are opt-in. Add the headers you need to your sketch:
 
 ```cpp
-#include "ServoExtension.h"
-// #include "NeoPixelExtension.h"
-// #include "UltrasonicExtension.h"
-// #include "MPUExtension.h"
+#include <Pardalote.h>
+#include <PardaloteServo.h>
+#include <PardaloteNeoPixel.h>
+// #include <PardaloteUltrasonic.h>
+// #include <PardaloteMPU.h>
 // #define CAMERA_MODEL_XIAO_ESP32S3
-// #include "CameraExtension.h"
+// #include <PardaloteCamera.h>
+
+void setup() { Pardalote.begin(); }
+void loop()  { Pardalote.run();   }
 ```
 
-That's all — extensions self-register and require no other changes to the sketch.
+Each extension self-registers when included — no other changes required. Only the extensions you `#include` get compiled into the binary.
 
 ---
 
 ## Project structure
 
 ```
-Pardalote_v20/
+Pardalote/
 ├── pardalote-arduino/
-│   └── Pardalote/
-│       ├── Pardalote.ino           # Main Arduino sketch
-│       ├── defs.h                  # Protocol constants (single source of truth)
-│       ├── protocol.h              # Binary frame encoding/decoding
-│       ├── extensions.h            # Extension registry and dispatch
-│       ├── wifi_config.h           # WiFi credential storage
-│       ├── secrets.h               # Your WiFi credentials (create this file)
-│       ├── ServoExtension.h        # Servo support (up to 8)
-│       ├── NeoPixelExtension.h     # NeoPixel support (up to 4 strips)
-│       ├── UltrasonicExtension.h   # Ultrasonic support (up to 4 sensors)
-│       ├── MPUExtension.h          # IMU support — MPU-6050/6500/9250/9255, LSM6DS3/DSOX
-│       └── CameraExtension.h       # MJPEG camera stream (ESP32-S3 only)
+│   └── library/
+│       └── Pardalote/                       # ← install this folder as an Arduino library
+│           ├── library.properties
+│           ├── keywords.txt
+│           ├── src/
+│           │   ├── Pardalote.h              # Public API
+│           │   ├── Pardalote.cpp            # PardaloteClass implementation
+│           │   ├── PardaloteServo.h         # Servo support (up to 8)
+│           │   ├── PardaloteNeoPixel.h      # NeoPixel support (up to 4 strips)
+│           │   ├── PardaloteUltrasonic.h    # Ultrasonic support (up to 4 sensors)
+│           │   ├── PardaloteMPU.h           # IMU support — MPU-6050/6500/9250/9255, LSM6DS3/DSOX
+│           │   ├── PardaloteCamera.h        # MJPEG camera stream (ESP32 only)
+│           │   └── internal/
+│           │       ├── defs.h               # Protocol constants
+│           │       ├── protocol.h           # Binary frame encoding/decoding
+│           │       ├── extensions.h         # Extension registry — declarations
+│           │       ├── extensions.cpp       # Extension registry — storage + dispatch
+│           │       ├── platform.h           # Board detection
+│           │       ├── wifi_config.h        # WiFi credential storage — declarations
+│           │       ├── wifi_config.cpp      # WiFi credential storage — implementation
+│           │       ├── led_matrix.h         # UNO R4 LED matrix — declarations
+│           │       └── led_matrix.cpp       # UNO R4 LED matrix — implementation
+│           └── examples/                    # IDE-visible example sketches
+│               ├── basic-LED/
+│               ├── servo/
+│               ├── neopixel/
+│               ├── ultrasonic/
+│               ├── mpu/
+│               └── camera/
 │
 ├── pardalote-js/
 │   ├── pardalote.js                       # Core library — always include first
@@ -780,11 +855,15 @@ On connect, the Arduino sends its full current state — pin modes, output value
 **"IMU not responding"**
 - Check SDA and SCL wiring and confirm the I2C address (AD0/SA0 pin state)
 - Check Serial Monitor for `[MPU] WHO_AM_I mismatch` — the model string or wiring is wrong
-- Verify `MPUExtension.h` is uncommented in `Pardalote.ino`
+- Verify your sketch has `#include <PardaloteMPU.h>`
 
 **"IMU readings drift when stationary"**
 - Run calibration with the sensor flat and still: `arduino.imu.calibrate(200)`
 - The complementary filter's `ALPHA` parameter gradually pulls angles back; lower it for faster drift correction
+
+**"Board hangs after a few seconds with the IMU example" (ESP32-WROVER and other older ESP32 boards)**
+- The original ESP32 chip's I²C peripheral can stall under sustained high-rate reads, hanging the main loop. Reduce the JS poll interval to 50 ms or higher: `arduino.imu.read(50)`.
+- Newer ESP32 boards (ESP32-S3, C3, etc.) and the UNO R4 don't have this limitation and can poll the IMU at 20 ms (50 Hz) reliably.
 
 **"Servo jitters"**
 - Use `setThrottle()` to limit write frequency

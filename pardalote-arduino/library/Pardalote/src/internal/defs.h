@@ -110,7 +110,7 @@
 // -------------------------------------------------------------------
 // MPU (6-DOF IMU) Device ID and Commands (0x28–0x2F)
 // Designed for MPU-6050; adaptable to other I2C IMUs by swapping the
-// I2C register reads in MPUExtension.h (see comments there).
+// I2C register reads in PardaloteMPU.h (see comments there).
 // -------------------------------------------------------------------
 #define DEVICE_MPU  203
 
@@ -125,7 +125,8 @@
 #define CMD_CAMERA_SET_RES     0x31  // JS→Ar: [id, framesize]  (framesize_t enum value)
 #define CMD_CAMERA_SET_QUALITY 0x32  // JS→Ar: [id, quality]    0 = best, 63 = worst
 
-#define CMD_MPU_ATTACH          0x28  // JS→Ar: [id, addr, modelCode, sda?, scl?]
+#define CMD_MPU_ATTACH          0x28  // JS→Ar: [id, addr, sda?, scl?] + model name string in payload
+                                      // Ar→JS (announce): [id, addr] + model name string in payload
 #define CMD_MPU_DETACH          0x29  // JS→Ar: [id]
 #define CMD_MPU_READ            0x2A  // JS→Ar: [id]
                                       // Ar→JS: [id, ax, ay, az, gx, gy, gz, temp]  (floats, g and °/s)
@@ -133,7 +134,9 @@
 #define CMD_MPU_SET_GYRO_RANGE  0x2C  // JS→Ar: [id, range]  0=±250, 1=±500, 2=±1000, 3=±2000 °/s
 #define CMD_MPU_CALIBRATE       0x2D  // JS→Ar: [id, samples?]
                                       // Ar→JS: [id, ax, ay, az, gx, gy, gz]  offset floats
-// modelCode values are assigned by MPUExtension.h's SENSORS[] table (0-based index).
-// See mpu.js MPU_MODELS for the JS-side name → code mapping.
+// Model name strings (e.g. "6050", "LSM6DSOX") are sent in the payload of
+// CMD_MPU_ATTACH and matched against SENSORS[i].name in PardaloteMPU.h.
+// See mpu.js MPU_MODELS for the JS-side list — row order in either table
+// is irrelevant; the two are coupled by name only.
 
 #endif

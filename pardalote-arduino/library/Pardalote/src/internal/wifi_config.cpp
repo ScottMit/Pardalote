@@ -1,46 +1,24 @@
 // ==============================================================
-// wifi_config.h
-// WiFi credential manager with EEPROM persistence
-// Supports up to WIFI_MAX_NETS networks; survives power cycles.
-//
-// Also supports optional compile-time credentials via secrets.h:
-//   #define SECRET_SSID "YourWiFiName"
-//   #define SECRET_PASS "YourWiFiPassword"
-// If defined, the secrets.h network is tried first on every boot
-// before falling back to EEPROM-stored networks.
+// internal/wifi_config.cpp
+// WiFi credential manager — implementation.
 // ==============================================================
 
-#pragma once
+#include "wifi_config.h"
+#include "platform.h"
 #include <EEPROM.h>
 
-// Pull in compile-time credentials if secrets.h exists and
-// has SECRET_SSID defined. No error if the file is absent.
-#if __has_include("secrets.h")
-  #include "secrets.h"
-#endif
+// Owns the compile-time-secrets struct. Pardalote.h's binder writes
+// into this from the user's TU at static-init time, before begin().
+PardaloteSecrets _pardaloteSecrets = { nullptr, nullptr };
 
 // -------------------------------------------------------------------
-// Storage layout
+// EEPROM layout
 //   Offset  Bytes  Content
 //   0       4      Magic number
 //   4+n*98  98     Network n: valid(1) + ssid(33) + pass(64)
 //   Total for 5 networks: 494 bytes
 // -------------------------------------------------------------------
-#define WIFI_MAGIC       0xAB12CD34UL
-#define WIFI_MAX_NETS    5
-#define SSID_LEN         33   // 32 chars + null
-#define PASS_LEN         64   // 63 chars + null
-
-struct WifiEntry {
-    bool valid;
-    char ssid[SSID_LEN];
-    char pass[PASS_LEN];
-};
-
-struct WifiStore {
-    uint32_t  magic;
-    WifiEntry nets[WIFI_MAX_NETS];
-};
+static constexpr uint32_t WIFI_MAGIC = 0xAB12CD34UL;
 
 // -------------------------------------------------------------------
 // Internal helpers
@@ -193,11 +171,7 @@ static void _wifiEnterConfig(WifiStore& s) {
 }
 
 // -------------------------------------------------------------------
-// wifiConfigInit — call at the top of setup(), before WiFi.begin().
-//
-// Loads stored networks from EEPROM. If none are stored, enters
-// config mode immediately. Otherwise shows a 5-second window:
-// press 'w' to configure, or wait to proceed to connection.
+// wifiConfigInit
 // -------------------------------------------------------------------
 void wifiConfigInit(WifiStore& s) {
 #ifdef PLATFORM_ESP32
@@ -217,26 +191,26 @@ void wifiConfigInit(WifiStore& s) {
 
     Serial.println(F("\n=== Pardalote ==="));
 
-#ifdef SECRET_SSID
-    Serial.print(F("Network (secrets.h): "));
-    Serial.println(F(SECRET_SSID));
-#endif
+    if (_pardaloteSecrets.ssid) {
+        Serial.print(F("Network (secrets.h): "));
+        Serial.println(_pardaloteSecrets.ssid);
+    }
 
-    // Loop until at least one network is available.
-    // If SECRET_SSID is defined we always have at least one option,
+    // Loop until at least one network is available. If secrets.h
+    // credentials are bound, we always have at least one option,
     // so skip the forced config loop even when EEPROM is empty.
     bool cameFromConfig = false;
-#ifdef SECRET_SSID
-    if (_wifiCount(s) == 0) {
-        Serial.println(F("No EEPROM networks stored."));
+    if (_pardaloteSecrets.ssid) {
+        if (_wifiCount(s) == 0) {
+            Serial.println(F("No EEPROM networks stored."));
+        }
+    } else {
+        while (_wifiCount(s) == 0) {
+            Serial.println(F("No WiFi networks stored."));
+            _wifiEnterConfig(s);
+            cameFromConfig = true;
+        }
     }
-#else
-    while (_wifiCount(s) == 0) {
-        Serial.println(F("No WiFi networks stored."));
-        _wifiEnterConfig(s);
-        cameFromConfig = true;
-    }
-#endif
 
     _wifiShow(s);
 
@@ -255,10 +229,7 @@ void wifiConfigInit(WifiStore& s) {
 }
 
 // -------------------------------------------------------------------
-// wifiConfigConnect — tries each stored network in order.
-//
-// Returns once connected. If all networks fail, drops into config
-// so the user can add or fix credentials, then retries.
+// wifiConfigConnect — tries secrets.h first, then EEPROM entries.
 // -------------------------------------------------------------------
 void wifiConfigConnect(WifiStore& s) {
 #ifdef PLATFORM_UNO_R4
@@ -270,16 +241,15 @@ void wifiConfigConnect(WifiStore& s) {
 
     for (;;) {
 
-#ifdef SECRET_SSID
-        // Try compile-time credentials first
-        {
+        // Try compile-time credentials first (if bound)
+        if (_pardaloteSecrets.ssid) {
             Serial.print(F("Trying (secrets.h): "));
-            Serial.println(F(SECRET_SSID));
-#ifdef SECRET_PASS
-            WiFi.begin(SECRET_SSID, SECRET_PASS);
-#else
-            WiFi.begin(SECRET_SSID);
-#endif
+            Serial.println(_pardaloteSecrets.ssid);
+            if (_pardaloteSecrets.pass) {
+                WiFi.begin(_pardaloteSecrets.ssid, _pardaloteSecrets.pass);
+            } else {
+                WiFi.begin(_pardaloteSecrets.ssid);
+            }
             unsigned long t = millis() + 10000;
             while (WiFi.status() != WL_CONNECTED && millis() < t) delay(500);
             if (WiFi.status() == WL_CONNECTED) return;
@@ -287,13 +257,10 @@ void wifiConfigConnect(WifiStore& s) {
             WiFi.disconnect();
             delay(200);
         }
-#endif
 
         // Try EEPROM-stored networks in order
-        bool anyStored = false;
         for (int i = 0; i < WIFI_MAX_NETS; i++) {
             if (!s.nets[i].valid) continue;
-            anyStored = true;
             Serial.print(F("Trying: "));
             Serial.println(s.nets[i].ssid);
             WiFi.begin(s.nets[i].ssid, s.nets[i].pass);

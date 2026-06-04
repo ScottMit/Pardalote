@@ -5,28 +5,35 @@
 // GPL-3.0 License
 // ==============================================================
 
-let ArduinoIP = '10.0.0.43';
+let ArduinoIP = '10.1.1.186';
 
 let arduino;
+
+let pixelPin = 9;
+let numPixels = 8;
 
 function setup() {
     createCanvas(600, 600);
     colorMode(HSB);
 
-    // connect to Arduino
+    // create Arduino and register the NeoPixel strip
     arduino = new Arduino();
-    arduino.connect(ArduinoIP);
-
-    // attach NeoPixel array to the Arduino
     arduino.add('neoStrip1', new NeoPixel());
-    // Init strip: pin 6, 8 pixels
-    arduino.neoStrip1.init(6, 8);
-    // set strip brightness
-    arduino.neoStrip1.setBrightness(50);
-    // Clear everything
-    arduino.neoStrip1.clear();
-    // calling show() sends the commands to the Arduino
-    arduino.neoStrip1.show();
+
+    // configure the strip once the Arduino is ready
+    arduino.on('ready', () => {
+        // Init strip: pin, num pixels
+        arduino.neoStrip1.init(pixelPin, numPixels);
+        // set strip brightness
+        arduino.neoStrip1.setBrightness(50);
+        // Clear everything
+        arduino.neoStrip1.clear();
+        // calling show() sends the buffered commands to the Arduino
+        arduino.neoStrip1.show();
+    });
+
+    // open the WebSocket connection
+    arduino.connect(ArduinoIP);
 
     // draw color field on screen
     noStroke();
@@ -46,7 +53,7 @@ function draw() {
     // set NeoPixel colors based on mouse location
     if (dist(mouseX, mouseY, width / 2, height / 2) < circleRadius){
         // make a rainbow
-        rainbowEffect(arduino.neoStrip1, 8);
+        rainbowEffect(arduino.neoStrip1, numPixels);
         fill(255);
     } else {
         // get pixel color at mouse location
@@ -62,9 +69,12 @@ function draw() {
     circle(width / 2, height / 2, circleRadius*2);
 }
 
-function rainbowEffect(strip, numPixels) {
-    for (let i = 0; i < numPixels; i++) {
-        let hue = map(i, 0, numPixels - 1, 0, 360);
+function rainbowEffect(strip, nPix) {
+    for (let i = 0; i < nPix; i++) {
+        // map the pixel number to a hue on the color wheel
+        let hIndex = i + (frameCount * 0.05)
+        hIndex = hIndex % nPix;
+        let hue = map(hIndex, 0, nPix - 1, 0, 360);
         colorMode(HSB);
         let rainbowColor = color(hue, 255, 255);
         colorMode(RGB);

@@ -5,9 +5,15 @@
 // GPL-3.0 License
 // ==============================================================
 
-let ArduinoIP = '172.20.10.12'; // Change this to your Arduino's IP
+let ArduinoIP = '10.1.1.186'; // Change this to your Arduino's IP
 
 let arduino;
+let servoPin = 5;
+// We track the commanded angle locally for the on-screen visualization.
+// arduino.myServo.read() exists too — but it round-trips to the Arduino,
+// and on ESP32 it reads the PWM duty register which can return values
+// slightly off the commanded angle. For just "what did I tell the servo
+// to do?" tracking it locally is simpler and exact.
 let angle = 90; // Starting angle
 let machineState = 1;
 let direction = 1; // 1 for increasing, -1 for decreasing
@@ -22,13 +28,13 @@ function setup() {
     // Attach servo to the Arduino
     arduino.add('myServo', new Servo());
 
-    // Attach servo to pin 5 (common servo pin)
-    arduino.myServo.attach(7);
+    // Attach servo to pin
+    arduino.myServo.attach(servoPin);
 
     // Move to center position
     arduino.myServo.center();
 
-    console.log("Servo attached to pin 7");
+    console.log("Servo attached to pin " + servoPin);
 }
 
 function draw() {
@@ -51,28 +57,32 @@ function draw() {
         case 1: {
             // Control servo with mouse X position
             let mouseLoc = constrain(mouseX, 0, width);
-            let targetAngle = map(mouseLoc, 0, width, 0, 180);
-            arduino.myServo.write(targetAngle);
+            angle = map(mouseLoc, 0, width, 0, 180);
+            arduino.myServo.write(angle);
             break;
         }
         case 2: {
-            // autoSweep runs in background, get the current angle
+            // autoSweep runs in background; arduino.myServo.angle holds the
+            // current commanded angle, updated by each sweep step.
+            angle = arduino.myServo.angle;
             break;
         }
         case 3: {
+            angle = 90;
             arduino.myServo.center();
             break;
         }
         case 4: {
+            angle = 0;
             arduino.myServo.min();
             break;
         }
         case 5: {
+            angle = 180;
             arduino.myServo.max();
             break;
         }
     }
-    angle = arduino.myServo.read();  // returns cached angle — no network traffic
 }
 
 function drawServoVisualization() {

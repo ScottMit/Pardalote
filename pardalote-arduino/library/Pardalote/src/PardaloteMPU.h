@@ -1,34 +1,35 @@
 // ==============================================================
-// MPUExtension.h
+// PardaloteMPU.h
 // Pardalote Generic IMU Extension
 // Version v1.1
 // by Scott Mitchell
 // GPL-3.0 License
 //
-// Include this file in Pardalote.ino to add IMU support.
-// No other changes to the sketch are required.
+// Add to your sketch:
 //
-//   #include "MPUExtension.h"
+//   #include <PardaloteMPU.h>
 //
 // Supports multiple sensor families through a descriptor table.
-// The JS side selects the sensor by passing a modelCode in the
-// CMD_MPU_ATTACH frame. See mpu.js for the name → code mapping.
+// The JS side selects the sensor by passing the model name string in
+// the payload of CMD_MPU_ATTACH. See mpu.js MPU_MODELS for the JS-side
+// list. Row order in SENSORS[] no longer matters — names are matched
+// directly, so reordering or inserting rows is safe.
 //
-// Currently supported sensors (SENSORS[] table, code = index):
-//   0  MPU-6050   TDK InvenSense   6-DOF   I2C 0x68 / 0x69
-//   1  MPU-6500   TDK InvenSense   6-DOF   I2C 0x68 / 0x69
-//   2  MPU-9250   TDK InvenSense   9-DOF*  I2C 0x68 / 0x69
-//   3  MPU-9255   TDK InvenSense   9-DOF*  I2C 0x68 / 0x69
-//   4  LSM6DS3    STMicroelectronics  6-DOF I2C 0x6A / 0x6B
-//   5  LSM6DSOX   STMicroelectronics  6-DOF I2C 0x6A / 0x6B
+// Currently supported sensors (model name in quotes):
+//   "6050"     TDK InvenSense MPU-6050   6-DOF   I2C 0x68 / 0x69
+//   "6500"     TDK InvenSense MPU-6500   6-DOF   I2C 0x68 / 0x69
+//   "9250"     TDK InvenSense MPU-9250   9-DOF*  I2C 0x68 / 0x69
+//   "9255"     TDK InvenSense MPU-9255   9-DOF*  I2C 0x68 / 0x69
+//   "LSM6DS3"  STMicroelectronics LSM6DS3  6-DOF I2C 0x6A / 0x6B
+//   "LSM6DSOX" STMicroelectronics LSM6DSOX 6-DOF I2C 0x6A / 0x6B
 //   (* magnetometer not yet implemented — 6-DOF data only)
 //
 // Adding a new sensor:
 //   1. Add scale arrays if the sensor uses different sensitivity values.
 //   2. Add a row to SENSORS[] with the correct register addresses,
-//      byte offsets, and endianness. The model name appears in Serial
-//      debug output only — the actual lookup uses the table index.
-//   3. Add a matching entry to MPU_MODELS in mpu.js.
+//      byte offsets, and endianness. The .name field is the wire identifier
+//      JS sends — keep it consistent with mpu.js MPU_MODELS keys.
+//   3. Add a matching entry to MPU_MODELS in mpu.js (same key string).
 //   Everything else — the protocol, commands, calibration — is generic.
 //
 // Response data (CMD_MPU_READ):
@@ -37,13 +38,11 @@
 //   temp        in °C         (float, sensor formula applied)
 // ==============================================================
 
-#ifndef MPU_EXTENSION_H
-#define MPU_EXTENSION_H
+#ifndef PARDALOTE_MPU_H
+#define PARDALOTE_MPU_H
 
 #include <Wire.h>
-#include "defs.h"
-#include "protocol.h"
-#include "extensions.h"
+#include "Pardalote.h"
 
 #define MAX_MPUS 2
 
@@ -55,7 +54,8 @@
 // in mpu.js MPU_MODELS with code = that row's index.
 // -------------------------------------------------------------------
 struct SensorDef {
-    const char*    name;         // for Serial debug messages
+    const char*    name;         // wire identifier (matched against payload of CMD_MPU_ATTACH)
+                                 // and used in Serial debug messages
 
     uint8_t        dof;          // 6 or 9 (9 = has magnetometer, data not yet sent)
 
@@ -106,23 +106,24 @@ struct SensorDef {
 // -------------------------------------------------------------------
 
 // MPU family — same sensitivity across 6050, 6500, 9250, 9255
-static const float    MPU_A_LSB[4] = { 16384.0f, 8192.0f, 4096.0f, 2048.0f };
-static const float    MPU_G_LSB[4] = { 131.0f, 65.5f, 32.8f, 16.4f };
-static const uint8_t  MPU_A_FS[4]  = { 0x00, 0x08, 0x10, 0x18 };   // AFS_SEL bits → ACCEL_CONFIG (0x1C)
-static const uint8_t  MPU_G_FS[4]  = { 0x00, 0x08, 0x10, 0x18 };   // FS_SEL bits  → GYRO_CONFIG  (0x1B)
+inline constexpr float    MPU_A_LSB[4] = { 16384.0f, 8192.0f, 4096.0f, 2048.0f };
+inline constexpr float    MPU_G_LSB[4] = { 131.0f, 65.5f, 32.8f, 16.4f };
+inline constexpr uint8_t  MPU_A_FS[4]  = { 0x00, 0x08, 0x10, 0x18 };   // AFS_SEL bits → ACCEL_CONFIG (0x1C)
+inline constexpr uint8_t  MPU_G_FS[4]  = { 0x00, 0x08, 0x10, 0x18 };   // FS_SEL bits  → GYRO_CONFIG  (0x1B)
 
 // LSM6 family — ±2g/4g/8g/16g accel; ±250/500/1000/2000 °/s gyro
 // Full register bytes include ODR=416 Hz (bits [7:4] = 0x07) ORed with FS bits.
 // Accel CTRL1_XL: FS bits [3:2] → 00=±2g 10=±4g 11=±8g 01=±16g
 // Gyro  CTRL2_G : FS bits [3:1] → 000=±250 010=±500 011=±1000 100=±2000
-static const float    LSM_A_LSB[4] = { 16393.0f, 8197.0f, 4098.0f, 2049.0f };
-static const float    LSM_G_LSB[4] = { 114.3f, 57.1f, 28.6f, 14.3f };
-static const uint8_t  LSM_A_FS[4]  = { 0x70, 0x78, 0x7C, 0x74 };   // ODR|FS → CTRL1_XL (0x10)
-static const uint8_t  LSM_G_FS[4]  = { 0x70, 0x74, 0x76, 0x78 };   // ODR|FS → CTRL2_G  (0x11)
+inline constexpr float    LSM_A_LSB[4] = { 16393.0f, 8197.0f, 4098.0f, 2049.0f };
+inline constexpr float    LSM_G_LSB[4] = { 114.3f, 57.1f, 28.6f, 14.3f };
+inline constexpr uint8_t  LSM_A_FS[4]  = { 0x70, 0x78, 0x7C, 0x74 };   // ODR|FS → CTRL1_XL (0x10)
+inline constexpr uint8_t  LSM_G_FS[4]  = { 0x70, 0x74, 0x76, 0x78 };   // ODR|FS → CTRL2_G  (0x11)
 
 // -------------------------------------------------------------------
 // Sensor table — each row is one supported sensor.
-// The JS modelCode is the row index (0-based).
+// The .name field is matched against the model name string the JS side
+// sends in the payload of CMD_MPU_ATTACH. Row order is irrelevant.
 //
 // MPU data block (big-endian, 14 bytes from 0x3B):
 //   [0-1]=AX  [2-3]=AY  [4-5]=AZ  [6-7]=TEMP  [8-9]=GX  [10-11]=GY  [12-13]=GZ
@@ -130,24 +131,24 @@ static const uint8_t  LSM_G_FS[4]  = { 0x70, 0x74, 0x76, 0x78 };   // ODR|FS →
 // LSM6 data block (little-endian, 14 bytes from 0x20):
 //   [0-1]=TEMP  [2-3]=GX  [4-5]=GY  [6-7]=GZ  [8-9]=AX  [10-11]=AY  [12-13]=AZ
 // -------------------------------------------------------------------
-static const SensorDef SENSORS[] = {
+inline constexpr SensorDef SENSORS[] = {
 // ── TDK InvenSense MPU family ─────────────────────────────────────────────────────────
 //  name         dof  whoReg  whoVal  preReg  preVal  preDelay  dataStart  LE
 //               axOff ayOff azOff txOff gxOff gyOff gzOff  accelCfg  gyroCfg
 //               accelLsb  gyroLsb  accelFs  gyroFs  tempDiv  tempOff
-    { "MPU-6050",  6,  0x75, 0x68,   0x6B,  0x00,    10,      0x3B,    false,
+    { "6050",  6,  0x75, 0x68,   0x6B,  0x00,    10,      0x3B,    false,
       0, 2, 4, 6, 8, 10, 12,   0x1C, 0x1B,
       MPU_A_LSB, MPU_G_LSB, MPU_A_FS, MPU_G_FS,   340.0f, 36.53f },
 
-    { "MPU-6500",  6,  0x75, 0x70,   0x6B,  0x00,    10,      0x3B,    false,
+    { "6500",  6,  0x75, 0x70,   0x6B,  0x00,    10,      0x3B,    false,
       0, 2, 4, 6, 8, 10, 12,   0x1C, 0x1B,
       MPU_A_LSB, MPU_G_LSB, MPU_A_FS, MPU_G_FS,   340.0f, 36.53f },
 
-    { "MPU-9250",  9,  0x75, 0x71,   0x6B,  0x00,    10,      0x3B,    false,
+    { "9250",  9,  0x75, 0x71,   0x6B,  0x00,    10,      0x3B,    false,
       0, 2, 4, 6, 8, 10, 12,   0x1C, 0x1B,
       MPU_A_LSB, MPU_G_LSB, MPU_A_FS, MPU_G_FS,   340.0f, 36.53f },
 
-    { "MPU-9255",  9,  0x75, 0x73,   0x6B,  0x00,    10,      0x3B,    false,
+    { "9255",  9,  0x75, 0x73,   0x6B,  0x00,    10,      0x3B,    false,
       0, 2, 4, 6, 8, 10, 12,   0x1C, 0x1B,
       MPU_A_LSB, MPU_G_LSB, MPU_A_FS, MPU_G_FS,   340.0f, 36.53f },
 
@@ -163,26 +164,42 @@ static const SensorDef SENSORS[] = {
       8, 10, 12, 0, 2, 4, 6,   0x10, 0x11,
       LSM_A_LSB, LSM_G_LSB, LSM_A_FS, LSM_G_FS,   256.0f, 25.0f },
 };
-static constexpr uint8_t NUM_SENSORS = sizeof(SENSORS) / sizeof(SENSORS[0]);
+inline constexpr uint8_t NUM_SENSORS = sizeof(SENSORS) / sizeof(SENSORS[0]);
 
 // -------------------------------------------------------------------
 // MpuExt — extension class
 // -------------------------------------------------------------------
 class MpuExt {
 private:
-    static uint8_t            _addr[MAX_MPUS];
-    static uint8_t            _accelRange[MAX_MPUS];
-    static uint8_t            _gyroRange[MAX_MPUS];
-    static bool               _attached[MAX_MPUS];
-    static bool               _calibrated[MAX_MPUS];
-    static const SensorDef*   _def[MAX_MPUS];   // pointer into SENSORS[]
+    inline static uint8_t            _addr[MAX_MPUS]       = {};
+    inline static uint8_t            _accelRange[MAX_MPUS] = {};
+    inline static uint8_t            _gyroRange[MAX_MPUS]  = {};
+    inline static bool               _attached[MAX_MPUS]   = {};
+    inline static bool               _calibrated[MAX_MPUS] = {};
+    inline static const SensorDef*   _def[MAX_MPUS]        = {};   // pointer into SENSORS[]
 
     // Software calibration offsets applied in readSensor()
-    static float _calAx[MAX_MPUS], _calAy[MAX_MPUS], _calAz[MAX_MPUS];
-    static float _calGx[MAX_MPUS], _calGy[MAX_MPUS], _calGz[MAX_MPUS];
+    inline static float _calAx[MAX_MPUS] = {};
+    inline static float _calAy[MAX_MPUS] = {};
+    inline static float _calAz[MAX_MPUS] = {};
+    inline static float _calGx[MAX_MPUS] = {};
+    inline static float _calGy[MAX_MPUS] = {};
+    inline static float _calGz[MAX_MPUS] = {};
 
     static bool validId(int id)   { return id >= 0 && id < MAX_MPUS; }
-    static bool validCode(int mc) { return mc >= 0 && mc < NUM_SENSORS; }
+
+    // Look up SENSORS[] by name string (payload is not null-terminated).
+    // Returns the index, or -1 if not found.
+    static int findSensor(const uint8_t* payload, uint16_t len) {
+        if (!payload || len == 0) return -1;
+        for (uint8_t i = 0; i < NUM_SENSORS; i++) {
+            if (strlen(SENSORS[i].name) == len &&
+                memcmp(SENSORS[i].name, payload, len) == 0) {
+                return i;
+            }
+        }
+        return -1;
+    }
 
     // ---- I2C helpers ------------------------------------------------
     static void writeReg(uint8_t addr, uint8_t reg, uint8_t val) {
@@ -280,30 +297,50 @@ public:
         switch (cmd) {
 
             // ── Attach ──────────────────────────────────────────────
+            // Params: [id, addr, sda?, scl?]
+            // Payload: model name string (e.g. "6050", "LSM6DSOX")
             case CMD_MPU_ATTACH: {
-                if (nparams < 3) return;
-                uint8_t addr      = (uint8_t)paramInt(params, 1);
-                int     modelCode = (int)paramInt(params, 2);
+                if (nparams < 2) return;
+                uint8_t addr = (uint8_t)paramInt(params, 1);
 
-                if (!validCode(modelCode)) {
-                    Serial.print(F("IMU: unknown modelCode ")); Serial.println(modelCode);
+                int code = findSensor(payload, payloadLen);
+                if (code < 0) {
+                    Serial.print(F("IMU: unknown model \""));
+                    if (payload && payloadLen) Serial.write(payload, payloadLen);
+                    Serial.println(F("\""));
                     return;
                 }
 
-                // Initialise I2C. On ESP32, optional custom SDA/SCL via params[3,4].
+                // Skip if already in the requested state — avoids redundant I2C
+                // init traffic and duplicate Serial output on JS reconnect /
+                // 'ready' re-attach.
+                bool stateChanged = !_attached[id]
+                                    || _addr[id] != addr
+                                    || _def[id]  != &SENSORS[code];
+                if (!stateChanged) break;
+
+                // Initialise I2C. On ESP32, optional custom SDA/SCL via params[2,3].
 #if defined(PLATFORM_ESP32)
-                if (nparams >= 5 && !_wireInitialised) {
-                    int sda = (int)paramInt(params, 3);
-                    int scl = (int)paramInt(params, 4);
-                    if (sda >= 0 && scl >= 0) { Wire.begin(sda, scl); _wireInitialised = true; }
-                    else ensureWire();
-                } else { ensureWire(); }
+                if (nparams >= 4) {
+                    int sda = (int)paramInt(params, 2);
+                    int scl = (int)paramInt(params, 3);
+                    if (sda >= 0 && scl >= 0) {
+                        // Try custom pins; if Wire was already inited elsewhere,
+                        // ensureWire(sda, scl) returns false and we just use the
+                        // existing pins (no-op on a second ensureWire()).
+                        if (!ensureWire(sda, scl)) ensureWire();
+                    } else {
+                        ensureWire();
+                    }
+                } else {
+                    ensureWire();
+                }
 #else
                 ensureWire();
 #endif
 
                 _addr[id]        = addr;
-                _def[id]         = &SENSORS[modelCode];
+                _def[id]         = &SENSORS[code];
                 _accelRange[id]  = 0;
                 _gyroRange[id]   = 0;
                 _calibrated[id]  = false;
@@ -340,7 +377,7 @@ public:
                 fb.addFloat(ax); fb.addFloat(ay); fb.addFloat(az);
                 fb.addFloat(gx); fb.addFloat(gy); fb.addFloat(gz);
                 fb.addFloat(temp);
-                broadcastFrame(fb);
+                Pardalote.broadcastFrame(fb);
                 break;
             }
 
@@ -415,7 +452,7 @@ public:
                 fb.addInt(id);
                 fb.addFloat(_calAx[id]); fb.addFloat(_calAy[id]); fb.addFloat(_calAz[id]);
                 fb.addFloat(_calGx[id]); fb.addFloat(_calGy[id]); fb.addFloat(_calGz[id]);
-                broadcastFrame(fb);
+                Pardalote.broadcastFrame(fb);
                 break;
             }
 
@@ -433,28 +470,29 @@ public:
         fb.begin(CMD_ANNOUNCE, DEVICE_MPU);
         fb.addInt(PROTOCOL_VERSION_MAJOR);
         fb.addInt(MAX_MPUS);
-        sendFrame(clientNum, fb);
+        Pardalote.sendFrame(clientNum, fb);
 
         for (int i = 0; i < MAX_MPUS; i++) {
             if (!_attached[i] || !_def[i]) continue;
 
-            // Re-send attach state (includes modelCode so JS can restore _def)
+            // Re-send attach state. Model name is carried in the payload so
+            // the JS side can identify the sensor by its string key.
             FrameBuilder fa;
             fa.begin(CMD_MPU_ATTACH, DEVICE_MPU);
             fa.addInt(i);
             fa.addInt(_addr[i]);
-            fa.addInt((int32_t)(_def[i] - SENSORS));  // modelCode = index in table
-            sendFrame(clientNum, fa);
+            fa.addString(_def[i]->name);
+            Pardalote.sendFrame(clientNum, fa);
 
             FrameBuilder fr;
             fr.begin(CMD_MPU_SET_ACCEL_RANGE, DEVICE_MPU);
             fr.addInt(i); fr.addInt(_accelRange[i]);
-            sendFrame(clientNum, fr);
+            Pardalote.sendFrame(clientNum, fr);
 
             FrameBuilder fg;
             fg.begin(CMD_MPU_SET_GYRO_RANGE, DEVICE_MPU);
             fg.addInt(i); fg.addInt(_gyroRange[i]);
-            sendFrame(clientNum, fg);
+            Pardalote.sendFrame(clientNum, fg);
 
             if (_calibrated[i]) {
                 FrameBuilder fc;
@@ -462,25 +500,11 @@ public:
                 fc.addInt(i);
                 fc.addFloat(_calAx[i]); fc.addFloat(_calAy[i]); fc.addFloat(_calAz[i]);
                 fc.addFloat(_calGx[i]); fc.addFloat(_calGy[i]); fc.addFloat(_calGz[i]);
-                sendFrame(clientNum, fc);
+                Pardalote.sendFrame(clientNum, fc);
             }
         }
     }
 };
-
-// Static member definitions
-uint8_t           MpuExt::_addr[MAX_MPUS]       = {};
-uint8_t           MpuExt::_accelRange[MAX_MPUS] = {};
-uint8_t           MpuExt::_gyroRange[MAX_MPUS]  = {};
-bool              MpuExt::_attached[MAX_MPUS]    = {};
-bool              MpuExt::_calibrated[MAX_MPUS]  = {};
-const SensorDef*  MpuExt::_def[MAX_MPUS]         = {};
-float             MpuExt::_calAx[MAX_MPUS]       = {};
-float             MpuExt::_calAy[MAX_MPUS]       = {};
-float             MpuExt::_calAz[MAX_MPUS]       = {};
-float             MpuExt::_calGx[MAX_MPUS]       = {};
-float             MpuExt::_calGy[MAX_MPUS]       = {};
-float             MpuExt::_calGz[MAX_MPUS]       = {};
 
 INSTALL_EXTENSION(DEVICE_MPU, MpuExt::handle, MpuExt::announce)
 

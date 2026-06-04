@@ -33,17 +33,20 @@ The example uses pins 7 (trig) and 8 (echo). Change `attach(7, 8)` in `sketch.js
 Install via Arduino IDE → Tools → Manage Libraries:
 - `WebSocketsServer` (by Markus Sattler)
 
-Also uncomment the Ultrasonic include in `Pardalote.ino`:
-
-```cpp
-#include "UltrasonicExtension.h"
-```
+Install Pardalote itself by copying `pardalote-arduino/library/Pardalote/` into your Arduino libraries folder (see the [top-level README](../../README.md#pardalote-library)).
 
 ## Quick Start
 
 ### 1. Upload the firmware
 
-1. Open `pardalote-arduino/Pardalote/Pardalote.ino` in Arduino IDE
+1. In Arduino IDE: **File → Examples → Pardalote → ultrasonic**. The sketch is two lines:
+   ```cpp
+   #include <Pardalote.h>
+   #include <PardaloteUltrasonic.h>
+
+   void setup() { Pardalote.begin(); }
+   void loop()  { Pardalote.run();   }
+   ```
 2. Select your board and upload
 3. Open the Serial Monitor at 115200 baud — on first boot Pardalote asks for your WiFi credentials:
    ```
@@ -59,7 +62,7 @@ Also uncomment the Ultrasonic include in `Pardalote.ino`:
    ```
    Credentials are saved to EEPROM and survive re-uploads. Press `w` within 5 seconds of any boot to update them.
 
-   **Prefer compile-time credentials?** Uncomment the two lines in `secrets.h`:
+   **Prefer compile-time credentials?** Create a `secrets.h` file in the sketch folder with:
    ```cpp
    #define SECRET_SSID "YourWiFiName"
    #define SECRET_PASS "YourWiFiPassword"
@@ -134,7 +137,7 @@ Increase with `setTimeout()` for longer range; decrease to speed up failed reads
 - Make sure the sensor has a clear line of sight with no nearby reflective surfaces
 
 **"Sensor doesn't respond at all"**
-- Verify `UltrasonicExtension.h` is uncommented in `Pardalote.ino`
+- Verify the sketch has `#include <PardaloteUltrasonic.h>`
 - Check VCC → 5 V and GND → GND
 
 **"Arduino won't connect"**

@@ -1,34 +1,32 @@
 // ==============================================================
-// NeoPixelExtension.h
+// PardaloteNeoPixel.h
 // Pardalote NeoPixel Extension
 // Version v1.0
 // by Scott Mitchell
 // GPL-3.0 License
 //
-// Include this file in Pardalote.ino to add NeoPixel support.
+// Add #include <PardaloteNeoPixel.h> to your sketch.
 // Requires the Adafruit NeoPixel library.
 //
 // Pixel updates are buffered on the Arduino side by the
 // Adafruit library — LEDs only update when CMD_NEO_SHOW arrives.
 // ==============================================================
 
-#ifndef NEOPIXEL_EXTENSION_H
-#define NEOPIXEL_EXTENSION_H
+#ifndef PARDALOTE_NEOPIXEL_H
+#define PARDALOTE_NEOPIXEL_H
 
 #include <Adafruit_NeoPixel.h>
-#include "defs.h"
-#include "protocol.h"
-#include "extensions.h"
+#include "Pardalote.h"
 
 #define MAX_STRIPS 4
 
 class NeoPixelExt {
 private:
-    static Adafruit_NeoPixel* _strips[MAX_STRIPS];
-    static int16_t  _pins[MAX_STRIPS];
-    static int16_t  _numPixels[MAX_STRIPS];
-    static uint32_t _types[MAX_STRIPS];
-    static bool     _initialized[MAX_STRIPS];
+    inline static Adafruit_NeoPixel* _strips[MAX_STRIPS]   = {};
+    inline static int16_t  _pins[MAX_STRIPS]                = { -1,-1,-1,-1 };
+    inline static uint16_t _numPixels[MAX_STRIPS]           = {};  // matches Adafruit_NeoPixel::numPixels() type
+    inline static uint32_t _types[MAX_STRIPS]               = {};
+    inline static bool     _initialized[MAX_STRIPS]         = {};
 
     static bool validId(int id) { return id >= 0 && id < MAX_STRIPS; }
 
@@ -58,7 +56,7 @@ public:
                 if (_strips[id]) { delete _strips[id]; _strips[id] = nullptr; }
                 _strips[id]      = new Adafruit_NeoPixel(num, pin, type);
                 _pins[id]        = (int16_t)pin;
-                _numPixels[id]   = (int16_t)num;
+                _numPixels[id]   = (uint16_t)num;
                 _types[id]       = type;
                 _initialized[id] = true;
 
@@ -129,7 +127,7 @@ public:
         fb.begin(CMD_ANNOUNCE, DEVICE_NEO_PIXEL);
         fb.addInt(PROTOCOL_VERSION_MAJOR);
         fb.addInt(MAX_STRIPS);
-        sendFrame(clientNum, fb);
+        Pardalote.sendFrame(clientNum, fb);
 
         for (int i = 0; i < MAX_STRIPS; i++) {
             if (!_initialized[i]) continue;
@@ -141,19 +139,19 @@ public:
             fi.addInt(_pins[i]);
             fi.addInt(_numPixels[i]);
             fi.addInt((int32_t)_types[i]);
-            sendFrame(clientNum, fi);
+            Pardalote.sendFrame(clientNum, fi);
 
             // Brightness frame
             FrameBuilder fbr;
             fbr.begin(CMD_NEO_BRIGHTNESS, DEVICE_NEO_PIXEL);
             fbr.addInt(i);
             fbr.addInt(_strips[i]->getBrightness());
-            sendFrame(clientNum, fbr);
+            Pardalote.sendFrame(clientNum, fbr);
 
             // One SET_PIXEL frame per pixel using getPixelColor() readback.
             // Adafruit stores colours in its own software buffer so this is
             // reliable regardless of whether show() has been called.
-            for (int j = 0; j < _numPixels[i]; j++) {
+            for (uint16_t j = 0; j < _numPixels[i]; j++) {
                 uint32_t c = _strips[i]->getPixelColor(j);
                 uint8_t w = (c >> 24) & 0xFF;
                 uint8_t r = (c >> 16) & 0xFF;
@@ -168,18 +166,11 @@ public:
                 fp.addInt(g);
                 fp.addInt(b);
                 if (w > 0) fp.addInt(w);
-                sendFrame(clientNum, fp);
+                Pardalote.sendFrame(clientNum, fp);
             }
         }
     }
 };
-
-// Static member definitions
-Adafruit_NeoPixel* NeoPixelExt::_strips[MAX_STRIPS]   = {};
-int16_t  NeoPixelExt::_pins[MAX_STRIPS]                = { -1,-1,-1,-1 };
-int16_t  NeoPixelExt::_numPixels[MAX_STRIPS]           = {};
-uint32_t NeoPixelExt::_types[MAX_STRIPS]               = {};
-bool     NeoPixelExt::_initialized[MAX_STRIPS]         = {};
 
 INSTALL_EXTENSION(DEVICE_NEO_PIXEL, NeoPixelExt::handle, NeoPixelExt::announce)
 
