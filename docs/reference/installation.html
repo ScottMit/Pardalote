@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Installation — Pardalote reference</title>
+<meta name="description" content="What you need and where to put it — hardware, software, and the two Pardalote libraries.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../css/site.css">
+</head>
+<body data-nav="reference">
+
+<nav class="site-nav speckled">
+  <a class="logo" href="../index.html">
+    <img src="../assets/logo.svg" width="30" height="30" alt="">
+    Pardalote
+  </a>
+  <div class="links">
+    <a data-nav="home" href="../index.html">Home</a>
+    <a data-nav="download" href="../download.html">Download</a>
+    <a data-nav="examples" href="../examples/index.html">Examples</a>
+    <a data-nav="reference" href="index.html">Reference</a>
+    <a href="https://github.com/scottmitchell/pardalote">GitHub</a>
+  </div>
+</nav>
+
+<div class="wrap">
+  <div class="ref-layout">
+<aside class="ref-nav">
+  <h4>Getting started</h4>
+  <a href="index.html">Overview</a>
+  <a href="installation.html">Installation</a>
+  <a href="wifi.html">WiFi configuration</a>
+  <h4>Core — JavaScript</h4>
+  <a href="connecting.html#connect">connect() / events</a>
+  <a href="pins.html#pinmode">pinMode()</a>
+  <a href="pins.html#digitalwrite">digitalWrite() / analogWrite()</a>
+  <a href="pins.html#analogread">analogRead() / digitalRead()</a>
+  <a href="pins.html#onchange">onChange()</a>
+  <a href="pins.html#pin-aliases">Pin aliases</a>
+  <h4>Core — Arduino</h4>
+  <a href="arduino.html#pardalotebegin">Pardalote.begin() / run()</a>
+  <a href="arduino.html#pardaloteshare">share() / send()</a>
+  <a href="arduino.html#the-actuator-objects">Reading actuators</a>
+  <h4>Extensions</h4>
+  <a href="extensions.html">Overview</a>
+  <a href="servo.html">Servo</a>
+  <a href="stepper.html">Stepper</a>
+  <a href="bus-servo.html">Bus servo</a>
+  <a href="groups.html">Groups</a>
+  <a href="neopixel.html">NeoPixel</a>
+  <a href="ultrasonic.html">Ultrasonic</a>
+  <a href="mpu.html">MPU / IMU</a>
+  <a href="camera.html">Camera</a>
+  <h4>Under the hood</h4>
+  <a href="protocol.html">Protocol</a>
+  <a href="troubleshooting.html">Troubleshooting</a>
+</aside>
+    <main class="ref-main">
+      <h1>Installation</h1>
+      <p class="lede">What you need and where to put it — hardware, software, and the two Pardalote libraries.</p>
+<h2 id="hardware">Hardware</h2>
+<ul>
+<li><strong>Arduino UNO R4 WiFi</strong> or <strong>ESP32 development board</strong></li>
+<li>The Arduino and your browser must be on the same WiFi network</li>
+</ul>
+<h2 id="software">Software</h2>
+<ul>
+<li>Arduino IDE (<a href="https://www.arduino.cc">arduino.cc</a>)</li>
+<li>A web browser</li>
+<li>A code or text editor</li>
+</ul>
+<h2 id="arduino-libraries">Arduino libraries</h2>
+<p>Install via Arduino IDE → Tools → Manage Libraries. Only install what your hardware needs:</p>
+<table>
+<thead>
+<tr>
+<th>Library</th>
+<th>Needed for</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>WebSocketsServer</code> (Markus Sattler)</td>
+<td>Always required</td>
+</tr>
+<tr>
+<td><code>Adafruit NeoPixel</code></td>
+<td>LED strips</td>
+</tr>
+<tr>
+<td><code>ESP32Servo</code></td>
+<td>Servos on ESP32</td>
+</tr>
+<tr>
+<td><code>AccelStepper</code> (Mike McCauley)</td>
+<td>Stepper motors</td>
+</tr>
+<tr>
+<td><code>SCServo</code> (Feetech/Waveshare)</td>
+<td>Serial bus servos — usually a ZIP from the Waveshare wiki or Feetech SDK, not in the Library Manager</td>
+</tr>
+</tbody>
+</table>
+<p>No extra library is needed for the MPU / IMU extension — it reads sensor registers directly over I2C. The camera extension needs only the ESP32 Arduino core.</p>
+<h2 id="the-pardalote-arduino-library">The Pardalote Arduino library</h2>
+<p>Pardalote ships as an Arduino library. Install it by copying the <code>Pardalote</code> folder from the download into your Arduino libraries folder:</p>
+<table>
+<thead>
+<tr>
+<th>OS</th>
+<th>Libraries folder</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>macOS</td>
+<td><code>~/Documents/Arduino/libraries/</code></td>
+</tr>
+<tr>
+<td>Windows</td>
+<td><code>Documents\Arduino\libraries\</code></td>
+</tr>
+<tr>
+<td>Linux</td>
+<td><code>~/Arduino/libraries/</code></td>
+</tr>
+</tbody>
+</table>
+<p>Restart Arduino IDE — Pardalote now appears under <strong>File → Examples → Pardalote</strong>.</p>
+<h2 id="the-pardalote-javascript-library">The Pardalote JavaScript library</h2>
+<p>No install step: copy <code>pardalote.js</code> (plus any extension files you want) next to your web page and include it with a script tag. <code>pardalote.js</code> must load before any extension file, and extensions before your sketch:</p>
+<div class="code-ex"><div class="bar">index.html — script loading order</div><pre><code><span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;pardalote.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
+<span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;pardalote-pins-esp32-wrover-dev.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>  <span class="cm">&lt;!-- optional pin aliases --&gt;</span>
+<span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;servo.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>       <span class="cm">&lt;!-- optional extensions --&gt;</span>
+<span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;neoPixel.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
+<span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;sketch.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
+</code></pre></div>
+<h2 id="a-minimal-sketch">A minimal sketch</h2>
+<p>A complete Pardalote sketch is two lines of <code>setup()</code> and one line of <code>loop()</code>:</p>
+<div class="code-ex"><div class="bar">sketch.ino — a complete Pardalote sketch</div><pre><code><span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;Pardalote.h&gt;</span><span class="cp"></span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">setup</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">begin</span><span class="p">();</span><span class="w"> </span><span class="p">}</span><span class="w"></span>
+<span class="kt">void</span><span class="w"> </span><span class="nf">loop</span><span class="p">()</span><span class="w">  </span><span class="p">{</span><span class="w"> </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">run</span><span class="p">();</span><span class="w">   </span><span class="p">}</span><span class="w"></span>
+</code></pre></div>
+<p>Extensions self-register when included — see <a href="extensions.html">Extensions</a>.</p>
+<h2 id="finding-the-boards-ip-address">Finding the board's IP address</h2>
+<p>After uploading and joining WiFi (see <a href="wifi.html">WiFi configuration</a>):</p>
+<ul>
+<li><strong>UNO R4 WiFi:</strong> the IP address scrolls across the LED matrix</li>
+<li><strong>ESP32:</strong> the IP is printed in the Serial Monitor at 115200 baud</li>
+</ul>
+<p>Put that address into your JavaScript: <code>arduino.connect('192.168.1.42')</code>.</p>
+
+    </main>
+  </div>
+</div>
+
+<footer class="site-footer speckled">
+  <div class="wrap">
+    <span>Pardalote — created by Scott Mitchell for design education and creative technology.</span>
+    <span><a href="index.html">Reference</a> · <a href="https://github.com/scottmitchell/pardalote">GitHub</a> · GPL-3.0</span>
+  </div>
+</footer>
+
+<script src="../js/site.js"></script>
+</body>
+</html>

@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Camera stream — Pardalote examples</title>
+<meta name="description" content="Live video from an ESP32 camera lands on a p5.js canvas, pixels and all — ready for creative coding.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../css/site.css">
+</head>
+<body data-nav="examples">
+
+<nav class="site-nav speckled">
+  <a class="logo" href="../index.html">
+    <img src="../assets/logo.svg" width="30" height="30" alt="">
+    Pardalote
+  </a>
+  <div class="links">
+    <a data-nav="home" href="../index.html">Home</a>
+    <a data-nav="download" href="../download.html">Download</a>
+    <a data-nav="examples" href="index.html">Examples</a>
+    <a data-nav="reference" href="../reference/index.html">Reference</a>
+    <a href="https://github.com/scottmitchell/pardalote">GitHub</a>
+  </div>
+</nav>
+
+<div class="page-head speckled">
+  <div class="wrap">
+    <div class="crumb"><a href="index.html">Examples</a> / Camera stream</div>
+    <h1>Camera stream</h1>
+    <p>Live video from an ESP32 camera lands on a p5.js canvas, pixels and all — ready for creative coding.</p>
+  </div>
+</div>
+
+<div class="wrap md-layout">
+  <div class="md-body">
+    <div class="tags" style="margin-bottom:.5rem;"><span class="tag lvl-adv">Advanced</span><span class="tag">Vision</span><span class="tag">p5.js</span></div>
+    <div class="ex-meta-row">
+      <a class="btn btn-dark" href="https://github.com/scottmitchell/pardalote/tree/main/examples/camera-example">View the code on GitHub</a>
+    </div>
+    <div class="screenshot-slot">Screenshot / video of this example — coming soon</div>
+<h1 id="camera-example">Camera Example</h1>
+<p>Streams live MJPEG video from an ESP32 camera module into a p5.js canvas over WiFi.</p>
+<p>Video is served over a separate HTTP connection — it does not flow through the WebSocket control channel, so camera streaming and Arduino control can run simultaneously without interfering with each other.</p>
+<hr />
+
+  </div>
+    <div class="ex-code-cols">
+      <div class="code-ex scroll">
+        <div class="bar">camera.ino — the Arduino side</div>
+        <pre><code><span class="cp">#define CAMERA_MODEL_WROVER_KIT</span>
+<span class="c1">// #define CAMERA_MODEL_ESP_EYE</span>
+<span class="c1">// #define CAMERA_MODEL_M5STACK_PSRAM</span>
+<span class="c1">// #define CAMERA_MODEL_M5STACK_V2_PSRAM</span>
+<span class="c1">// #define CAMERA_MODEL_M5STACK_WIDE</span>
+<span class="c1">// #define CAMERA_MODEL_M5STACK_ESP32CAM</span>
+<span class="c1">// #define CAMERA_MODEL_M5STACK_UNITCAM</span>
+<span class="c1">// #define CAMERA_MODEL_M5STACK_CAMS3_UNIT</span>
+<span class="c1">// #define CAMERA_MODEL_AI_THINKER</span>
+<span class="c1">// #define CAMERA_MODEL_TTGO_T_JOURNAL</span>
+<span class="c1">// #define CAMERA_MODEL_XIAO_ESP32S3</span>
+<span class="c1">// #define CAMERA_MODEL_ESP32_CAM_BOARD</span>
+<span class="c1">// #define CAMERA_MODEL_ESP32S3_CAM_LCD</span>
+<span class="c1">// #define CAMERA_MODEL_ESP32S2_CAM_BOARD</span>
+<span class="c1">// #define CAMERA_MODEL_ESP32S3_EYE</span>
+<span class="c1">// #define CAMERA_MODEL_DFRobot_FireBeetle2_ESP32S3</span>
+<span class="c1">// #define CAMERA_MODEL_DFRobot_Romeo_ESP32S3</span>
+
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;Pardalote.h&gt;</span><span class="cp"></span>
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;PardaloteCamera.h&gt;</span><span class="cp"></span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">setup</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">begin</span><span class="p">();</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">loop</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">run</span><span class="p">();</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</code></pre>
+      </div>
+      <div class="code-ex scroll">
+        <div class="bar">sketch.js — the browser side</div>
+        <pre><code><span class="kd">const</span> <span class="nx">ARDUINO_IP</span>  <span class="o">=</span> <span class="s1">&#39;172.20.10.2&#39;</span><span class="p">;</span>   <span class="c1">// Change this to your Arduino&#39;s IP</span>
+<span class="kd">const</span> <span class="nx">CAMERA_PORT</span> <span class="o">=</span> <span class="mf">82</span><span class="p">;</span>
+
+<span class="kd">let</span> <span class="nx">arduino</span><span class="p">;</span>
+<span class="kd">let</span> <span class="nx">camEl</span> <span class="o">=</span> <span class="kc">null</span><span class="p">;</span>   <span class="c1">// &lt;img&gt; element pointing at the MJPEG stream</span>
+
+<span class="kd">function</span> <span class="nx">setup</span><span class="p">()</span> <span class="p">{</span>
+    <span class="nx">createCanvas</span><span class="p">(</span><span class="mf">640</span><span class="p">,</span> <span class="mf">480</span><span class="p">);</span>
+
+    <span class="nx">arduino</span> <span class="o">=</span> <span class="ow">new</span> <span class="nx">Arduino</span><span class="p">();</span>
+    <span class="nx">arduino</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;cam&#39;</span><span class="p">,</span> <span class="ow">new</span> <span class="nx">Camera</span><span class="p">());</span>
+    <span class="nx">arduino</span><span class="p">.</span><span class="nx">connect</span><span class="p">(</span><span class="nx">ARDUINO_IP</span><span class="p">);</span>
+
+    <span class="nx">arduino</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;ready&#39;</span><span class="p">,</span> <span class="p">()</span> <span class="p">=&gt;</span> <span class="p">{</span>
+        <span class="nx">arduino</span><span class="p">.</span><span class="nx">cam</span><span class="p">.</span><span class="nx">attach</span><span class="p">(</span><span class="nx">CAMERA_PORT</span><span class="p">);</span>
+    <span class="p">});</span>
+
+    <span class="nx">arduino</span><span class="p">.</span><span class="nx">cam</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;stream&#39;</span><span class="p">,</span> <span class="p">({</span> <span class="nx">url</span> <span class="p">})</span> <span class="p">=&gt;</span> <span class="p">{</span>
+        <span class="k">if</span> <span class="p">(</span><span class="nx">camEl</span><span class="p">)</span> <span class="nx">camEl</span><span class="p">.</span><span class="nx">remove</span><span class="p">();</span>
+        <span class="nx">camEl</span> <span class="o">=</span> <span class="nx">createImg</span><span class="p">(</span><span class="nx">url</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">);</span>
+        <span class="nx">camEl</span><span class="p">.</span><span class="nx">hide</span><span class="p">();</span>
+    <span class="p">});</span>
+<span class="p">}</span>
+
+<span class="kd">function</span> <span class="nx">draw</span><span class="p">()</span> <span class="p">{</span>
+    <span class="nx">background</span><span class="p">(</span><span class="mf">30</span><span class="p">);</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="nx">camEl</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">try</span> <span class="p">{</span>
+            <span class="nx">image</span><span class="p">(</span><span class="nx">camEl</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="nx">width</span><span class="p">,</span> <span class="nx">height</span><span class="p">);</span>
+        <span class="p">}</span> <span class="k">catch</span> <span class="p">(</span><span class="nx">e</span><span class="p">)</span> <span class="p">{</span>
+            <span class="c1">// img entered broken state (stream dropped) — clear and show placeholder</span>
+            <span class="nx">camEl</span><span class="p">.</span><span class="nx">remove</span><span class="p">();</span>
+            <span class="nx">camEl</span> <span class="o">=</span> <span class="kc">null</span><span class="p">;</span>
+        <span class="p">}</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+        <span class="c1">// Waiting for stream — show a placeholder message</span>
+        <span class="nx">fill</span><span class="p">(</span><span class="mf">80</span><span class="p">);</span>
+        <span class="nx">noStroke</span><span class="p">();</span>
+        <span class="nx">rect</span><span class="p">(</span><span class="mf">0</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="nx">width</span><span class="p">,</span> <span class="nx">height</span><span class="p">);</span>
+        <span class="nx">fill</span><span class="p">(</span><span class="mf">200</span><span class="p">);</span>
+        <span class="nx">textAlign</span><span class="p">(</span><span class="nx">CENTER</span><span class="p">,</span> <span class="nx">CENTER</span><span class="p">);</span>
+        <span class="nx">textSize</span><span class="p">(</span><span class="mf">16</span><span class="p">);</span>
+        <span class="nx">text</span><span class="p">(</span><span class="nx">arduino</span><span class="p">.</span><span class="nx">connected</span> <span class="o">?</span> <span class="s1">&#39;Starting camera…&#39;</span> <span class="o">:</span> <span class="s1">&#39;Connecting…&#39;</span><span class="p">,</span> <span class="nx">width</span> <span class="o">/</span> <span class="mf">2</span><span class="p">,</span> <span class="nx">height</span> <span class="o">/</span> <span class="mf">2</span><span class="p">);</span>
+    <span class="p">}</span>
+
+    <span class="c1">// Connection status dot — top-right corner</span>
+    <span class="nx">noStroke</span><span class="p">();</span>
+    <span class="nx">fill</span><span class="p">(</span><span class="nx">arduino</span><span class="p">.</span><span class="nx">connected</span> <span class="o">?</span> <span class="nx">color</span><span class="p">(</span><span class="mf">60</span><span class="p">,</span> <span class="mf">200</span><span class="p">,</span> <span class="mf">80</span><span class="p">)</span> <span class="o">:</span> <span class="nx">color</span><span class="p">(</span><span class="mf">200</span><span class="p">,</span> <span class="mf">50</span><span class="p">,</span> <span class="mf">60</span><span class="p">));</span>
+    <span class="nx">circle</span><span class="p">(</span><span class="nx">width</span> <span class="o">-</span> <span class="mf">16</span><span class="p">,</span> <span class="mf">16</span><span class="p">,</span> <span class="mf">12</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre>
+      </div>
+    </div>
+  <div class="md-body">
+<h2 id="what-you-need">What you need</h2>
+<ul>
+<li>An ESP32 board with a camera module and PSRAM (see supported boards below)</li>
+<li>The board flashed with a sketch that <code>#include</code>s <code>&lt;PardaloteCamera.h&gt;</code> (the bundled <code>camera</code> example fits the bill)</li>
+<li>A web browser on the same WiFi network</li>
+</ul>
+<hr />
+<h2 id="files">Files</h2>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>index.html</code></td>
+<td>Loads p5.js, Pardalote, and the sketch</td>
+</tr>
+<tr>
+<td><code>sketch.js</code></td>
+<td>p5.js sketch — connects, streams, draws</td>
+</tr>
+<tr>
+<td><code>style.css</code></td>
+<td>Minimal page reset</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="arduino-setup">Arduino setup</h2>
+<h3 id="1-open-the-library-example">1. Open the library example</h3>
+<p>In Arduino IDE: <strong>File → Examples → Pardalote → camera</strong>. The sketch looks like:</p>
+<pre><code><span class="c1">// Uncomment ONE:</span>
+<span class="cp">#define CAMERA_MODEL_WROVER_KIT               </span><span class="c1">// Freenove ESP32-WROVER-DEV</span>
+<span class="c1">// #define CAMERA_MODEL_AI_THINKER            // AI-Thinker ESP32-CAM</span>
+<span class="c1">// #define CAMERA_MODEL_XIAO_ESP32S3          // Seeed XIAO ESP32S3 Sense</span>
+<span class="c1">// #define CAMERA_MODEL_ESP32S3_EYE           // Espressif ESP32-S3-EYE</span>
+<span class="c1">// #define CAMERA_MODEL_M5STACK_PSRAM         // M5Stack PSRAM</span>
+<span class="c1">// #define CAMERA_MODEL_M5STACK_WIDE          // M5Stack Wide</span>
+<span class="c1">// ... (see PardaloteCamera.h for all supported models)</span>
+
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;Pardalote.h&gt;</span><span class="cp"></span>
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;PardaloteCamera.h&gt;</span><span class="cp"></span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">setup</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">begin</span><span class="p">();</span><span class="w"> </span><span class="p">}</span><span class="w"></span>
+<span class="kt">void</span><span class="w"> </span><span class="nf">loop</span><span class="p">()</span><span class="w">  </span><span class="p">{</span><span class="w"> </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">run</span><span class="p">();</span><span class="w">   </span><span class="p">}</span><span class="w"></span>
+</code></pre>
+<p>Pick the <code>CAMERA_MODEL_*</code> define that matches your hardware before the include.</p>
+<h3 id="2-upload">2. Upload</h3>
+<p>Flash the sketch to your board. Once connected to WiFi, the IP address is printed in the Serial Monitor (115200 baud).</p>
+<hr />
+<h2 id="browser-setup">Browser setup</h2>
+<h3 id="1-set-the-ip-address">1. Set the IP address</h3>
+<p>Open <code>sketch.js</code> and update the Arduino IP address:</p>
+<pre><code><span class="kd">const</span> <span class="nx">ARDUINO_IP</span>  <span class="o">=</span> <span class="s1">&#39;10.1.1.128&#39;</span><span class="p">;</span>  <span class="c1">// ← your Arduino&#39;s IP</span>
+<span class="kd">const</span> <span class="nx">CAMERA_PORT</span> <span class="o">=</span> <span class="mf">82</span><span class="p">;</span>             <span class="c1">// ← port for the camera HTTP server</span>
+</code></pre>
+<p><code>CAMERA_PORT</code> can be any unused port. <code>82</code> is the default — change it only if something else on your network uses that port.</p>
+<h3 id="2-open-the-example">2. Open the example</h3>
+<p>Serve the folder from a local web server and open <code>index.html</code> in a browser. You can use any static server — for example:</p>
+<pre><code>npx serve .
+</code></pre>
+<p>If you are using a code editor you can run the web server there.</p>
+<blockquote>
+<p><strong>Why a server?</strong> Browsers block WebSocket connections from <code>file://</code> pages on some platforms. A local server avoids this.</p>
+</blockquote>
+<hr />
+<h2 id="how-it-works">How it works</h2>
+<pre><code>Arduino                          Browser
+────────────────────────────────────────────────────────
+WebSocket :81  ←──── control ────→  pardalote.js / camera.js
+HTTP      :82  ──── MJPEG stream ──→  &lt;img src=&quot;http://ip:82/stream&quot;&gt;
+</code></pre>
+<ol>
+<li><code>arduino.connect()</code> opens a WebSocket on port 81.</li>
+<li>On <code>ready</code>, <code>arduino.cam.attach(CAMERA_PORT)</code> sends a <code>CMD_CAMERA_INIT</code> frame to the Arduino over the WebSocket. The Arduino initialises the camera hardware and starts an HTTP server on the requested port.</li>
+<li>The Arduino echoes the confirmed port back. <code>camera.js</code> sets an <code>&lt;img&gt;</code> element's <code>src</code> to <code>http://&lt;ip&gt;:&lt;port&gt;/stream</code> and emits the <code>stream</code> event.</li>
+<li>The browser fetches the MJPEG stream directly over HTTP — the WebSocket is only used for the initial handshake and any subsequent control commands (resolution, quality).</li>
+<li>In <code>draw()</code>, <code>image(camEl, 0, 0, width, height)</code> renders the current frame to the p5.js canvas.</li>
+</ol>
+<hr />
+<h2 id="adjusting-the-stream">Adjusting the stream</h2>
+<pre><code><span class="c1">// Resolution — call before or after attach()</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">cam</span><span class="p">.</span><span class="nx">setResolution</span><span class="p">(</span><span class="nx">FRAMESIZE_QVGA</span><span class="p">);</span>   <span class="c1">// 320×240  ← default</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">cam</span><span class="p">.</span><span class="nx">setResolution</span><span class="p">(</span><span class="nx">FRAMESIZE_VGA</span><span class="p">);</span>    <span class="c1">// 640×480</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">cam</span><span class="p">.</span><span class="nx">setResolution</span><span class="p">(</span><span class="nx">FRAMESIZE_HD</span><span class="p">);</span>     <span class="c1">// 1280×720</span>
+
+<span class="c1">// JPEG quality: 0 = best image / highest bandwidth</span>
+<span class="c1">//              63 = worst image / lowest bandwidth</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">cam</span><span class="p">.</span><span class="nx">setQuality</span><span class="p">(</span><span class="mf">12</span><span class="p">);</span>  <span class="c1">// default</span>
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Constant</th>
+<th>Resolution</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>FRAMESIZE_QQVGA</code></td>
+<td>160×120</td>
+</tr>
+<tr>
+<td><code>FRAMESIZE_QVGA</code></td>
+<td>320×240</td>
+</tr>
+<tr>
+<td><code>FRAMESIZE_HVGA</code></td>
+<td>480×320</td>
+</tr>
+<tr>
+<td><code>FRAMESIZE_VGA</code></td>
+<td>640×480</td>
+</tr>
+<tr>
+<td><code>FRAMESIZE_SVGA</code></td>
+<td>800×600</td>
+</tr>
+<tr>
+<td><code>FRAMESIZE_HD</code></td>
+<td>1280×720</td>
+</tr>
+</tbody>
+</table>
+<p>Higher resolutions require more bandwidth and may reduce frame rate. QVGA is a good starting point for most WiFi environments.</p>
+<hr />
+<h2 id="snapshots">Snapshots</h2>
+<p>Capture a single JPEG still without interrupting the stream:</p>
+<pre><code><span class="kd">const</span> <span class="nx">url</span> <span class="o">=</span> <span class="k">await</span> <span class="nx">arduino</span><span class="p">.</span><span class="nx">cam</span><span class="p">.</span><span class="nx">snapshot</span><span class="p">();</span>
+<span class="c1">// url is a blob: URL — use as an &lt;img&gt; src or save it</span>
+<span class="c1">// revoke when done to free memory:</span>
+<span class="nx">URL</span><span class="p">.</span><span class="nx">revokeObjectURL</span><span class="p">(</span><span class="nx">url</span><span class="p">);</span>
+</code></pre>
+<p>The snapshot is served from <code>http://&lt;ip&gt;:&lt;port&gt;/snapshot</code> — a separate endpoint from the stream.</p>
+<hr />
+<h2 id="pixel-manipulation">Pixel manipulation</h2>
+<p>Because the camera HTTP server sends <code>Access-Control-Allow-Origin: *</code>, p5.js can read pixel data from the stream:</p>
+<pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">cam</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;stream&#39;</span><span class="p">,</span> <span class="p">({</span> <span class="nx">url</span> <span class="p">})</span> <span class="p">=&gt;</span> <span class="p">{</span>
+    <span class="nx">camEl</span> <span class="o">=</span> <span class="nx">createImg</span><span class="p">(</span><span class="nx">url</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">);</span>
+    <span class="nx">camEl</span><span class="p">.</span><span class="nx">hide</span><span class="p">();</span>
+<span class="p">});</span>
+
+<span class="kd">function</span> <span class="nx">draw</span><span class="p">()</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="nx">camEl</span><span class="p">)</span> <span class="p">{</span>
+        <span class="nx">image</span><span class="p">(</span><span class="nx">camEl</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="nx">width</span><span class="p">,</span> <span class="nx">height</span><span class="p">);</span>
+        <span class="nx">loadPixels</span><span class="p">();</span>
+        <span class="c1">// pixels[] is now available — RGBA values for every canvas pixel</span>
+        <span class="k">for</span> <span class="p">(</span><span class="kd">let</span> <span class="nx">i</span> <span class="o">=</span> <span class="mf">0</span><span class="p">;</span> <span class="nx">i</span> <span class="o">&lt;</span> <span class="nx">pixels</span><span class="p">.</span><span class="nx">length</span><span class="p">;</span> <span class="nx">i</span> <span class="o">+=</span> <span class="mf">4</span><span class="p">)</span> <span class="p">{</span>
+            <span class="nx">pixels</span><span class="p">[</span><span class="nx">i</span><span class="p">]</span> <span class="o">=</span> <span class="mf">255</span> <span class="o">-</span> <span class="nx">pixels</span><span class="p">[</span><span class="nx">i</span><span class="p">];</span>     <span class="c1">// invert red</span>
+            <span class="nx">pixels</span><span class="p">[</span><span class="nx">i</span><span class="o">+</span><span class="mf">1</span><span class="p">]</span> <span class="o">=</span> <span class="mf">255</span> <span class="o">-</span> <span class="nx">pixels</span><span class="p">[</span><span class="nx">i</span><span class="o">+</span><span class="mf">1</span><span class="p">];</span> <span class="c1">// invert green</span>
+            <span class="nx">pixels</span><span class="p">[</span><span class="nx">i</span><span class="o">+</span><span class="mf">2</span><span class="p">]</span> <span class="o">=</span> <span class="mf">255</span> <span class="o">-</span> <span class="nx">pixels</span><span class="p">[</span><span class="nx">i</span><span class="o">+</span><span class="mf">2</span><span class="p">];</span> <span class="c1">// invert blue</span>
+        <span class="p">}</span>
+        <span class="nx">updatePixels</span><span class="p">();</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</code></pre>
+<p>Note: <code>loadPixels()</code> on every frame is CPU-intensive. For heavy processing, consider drawing to an off-screen <code>createGraphics()</code> buffer and only calling <code>loadPixels()</code> on that.</p>
+<hr />
+<h2 id="troubleshooting">Troubleshooting</h2>
+<p><strong>Stream doesn't appear</strong></p>
+<ul>
+<li>Check that <code>ARDUINO_IP</code> and <code>CAMERA_PORT</code> in <code>sketch.js</code> are correct</li>
+<li>Open <code>http://&lt;ip&gt;:&lt;port&gt;/stream</code> directly in a browser tab — if you see video there, the Arduino is working and the issue is in the JS</li>
+<li>Check the browser console for errors</li>
+</ul>
+<p><strong>&quot;Camera Init failed: 0x106 (ESP_ERR_NOT_SUPPORTED)&quot;</strong></p>
+<ul>
+<li>Wrong board define — the camera sensor PID didn't match. Select the correct <code>CAMERA_MODEL_*</code> for your hardware and re-flash.</li>
+</ul>
+<p><strong>Low frame rate</strong></p>
+<ul>
+<li>Reduce resolution with <code>setResolution(FRAMESIZE_QVGA)</code> or increase quality number (lower quality) with <code>setQuality(20)</code></li>
+<li>Move the Arduino closer to the WiFi access point</li>
+<li>Disable WiFi modem sleep — Pardalote does this automatically with <code>WiFi.setSleep(false)</code></li>
+</ul>
+<p><strong>XIAO ESP32S3 won't connect to WiFi</strong></p>
+<ul>
+<li>The Sense board has a u.FL connector for an external antenna. If the antenna switch is set to external and nothing is plugged in, the radio has no antenna and cannot connect. Either attach an external antenna or move the antenna switch to the internal position.</li>
+</ul>
+<p><strong>Canvas size doesn't match stream</strong></p>
+<ul>
+<li>The canvas size and stream resolution are independent. <code>image(camEl, 0, 0, width, height)</code> scales the stream to fill the canvas. Adjust <code>createCanvas()</code> dimensions to match your desired aspect ratio.</li>
+</ul>
+<p><strong>Only one browser can receive the stream at a time</strong></p>
+<ul>
+<li>This is a fundamental limitation of the ESP32 camera driver. The camera's <code>esp_camera_fb_get()</code> function is single-consumer by design — only one HTTP client can receive MJPEG frames at a time. A second browser connecting will see a black screen and will only get the feed once the first disconnects. This behaviour is identical to Espressif's own CameraWebServer example. Multi-client streaming requires a dedicated FreeRTOS task that owns the camera, copies each frame to a shared PSRAM buffer, and fans it out to all connected clients — this is not currently implemented in Pardalote.</li>
+</ul>
+
+  </div>
+</div>
+
+<footer class="site-footer speckled">
+  <div class="wrap">
+    <span>Pardalote — created by Scott Mitchell for design education and creative technology.</span>
+    <span><a href="../reference/index.html">Reference</a> · <a href="https://github.com/scottmitchell/pardalote">GitHub</a> · GPL-3.0</span>
+  </div>
+</footer>
+
+<script src="../js/site.js"></script>
+</body>
+</html>

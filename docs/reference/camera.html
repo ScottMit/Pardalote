@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Camera — Pardalote reference</title>
+<meta name="description" content="MJPEG video and JPEG snapshots from ESP32 camera boards, served over HTTP so video never competes with control messages.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../css/site.css">
+</head>
+<body data-nav="reference">
+
+<nav class="site-nav speckled">
+  <a class="logo" href="../index.html">
+    <img src="../assets/logo.svg" width="30" height="30" alt="">
+    Pardalote
+  </a>
+  <div class="links">
+    <a data-nav="home" href="../index.html">Home</a>
+    <a data-nav="download" href="../download.html">Download</a>
+    <a data-nav="examples" href="../examples/index.html">Examples</a>
+    <a data-nav="reference" href="index.html">Reference</a>
+    <a href="https://github.com/scottmitchell/pardalote">GitHub</a>
+  </div>
+</nav>
+
+<div class="wrap">
+  <div class="ref-layout">
+<aside class="ref-nav">
+  <h4>Getting started</h4>
+  <a href="index.html">Overview</a>
+  <a href="installation.html">Installation</a>
+  <a href="wifi.html">WiFi configuration</a>
+  <h4>Core — JavaScript</h4>
+  <a href="connecting.html#connect">connect() / events</a>
+  <a href="pins.html#pinmode">pinMode()</a>
+  <a href="pins.html#digitalwrite">digitalWrite() / analogWrite()</a>
+  <a href="pins.html#analogread">analogRead() / digitalRead()</a>
+  <a href="pins.html#onchange">onChange()</a>
+  <a href="pins.html#pin-aliases">Pin aliases</a>
+  <h4>Core — Arduino</h4>
+  <a href="arduino.html#pardalotebegin">Pardalote.begin() / run()</a>
+  <a href="arduino.html#pardaloteshare">share() / send()</a>
+  <a href="arduino.html#the-actuator-objects">Reading actuators</a>
+  <h4>Extensions</h4>
+  <a href="extensions.html">Overview</a>
+  <a href="servo.html">Servo</a>
+  <a href="stepper.html">Stepper</a>
+  <a href="bus-servo.html">Bus servo</a>
+  <a href="groups.html">Groups</a>
+  <a href="neopixel.html">NeoPixel</a>
+  <a href="ultrasonic.html">Ultrasonic</a>
+  <a href="mpu.html">MPU / IMU</a>
+  <a href="camera.html">Camera</a>
+  <h4>Under the hood</h4>
+  <a href="protocol.html">Protocol</a>
+  <a href="troubleshooting.html">Troubleshooting</a>
+</aside>
+    <main class="ref-main">
+      <h1>Camera</h1>
+      <p class="lede">MJPEG video and JPEG snapshots from ESP32 camera boards, served over HTTP so video never competes with control messages.</p>
+<p>The camera extension streams MJPEG video and serves JPEG snapshots over a <strong>separate HTTP server</strong> — video never flows through the WebSocket, so it doesn't compete with control messages.</p>
+<p>Requires no third-party library beyond the ESP32 Arduino core (which includes <code>esp_camera</code> and <code>esp_http_server</code>). PSRAM must be present on the board.</p>
+<h2 id="arduino-setup">Arduino setup</h2>
+<p>Define your board model <strong>before</strong> including the camera header:</p>
+<div class="code-ex"><div class="bar">sketch.ino — camera setup</div><pre><code><span class="cp">#define CAMERA_MODEL_WROVER_KIT</span>
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;PardaloteCamera.h&gt;</span><span class="cp"></span>
+</code></pre></div>
+<p>Board define names match the ESP CameraWebServer example:</p>
+<table>
+<thead>
+<tr>
+<th>Board</th>
+<th>Define</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Freenove ESP32-WROVER-DEV</td>
+<td><code>CAMERA_MODEL_WROVER_KIT</code></td>
+</tr>
+<tr>
+<td>AI-Thinker ESP32-CAM</td>
+<td><code>CAMERA_MODEL_AI_THINKER</code></td>
+</tr>
+<tr>
+<td>Seeed Studio XIAO ESP32S3 Sense</td>
+<td><code>CAMERA_MODEL_XIAO_ESP32S3</code></td>
+</tr>
+<tr>
+<td>Espressif ESP32-S3-EYE</td>
+<td><code>CAMERA_MODEL_ESP32S3_EYE</code></td>
+</tr>
+<tr>
+<td>Espressif ESP-EYE</td>
+<td><code>CAMERA_MODEL_ESP_EYE</code></td>
+</tr>
+<tr>
+<td>M5Stack PSRAM</td>
+<td><code>CAMERA_MODEL_M5STACK_PSRAM</code></td>
+</tr>
+<tr>
+<td>M5Stack V2 PSRAM</td>
+<td><code>CAMERA_MODEL_M5STACK_V2_PSRAM</code></td>
+</tr>
+<tr>
+<td>M5Stack Wide</td>
+<td><code>CAMERA_MODEL_M5STACK_WIDE</code></td>
+</tr>
+<tr>
+<td>M5Stack ESP32CAM</td>
+<td><code>CAMERA_MODEL_M5STACK_ESP32CAM</code></td>
+</tr>
+<tr>
+<td>M5Stack UnitCam</td>
+<td><code>CAMERA_MODEL_M5STACK_UNITCAM</code></td>
+</tr>
+<tr>
+<td>M5Stack CamS3 Unit</td>
+<td><code>CAMERA_MODEL_M5STACK_CAMS3_UNIT</code></td>
+</tr>
+<tr>
+<td>TTGO T-Journal</td>
+<td><code>CAMERA_MODEL_TTGO_T_JOURNAL</code></td>
+</tr>
+<tr>
+<td>ESP32-CAM Board</td>
+<td><code>CAMERA_MODEL_ESP32_CAM_BOARD</code></td>
+</tr>
+<tr>
+<td>ESP32-S3 CAM LCD</td>
+<td><code>CAMERA_MODEL_ESP32S3_CAM_LCD</code></td>
+</tr>
+<tr>
+<td>ESP32-S2 CAM Board</td>
+<td><code>CAMERA_MODEL_ESP32S2_CAM_BOARD</code></td>
+</tr>
+<tr>
+<td>DFRobot FireBeetle 2 ESP32-S3</td>
+<td><code>CAMERA_MODEL_DFRobot_FireBeetle2_ESP32S3</code></td>
+</tr>
+<tr>
+<td>DFRobot Romeo ESP32-S3</td>
+<td><code>CAMERA_MODEL_DFRobot_Romeo_ESP32S3</code></td>
+</tr>
+</tbody>
+</table>
+<p>Examples below assume:</p>
+<pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;cam&#39;</span><span class="p">,</span> <span class="ow">new</span> <span class="nx">Camera</span><span class="p">());</span>
+</code></pre>
+<h2 id="attach">attach()</h2>
+<p>Starts the camera HTTP server. Call inside <code>on('ready')</code>.</p>
+<div class="sig">arduino.cam.<span class="fn">attach</span>(port)</div>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>port</code></td>
+<td>number</td>
+<td>HTTP port for the camera server, e.g. <code>82</code>.</td>
+</tr>
+</tbody>
+</table>
+<div class="code-ex"><div class="bar">Example — start the stream</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;ready&#39;</span><span class="p">,</span> <span class="p">()</span> <span class="p">=&gt;</span> <span class="p">{</span>
+    <span class="nx">arduino</span><span class="p">.</span><span class="nx">cam</span><span class="p">.</span><span class="nx">attach</span><span class="p">(</span><span class="mf">82</span><span class="p">);</span>
+<span class="p">});</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">cam</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;stream&#39;</span><span class="p">,</span> <span class="p">({</span> <span class="nx">url</span><span class="p">,</span> <span class="nx">element</span> <span class="p">})</span> <span class="p">=&gt;</span> <span class="p">{</span>
+    <span class="c1">// element is a live &lt;img&gt; — append to DOM or use url with p5.js createImg()</span>
+    <span class="nb">document</span><span class="p">.</span><span class="nx">body</span><span class="p">.</span><span class="nx">appendChild</span><span class="p">(</span><span class="nx">element</span><span class="p">);</span>
+<span class="p">});</span>
+</code></pre></div>
+<h2 id="setresolution">setResolution()</h2>
+<p>Frame size, using constants that match the ESP32 camera <code>framesize_t</code> enum.</p>
+<div class="sig">arduino.cam.<span class="fn">setResolution</span>(framesize)</div>
+<table>
+<thead>
+<tr>
+<th>Constant</th>
+<th>Resolution</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>FRAMESIZE_QQVGA</code></td>
+<td>160×120</td>
+</tr>
+<tr>
+<td><code>FRAMESIZE_QVGA</code></td>
+<td>320×240 (default)</td>
+</tr>
+<tr>
+<td><code>FRAMESIZE_HVGA</code></td>
+<td>480×320</td>
+</tr>
+<tr>
+<td><code>FRAMESIZE_VGA</code></td>
+<td>640×480</td>
+</tr>
+<tr>
+<td><code>FRAMESIZE_SVGA</code></td>
+<td>800×600</td>
+</tr>
+<tr>
+<td><code>FRAMESIZE_HD</code></td>
+<td>1280×720</td>
+</tr>
+</tbody>
+</table>
+<h2 id="setquality">setQuality()</h2>
+<p>JPEG compression level.</p>
+<div class="sig">arduino.cam.<span class="fn">setQuality</span>(quality)</div>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>quality</code></td>
+<td>number</td>
+<td><code>0</code> = best image / highest bandwidth, <code>63</code> = worst / lowest. Default <code>12</code> — a good streaming balance.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="snapshot">snapshot()</h2>
+<p>Fetches a single JPEG still over HTTP.</p>
+<div class="sig">await arduino.cam.<span class="fn">snapshot</span>()</div>
+<p><strong>Returns</strong> a <code>blob:</code> URL — use as an image src, revoke with <code>URL.revokeObjectURL(url)</code> when done. Also fires the <code>'snapshot'</code> event with <code>{ url, blob }</code>.</p>
+<h2 id="detach--getelement">detach() / getElement()</h2>
+<div class="sig">arduino.cam.<span class="fn">detach</span>() · arduino.cam.<span class="fn">getElement</span>()</div>
+<p><code>detach()</code> clears the local stream reference (the HTTP server keeps running on the board). <code>getElement()</code> returns the live <code>&lt;img&gt;</code> element.</p>
+<h2 id="events">Events</h2>
+<div class="sig">arduino.cam.<span class="fn">on</span>(event, handler)</div>
+<table>
+<thead>
+<tr>
+<th>Event</th>
+<th>Payload</th>
+<th>Fires when</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>'stream'</code></td>
+<td><code>{ url, element }</code></td>
+<td>The stream is confirmed live.</td>
+</tr>
+<tr>
+<td><code>'snapshot'</code></td>
+<td><code>{ url, blob }</code></td>
+<td>A still is received.</td>
+</tr>
+<tr>
+<td><code>'error'</code></td>
+<td><code>{ message }</code></td>
+<td>A fetch failed.</td>
+</tr>
+</tbody>
+</table>
+<p>Shorthand: <code>onStream(fn)</code>, <code>onSnapshot(fn)</code>, <code>onError(fn)</code>.</p>
+<h2 id="p5js-integration">p5.js integration</h2>
+<div class="code-ex"><div class="bar">sketch.js — draw the stream to a p5.js canvas</div><pre><code><span class="kd">let</span> <span class="nx">camEl</span><span class="p">;</span>
+
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">cam</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;stream&#39;</span><span class="p">,</span> <span class="p">({</span> <span class="nx">url</span> <span class="p">})</span> <span class="p">=&gt;</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="nx">camEl</span><span class="p">)</span> <span class="nx">camEl</span><span class="p">.</span><span class="nx">remove</span><span class="p">();</span>
+    <span class="nx">camEl</span> <span class="o">=</span> <span class="nx">createImg</span><span class="p">(</span><span class="nx">url</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">);</span>  <span class="c1">// wrap in p5.Element so image() accepts it</span>
+    <span class="nx">camEl</span><span class="p">.</span><span class="nx">hide</span><span class="p">();</span>                <span class="c1">// keep it out of the DOM layout</span>
+<span class="p">});</span>
+
+<span class="kd">function</span> <span class="nx">draw</span><span class="p">()</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="nx">camEl</span><span class="p">)</span> <span class="p">{</span>
+        <span class="nx">image</span><span class="p">(</span><span class="nx">camEl</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="nx">width</span><span class="p">,</span> <span class="nx">height</span><span class="p">);</span>  <span class="c1">// draw MJPEG frame to canvas</span>
+        <span class="nx">loadPixels</span><span class="p">();</span>                        <span class="c1">// pixels[] available for manipulation</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+<p><code>loadPixels()</code> works because <code>PardaloteCamera.h</code> sets <code>Access-Control-Allow-Origin: *</code> on both HTTP endpoints automatically.</p>
+<h2 id="http-endpoints">HTTP endpoints</h2>
+<table>
+<thead>
+<tr>
+<th>Endpoint</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>http://&lt;ip&gt;:&lt;port&gt;/stream</code></td>
+<td>MJPEG stream</td>
+</tr>
+<tr>
+<td><code>http://&lt;ip&gt;:&lt;port&gt;/snapshot</code></td>
+<td>Single JPEG</td>
+</tr>
+</tbody>
+</table>
+<h2 id="state-snapshot">State snapshot</h2>
+<div class="sig">arduino.cam.<span class="fn">getState</span>()</div>
+<p><strong>Returns</strong> <code>{ logicalId, port, streamUrl, snapshotUrl, framesize, quality }</code>.</p>
+<h2 id="limitations">Limitations</h2>
+<p>Only one browser can receive the MJPEG stream at a time. This is a fundamental limitation of the ESP32 camera driver — <code>esp_camera_fb_get()</code> is single-consumer by design. A second browser connecting will see a black screen and only receives the feed once the first disconnects. This behaviour is identical to Espressif's own CameraWebServer example.</p>
+<p>See also: <a href="../examples/camera-example.html">Camera example</a></p>
+
+    </main>
+  </div>
+</div>
+
+<footer class="site-footer speckled">
+  <div class="wrap">
+    <span>Pardalote — created by Scott Mitchell for design education and creative technology.</span>
+    <span><a href="index.html">Reference</a> · <a href="https://github.com/scottmitchell/pardalote">GitHub</a> · GPL-3.0</span>
+  </div>
+</footer>
+
+<script src="../js/site.js"></script>
+</body>
+</html>

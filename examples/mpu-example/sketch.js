@@ -10,8 +10,7 @@
 // Firmware: sketch must `#include <PardaloteMPU.h>` (see examples/mpu in the Pardalote library).
 // ==============================================================
 
-// ── Change this to your Arduino's IP address ─────────────────
-const ARDUINO_IP = '10.1.1.186';
+const ARDUINO_IP = '10.1.1.186';   // Change this to your Arduino's IP
 
 // ── Tuning ───────────────────────────────────────────────────
 const POLL_MS = 50;    // sensor poll interval ms (50 Hz)

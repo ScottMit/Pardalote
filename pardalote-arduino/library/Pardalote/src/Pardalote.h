@@ -75,11 +75,43 @@ public:
     void sendFrame(uint8_t clientNum, FrameBuilder& fb);
     void broadcastFrame(FrameBuilder& fb);
 
+    // Run an extension command locally from the sketch — the same code path a
+    // browser command takes. Used by the PardaloteServo / PardaloteStepper
+    // write helpers; not usually called directly.
+    void command(uint16_t deviceId, uint8_t cmd, int32_t a)                       { int32_t p[1] = { a };       _command(deviceId, cmd, p, 1); }
+    void command(uint16_t deviceId, uint8_t cmd, int32_t a, int32_t b)            { int32_t p[2] = { a, b };    _command(deviceId, cmd, p, 2); }
+    void command(uint16_t deviceId, uint8_t cmd, int32_t a, int32_t b, int32_t c) { int32_t p[3] = { a, b, c }; _command(deviceId, cmd, p, 3); }
+
     // Inspection helpers.
     const char* boardName() const { return PARDALOTE_BOARD; }
     bool        anyConnected() const { return _connectedClients != 0; }
 
+    // -----------------------------------------------------------------------
+    // Sharing pin state with the browser.
+    //
+    // share(pin, mode) — tell the browser "this pin exists, it's in this mode."
+    //     Accepts Arduino's INPUT / OUTPUT / INPUT_PULLUP / INPUT_PULLDOWN, or
+    //     Pardalote's MODE_ANALOG_INPUT. For input modes the JS side will start
+    //     polling automatically — so the browser gets values flowing without
+    //     having to declare the pin itself.
+    //
+    // send(pin, value) — push a current value to the browser. JS caches it,
+    //     fires arduino.onChange(pin, ...) handlers, makes it available via
+    //     arduino.digitalRead(pin) / analogRead(pin).
+    //
+    // Both calls do NOT manipulate the pin — they only inform the browser.
+    // The sketch is still responsible for the actual pinMode / digitalWrite /
+    // digitalRead via the standard Arduino API. share() and send() exist
+    // purely to keep the browser in sync.
+    //
+    // See examples/shared-control-example/ and examples/shared-input-example/.
+    // -----------------------------------------------------------------------
+    void share(uint8_t pin, uint8_t mode);
+    void send (uint8_t pin, int     value);
+
 private:
+    void _command(uint16_t deviceId, uint8_t cmd, const int32_t* params, uint8_t n);
+
     static constexpr uint8_t  MAX_WS_CLIENTS  = 4;
     static constexpr uint32_t HELLO_DELAY_MS  = 50;
     static constexpr int      NUM_ACTIONS     = 20;

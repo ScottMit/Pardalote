@@ -259,6 +259,9 @@ class Arduino {
         this._available   = new Set();  // deviceIds announced by Arduino
         this._nextId      = 0;
 
+        // Actuator groups, keyed by name (see group())
+        this._groups      = {};
+
         // Connection-level callbacks
         this._cbs = {};
 
@@ -449,9 +452,14 @@ class Arduino {
         // Sync-complete signal — all announce frames have arrived; fire 'ready'.
         if (frame.cmd === CMD_SYNC_COMPLETE) { this._onSyncComplete(); return; }
 
-        // Incoming pin-state frames from Arduino announce — sync local maps.
+        // Incoming pin-state frames — from Arduino announce on connect, or
+        // from Arduino sketches calling Pardalote.share(pin, mode). For input
+        // modes we auto-start a default-interval poll so the browser starts
+        // receiving values without a separate digitalRead/analogRead call.
         if (frame.cmd === CMD_PIN_MODE) {
-            this._pinModes.set(pin, frame.params[0]);
+            const mode = frame.params[0];
+            this._pinModes.set(pin, mode);
+            this._maybeStartPollFor(pin, mode);
             return;
         }
         if (frame.cmd === CMD_DIGITAL_WRITE) {
@@ -607,6 +615,21 @@ class Arduino {
     }
 
     // -------------------------------------------------------------------
+    // group(name, members)
+    // Create a named group of actuators for coordinated control. `members`
+    // maps channel names to extension instances:
+    //   arduino.group('arm', { shoulder: arduino.s1, elbow: arduino.s2 });
+    // group.set({...}) writes every member in ONE batched WebSocket message
+    // so they move together. Returns the Group (also at arduino[name]).
+    // -------------------------------------------------------------------
+    group(name, members) {
+        const g = new Group(this, name, members);
+        this._groups[name] = g;
+        this[name] = g;   // shorthand: arduino.arm
+        return g;
+    }
+
+    // -------------------------------------------------------------------
     // Core API — mirrors Arduino's own function names where possible
     // -------------------------------------------------------------------
 
@@ -631,12 +654,22 @@ class Arduino {
         this._pinModes.set(pin, mode);   // stored for announce sync and _onSyncComplete replay
         this.end(pin);                   // cancel any active periodic read before changing mode
         this.send(encodeFrame(CMD_PIN_MODE, pin, [mode]));
-        if (interval !== undefined) {
-            if (mode === ANALOG_INPUT)                                          this.analogRead(pin, interval);
-            else if (mode === INPUT || mode === INPUT_PULLUP
-                                    || mode === INPUT_PULLDOWN)                 this.digitalRead(pin, interval);
-        }
+        // For input modes, auto-start polling. If `interval` is given use it,
+        // otherwise the underlying digitalRead / analogRead falls back to
+        // this.defaultInterval (200 ms). OUTPUT modes never auto-poll.
+        this._maybeStartPollFor(pin, mode, interval);
         return this;
+    }
+
+    // Shared helper used by pinMode() and by the incoming CMD_PIN_MODE handler.
+    // For input-type modes, kick off a periodic read at the given interval
+    // (or defaultInterval if undefined). No-op for OUTPUT or unknown modes.
+    _maybeStartPollFor(pin, mode, interval) {
+        if (mode === ANALOG_INPUT) {
+            this.analogRead(pin, interval);
+        } else if (mode === INPUT || mode === INPUT_PULLUP || mode === INPUT_PULLDOWN) {
+            this.digitalRead(pin, interval);
+        }
     }
 
     digitalWrite(pin, value) {
@@ -760,5 +793,159 @@ class Arduino {
             deviceIP:          this.deviceIP,
             availableExtensions: [...this._available]
         };
+    }
+}
+
+// =====================================================================
+// Group — a named collection of actuators for coordinated control.
+//
+// Layer 1: set() writes every member's value in a SINGLE batched WebSocket
+// message (frames coalesced via arduino.send([...])). On the board they are
+// parsed and applied back-to-back within one receive, so the members move
+// together. read() polls/reports every member.
+//
+// Members must implement the group member adapter (_memberWrite + the
+// memberValue getter) — currently Servo, BusServo and Stepper. Anything
+// else raises a clear error at construction.
+// =====================================================================
+class Group {
+    constructor(arduino, name, members) {
+        this.arduino = arduino;
+        this.name    = name;
+        this.members = {};
+
+        // Last-commanded value per member — the assumed "current" position for
+        // moveTo() distance/speed matching. Seeded from memberValue on first use.
+        this._commanded = {};
+
+        if (!members || typeof members !== 'object' || Array.isArray(members)) {
+            throw new TypeError(
+                `Group '${name}': members must be an object like ` +
+                `{ shoulder: arduino.s1, elbow: arduino.s2 }`);
+        }
+        for (const [key, m] of Object.entries(members)) {
+            if (!m || typeof m._memberWrite !== 'function' || !('memberValue' in m)) {
+                throw new TypeError(
+                    `Group '${name}': member '${key}' is not a groupable actuator ` +
+                    `(supported: Servo, BusServo, Stepper).`);
+            }
+            this.members[key] = m;
+        }
+    }
+
+    // set({ name: value, ... }) — write all named members in ONE message.
+    //
+    // Members that expose a hardware sync key (_memberSyncKey) and share it
+    // with another member in the same call are coalesced into a single sync
+    // frame (e.g. bus servos of one series → one Feetech SyncWrite packet, so
+    // they latch together). Everything else uses _memberWrite. All resulting
+    // frames still go out in one batched WebSocket message.
+    set(values) {
+        if (!values || typeof values !== 'object') return this;
+
+        const buckets = new Map();   // syncKey → [[member, value], ...]
+        const loose   = [];          // [[member, value], ...]
+        for (const [key, v] of Object.entries(values)) {
+            const m = this.members[key];
+            if (!m) { console.warn(`Group '${this.name}': no member '${key}'`); continue; }
+            if (typeof v === 'number') this._commanded[key] = Math.round(v);
+            const sk = (typeof m._memberSyncKey === 'function') ? m._memberSyncKey() : null;
+            if (sk) {
+                if (!buckets.has(sk)) buckets.set(sk, []);
+                buckets.get(sk).push([m, v]);
+            } else {
+                loose.push([m, v]);
+            }
+        }
+
+        const frames = [];
+        for (const entries of buckets.values()) {
+            if (entries.length >= 2 && typeof entries[0][0]._memberSetEncode === 'function') {
+                frames.push(...entries[0][0]._memberSetEncode(entries));   // one sync packet
+            } else {
+                for (const [m, v] of entries) frames.push(...m._memberWrite(v));
+            }
+        }
+        for (const [m, v] of loose) frames.push(...m._memberWrite(v));
+
+        if (frames.length) this.arduino.send(frames);   // single batched WebSocket message
+        return this;
+    }
+
+    // moveTo({ name: target, ... }, { duration })
+    // Coordinated move where all members ARRIVE together after ~`duration` ms.
+    // Each actuator type does this its own way, via _memberMoveEncode():
+    //   - bus servos: one SyncWrite with matched per-servo speeds;
+    //   - PWM servos: one on-board interpolated SYNC_TIMED (shared duration);
+    // all coalesced into a single batched message.
+    //
+    // "Current" position is the last commanded value (seeded from memberValue).
+    // For an accurate first move from an unknown pose, poll read() first or move
+    // from a known start (center()/set()).
+    //
+    // Members without a timed-move hook (e.g. steppers, for now) move immediately.
+    moveTo(targets, { duration = 1000 } = {}) {
+        if (!targets || typeof targets !== 'object') return this;
+
+        const buckets = new Map();   // syncKey → [[m, target, current], ...]
+        const loose   = [];          // [[m, target], ...]
+        for (const [key, raw] of Object.entries(targets)) {
+            const m = this.members[key];
+            if (!m) { console.warn(`Group '${this.name}': no member '${key}'`); continue; }
+            const target  = Math.round(raw);
+            const current = (this._commanded[key] !== undefined) ? this._commanded[key] : (m.memberValue || 0);
+            this._commanded[key] = target;
+            const sk = (typeof m._memberSyncKey === 'function') ? m._memberSyncKey() : null;
+            if (sk && typeof m._memberMoveEncode === 'function') {
+                if (!buckets.has(sk)) buckets.set(sk, []);
+                buckets.get(sk).push([m, target, current]);
+            } else {
+                loose.push([m, target]);
+            }
+        }
+
+        const frames = [];
+        for (const entries of buckets.values()) {
+            frames.push(...entries[0][0]._memberMoveEncode(entries, duration));   // per-type timing
+        }
+        for (const [m, target] of loose) frames.push(...m._memberWrite(target));
+
+        if (frames.length) this.arduino.send(frames);
+        return this;
+    }
+
+    // Like moveTo(), but returns a Promise that resolves after `duration` ms —
+    // time-based (not feedback-confirmed), for sequencing coordinated moves.
+    moveToAsync(targets, opts = {}) {
+        this.moveTo(targets, opts);
+        return new Promise(res => setTimeout(res, opts.duration ?? 1000));
+    }
+
+    // read()         — snapshot of each member's current value (from cache).
+    // read(interval) — start polling every member at interval, return snapshot.
+    // read(END)      — stop polling every member.
+    read(interval) {
+        if (interval !== undefined) {
+            Object.values(this.members).forEach(m => m.read(interval));
+        }
+        return this.values();
+    }
+
+    // Current cached value of every member, keyed by channel name.
+    values() {
+        const out = {};
+        for (const [key, m] of Object.entries(this.members)) out[key] = m.memberValue;
+        return out;
+    }
+
+    // Stop polling every member.
+    stop() { Object.values(this.members).forEach(m => m.read(END)); return this; }
+
+    getState() {
+        const out = {};
+        for (const [key, m] of Object.entries(this.members)) {
+            out[key] = (typeof m.getState === 'function') ? m.getState() : m.memberValue;
+        }
+        return { name: this.name, members: out };
     }
 }

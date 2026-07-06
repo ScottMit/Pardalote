@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shared light switch — Pardalote examples</title>
+<meta name="description" content="One light, four switches: two physical buttons and two on screen. Press any of them — everything stays in sync.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../css/site.css">
+</head>
+<body data-nav="examples">
+
+<nav class="site-nav speckled">
+  <a class="logo" href="../index.html">
+    <img src="../assets/logo.svg" width="30" height="30" alt="">
+    Pardalote
+  </a>
+  <div class="links">
+    <a data-nav="home" href="../index.html">Home</a>
+    <a data-nav="download" href="../download.html">Download</a>
+    <a data-nav="examples" href="index.html">Examples</a>
+    <a data-nav="reference" href="../reference/index.html">Reference</a>
+    <a href="https://github.com/scottmitchell/pardalote">GitHub</a>
+  </div>
+</nav>
+
+<div class="page-head speckled">
+  <div class="wrap">
+    <div class="crumb"><a href="index.html">Examples</a> / Shared light switch</div>
+    <h1>Shared light switch</h1>
+    <p>One light, four switches: two physical buttons and two on screen. Press any of them — everything stays in sync.</p>
+  </div>
+</div>
+
+<div class="wrap md-layout">
+  <div class="md-body">
+    <div class="tags" style="margin-bottom:.5rem;"><span class="tag lvl-start">Beginner</span><span class="tag">Multi-user</span></div>
+    <div class="ex-meta-row">
+      <a class="btn btn-dark" href="https://github.com/scottmitchell/pardalote/tree/main/examples/shared-control-example">View the code on GitHub</a>
+    </div>
+    <div class="screenshot-slot">Screenshot / video of this example — coming soon</div>
+<h1 id="shared-control--light-switch">Shared Control — Light Switch</h1>
+<p>A light controlled by <strong>both</strong> physical buttons on the Arduino <strong>and</strong> on/off buttons in the browser. Press either side; both stay in sync.</p>
+
+  </div>
+    <div class="ex-code-cols">
+      <div class="code-ex scroll">
+        <div class="bar">light-switch.ino — the Arduino side</div>
+        <pre><code><span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;Pardalote.h&gt;</span><span class="cp"></span>
+
+<span class="k">const</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">LIGHT</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="mi">13</span><span class="p">;</span><span class="w"></span>
+<span class="k">const</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">BTN_ON</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">7</span><span class="p">;</span><span class="w"></span>
+<span class="k">const</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">BTN_OFF</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">8</span><span class="p">;</span><span class="w"></span>
+
+<span class="kt">bool</span><span class="w"> </span><span class="n">lastOn</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="n">HIGH</span><span class="p">;</span><span class="w">   </span><span class="c1">// INPUT_PULLUP: idle is HIGH, press pulls LOW</span>
+<span class="kt">bool</span><span class="w"> </span><span class="n">lastOff</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">HIGH</span><span class="p">;</span><span class="w"></span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">setup</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">begin</span><span class="p">();</span><span class="w"></span>
+<span class="w">    </span><span class="n">pinMode</span><span class="p">(</span><span class="n">LIGHT</span><span class="p">,</span><span class="w">  </span><span class="n">OUTPUT</span><span class="p">);</span><span class="w"></span>
+<span class="w">    </span><span class="n">pinMode</span><span class="p">(</span><span class="n">BTN_ON</span><span class="p">,</span><span class="w">  </span><span class="n">INPUT_PULLUP</span><span class="p">);</span><span class="w"></span>
+<span class="w">    </span><span class="n">pinMode</span><span class="p">(</span><span class="n">BTN_OFF</span><span class="p">,</span><span class="w"> </span><span class="n">INPUT_PULLUP</span><span class="p">);</span><span class="w"></span>
+
+<span class="w">    </span><span class="c1">// Tell the browser pin 13 is OUTPUT so it doesn&#39;t need to declare it.</span>
+<span class="w">    </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">share</span><span class="p">(</span><span class="n">LIGHT</span><span class="p">,</span><span class="w"> </span><span class="n">OUTPUT</span><span class="p">);</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">loop</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">run</span><span class="p">();</span><span class="w"></span>
+
+<span class="w">    </span><span class="c1">// Edge-detect each button press (don&#39;t re-fire while held)</span>
+<span class="w">    </span><span class="kt">bool</span><span class="w"> </span><span class="n">nowOn</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="n">digitalRead</span><span class="p">(</span><span class="n">BTN_ON</span><span class="p">);</span><span class="w"></span>
+<span class="w">    </span><span class="kt">bool</span><span class="w"> </span><span class="n">nowOff</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">digitalRead</span><span class="p">(</span><span class="n">BTN_OFF</span><span class="p">);</span><span class="w"></span>
+
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">nowOn</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">LOW</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="n">lastOn</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">HIGH</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="n">digitalWrite</span><span class="p">(</span><span class="n">LIGHT</span><span class="p">,</span><span class="w"> </span><span class="n">HIGH</span><span class="p">);</span><span class="w"></span>
+<span class="w">        </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">send</span><span class="p">(</span><span class="n">LIGHT</span><span class="p">,</span><span class="w"> </span><span class="n">HIGH</span><span class="p">);</span><span class="w">   </span><span class="c1">// tell the browser the light is on</span>
+<span class="w">    </span><span class="p">}</span><span class="w"></span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">nowOff</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">LOW</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="n">lastOff</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">HIGH</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="n">digitalWrite</span><span class="p">(</span><span class="n">LIGHT</span><span class="p">,</span><span class="w"> </span><span class="n">LOW</span><span class="p">);</span><span class="w"></span>
+<span class="w">        </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">send</span><span class="p">(</span><span class="n">LIGHT</span><span class="p">,</span><span class="w"> </span><span class="n">LOW</span><span class="p">);</span><span class="w"></span>
+<span class="w">    </span><span class="p">}</span><span class="w"></span>
+
+<span class="w">    </span><span class="n">lastOn</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="n">nowOn</span><span class="p">;</span><span class="w"></span>
+<span class="w">    </span><span class="n">lastOff</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">nowOff</span><span class="p">;</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</code></pre>
+      </div>
+      <div class="code-ex scroll">
+        <div class="bar">sketch.js — the browser side</div>
+        <pre><code><span class="kd">const</span> <span class="nx">ARDUINO_IP</span> <span class="o">=</span> <span class="s1">&#39;192.168.1.42&#39;</span><span class="p">;</span>   <span class="c1">// Change this to your Arduino&#39;s IP</span>
+<span class="kd">const</span> <span class="nx">LIGHT</span>      <span class="o">=</span> <span class="mf">13</span><span class="p">;</span>
+
+<span class="kd">const</span> <span class="nx">arduino</span> <span class="o">=</span> <span class="ow">new</span> <span class="nx">Arduino</span><span class="p">();</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">connect</span><span class="p">(</span><span class="nx">ARDUINO_IP</span><span class="p">);</span>
+
+<span class="c1">// Browser → Arduino: clicking the buttons sends a normal digitalWrite.</span>
+<span class="nb">document</span><span class="p">.</span><span class="nx">getElementById</span><span class="p">(</span><span class="s1">&#39;on-btn&#39;</span><span class="p">).</span><span class="nx">onclick</span>  <span class="o">=</span> <span class="p">()</span> <span class="p">=&gt;</span> <span class="nx">arduino</span><span class="p">.</span><span class="nx">digitalWrite</span><span class="p">(</span><span class="nx">LIGHT</span><span class="p">,</span> <span class="nx">HIGH</span><span class="p">);</span>
+<span class="nb">document</span><span class="p">.</span><span class="nx">getElementById</span><span class="p">(</span><span class="s1">&#39;off-btn&#39;</span><span class="p">).</span><span class="nx">onclick</span> <span class="o">=</span> <span class="p">()</span> <span class="p">=&gt;</span> <span class="nx">arduino</span><span class="p">.</span><span class="nx">digitalWrite</span><span class="p">(</span><span class="nx">LIGHT</span><span class="p">,</span> <span class="nx">LOW</span><span class="p">);</span>
+
+<span class="c1">// Arduino → Browser: any change to pin 13 (either side) lands here.</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">onChange</span><span class="p">(</span><span class="nx">LIGHT</span><span class="p">,</span> <span class="nx">value</span> <span class="p">=&gt;</span> <span class="p">{</span>
+    <span class="kd">const</span> <span class="nx">el</span> <span class="o">=</span> <span class="nb">document</span><span class="p">.</span><span class="nx">getElementById</span><span class="p">(</span><span class="s1">&#39;light&#39;</span><span class="p">);</span>
+    <span class="nx">el</span><span class="p">.</span><span class="nx">textContent</span> <span class="o">=</span> <span class="nx">value</span> <span class="o">?</span> <span class="s1">&#39;ON&#39;</span> <span class="o">:</span> <span class="s1">&#39;OFF&#39;</span><span class="p">;</span>
+    <span class="nx">el</span><span class="p">.</span><span class="nx">className</span>   <span class="o">=</span> <span class="nx">value</span> <span class="o">?</span> <span class="s1">&#39;on&#39;</span> <span class="o">:</span> <span class="s1">&#39;off&#39;</span><span class="p">;</span>
+<span class="p">});</span>
+
+<span class="c1">// Connection indicator</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;ready&#39;</span><span class="p">,</span>      <span class="p">()</span> <span class="p">=&gt;</span> <span class="nx">setStatus</span><span class="p">(</span><span class="kc">true</span><span class="p">));</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;disconnect&#39;</span><span class="p">,</span> <span class="p">()</span> <span class="p">=&gt;</span> <span class="nx">setStatus</span><span class="p">(</span><span class="kc">false</span><span class="p">));</span>
+
+<span class="kd">function</span> <span class="nx">setStatus</span><span class="p">(</span><span class="nx">connected</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kd">const</span> <span class="nx">el</span> <span class="o">=</span> <span class="nb">document</span><span class="p">.</span><span class="nx">getElementById</span><span class="p">(</span><span class="s1">&#39;status&#39;</span><span class="p">);</span>
+    <span class="nx">el</span><span class="p">.</span><span class="nx">textContent</span> <span class="o">=</span> <span class="nx">connected</span> <span class="o">?</span> <span class="s1">&#39;● CONNECTED&#39;</span> <span class="o">:</span> <span class="s1">&#39;● DISCONNECTED&#39;</span><span class="p">;</span>
+    <span class="nx">el</span><span class="p">.</span><span class="nx">className</span>   <span class="o">=</span> <span class="nx">connected</span> <span class="o">?</span> <span class="s1">&#39;connected&#39;</span>   <span class="o">:</span> <span class="s1">&#39;disconnected&#39;</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre>
+      </div>
+    </div>
+  <div class="md-body">
+<h2 id="what-this-example-demonstrates">What this example demonstrates</h2>
+<p>The library refactor lets your Arduino sketch coexist with the browser as equal peers on the same pins. This example shows the two halves of that contract:</p>
+<ul>
+<li><strong>Arduino code can change a pin and tell the browser</strong> — <code>Pardalote.send(pin, value)</code></li>
+<li><strong>Browser can change a pin</strong> — the regular <code>arduino.digitalWrite(pin, value)</code> already works</li>
+<li><strong>Both sides see every change</strong> — whoever was last wins, both UIs reflect it</li>
+</ul>
+<p>The Arduino sketch also calls <code>Pardalote.share(LIGHT, OUTPUT)</code> once during <code>setup()</code> so the browser knows pin 13 is an output without having to declare it itself.</p>
+<h2 id="hardware">Hardware</h2>
+<ul>
+<li>Arduino UNO R4 WiFi or ESP32 development board</li>
+<li>LED on <strong>pin 13</strong> (built-in on most boards; otherwise add an external LED + 220 Ω resistor)</li>
+<li>Pushbutton on <strong>pin 7</strong> → GND (the &quot;on&quot; button)</li>
+<li>Pushbutton on <strong>pin 8</strong> → GND (the &quot;off&quot; button)</li>
+</ul>
+<p>Buttons use <code>INPUT_PULLUP</code> — no external resistors needed.</p>
+<h2 id="run-it">Run it</h2>
+<ol>
+<li>Open <code>light-switch.ino</code> in Arduino IDE, select your board, upload.</li>
+<li>Find the Arduino's IP from the LED matrix (UNO R4) or Serial Monitor (ESP32).</li>
+<li>Edit <code>ARDUINO_IP</code> in <code>sketch.js</code> to match.</li>
+<li>Open <code>index.html</code> in a browser.</li>
+<li>Press the physical buttons → the on-screen light follows. Click the browser buttons → the LED follows.</li>
+</ol>
+<h2 id="whats-happening-under-the-hood">What's happening under the hood</h2>
+<pre><code><span class="c1">// Arduino side, in loop():</span>
+<span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">button</span><span class="w"> </span><span class="n">pressed</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">digitalWrite</span><span class="p">(</span><span class="n">LIGHT</span><span class="p">,</span><span class="w"> </span><span class="n">HIGH</span><span class="p">);</span><span class="w">     </span><span class="c1">// Arduino&#39;s own pin API — does the hardware</span>
+<span class="w">    </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">send</span><span class="p">(</span><span class="n">LIGHT</span><span class="p">,</span><span class="w"> </span><span class="n">HIGH</span><span class="p">);</span><span class="w">   </span><span class="c1">// tells the browser the new value</span>
+<span class="p">}</span><span class="w"></span>
+</code></pre>
+<pre><code><span class="c1">// Browser side:</span>
+<span class="nb">document</span><span class="p">.</span><span class="nx">getElementById</span><span class="p">(</span><span class="s1">&#39;on-btn&#39;</span><span class="p">).</span><span class="nx">onclick</span> <span class="o">=</span> <span class="p">()</span> <span class="p">=&gt;</span> <span class="nx">arduino</span><span class="p">.</span><span class="nx">digitalWrite</span><span class="p">(</span><span class="nx">LIGHT</span><span class="p">,</span> <span class="nx">HIGH</span><span class="p">);</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">onChange</span><span class="p">(</span><span class="nx">LIGHT</span><span class="p">,</span> <span class="nx">val</span> <span class="p">=&gt;</span> <span class="nx">updateLightDisplay</span><span class="p">(</span><span class="nx">val</span><span class="p">));</span>
+</code></pre>
+<p><code>Pardalote.send()</code> from the Arduino and <code>arduino.digitalWrite()</code> from the browser both end up broadcasting the same <code>CMD_DIGITAL_WRITE</code> frame. Whoever calls last wins on the actual pin state; every connected browser sees every change.</p>
+<h2 id="companion-example">Companion example</h2>
+<p><a href="shared-input-example.html">shared-input-example</a> goes the other direction — the Arduino calls <code>Pardalote.share(A0, MODE_ANALOG_INPUT)</code> once, and the browser starts receiving values without writing any <code>pinMode</code> / <code>analogRead</code> code itself.</p>
+
+  </div>
+</div>
+
+<footer class="site-footer speckled">
+  <div class="wrap">
+    <span>Pardalote — created by Scott Mitchell for design education and creative technology.</span>
+    <span><a href="../reference/index.html">Reference</a> · <a href="https://github.com/scottmitchell/pardalote">GitHub</a> · GPL-3.0</span>
+  </div>
+</footer>
+
+<script src="../js/site.js"></script>
+</body>
+</html>

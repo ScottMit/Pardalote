@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ultrasonic — Pardalote reference</title>
+<meta name="description" content="Up to 4 HC-SR04-style distance sensors, in 3-wire or 4-wire configurations, with polled reads in centimetres or inches.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../css/site.css">
+</head>
+<body data-nav="reference">
+
+<nav class="site-nav speckled">
+  <a class="logo" href="../index.html">
+    <img src="../assets/logo.svg" width="30" height="30" alt="">
+    Pardalote
+  </a>
+  <div class="links">
+    <a data-nav="home" href="../index.html">Home</a>
+    <a data-nav="download" href="../download.html">Download</a>
+    <a data-nav="examples" href="../examples/index.html">Examples</a>
+    <a data-nav="reference" href="index.html">Reference</a>
+    <a href="https://github.com/scottmitchell/pardalote">GitHub</a>
+  </div>
+</nav>
+
+<div class="wrap">
+  <div class="ref-layout">
+<aside class="ref-nav">
+  <h4>Getting started</h4>
+  <a href="index.html">Overview</a>
+  <a href="installation.html">Installation</a>
+  <a href="wifi.html">WiFi configuration</a>
+  <h4>Core — JavaScript</h4>
+  <a href="connecting.html#connect">connect() / events</a>
+  <a href="pins.html#pinmode">pinMode()</a>
+  <a href="pins.html#digitalwrite">digitalWrite() / analogWrite()</a>
+  <a href="pins.html#analogread">analogRead() / digitalRead()</a>
+  <a href="pins.html#onchange">onChange()</a>
+  <a href="pins.html#pin-aliases">Pin aliases</a>
+  <h4>Core — Arduino</h4>
+  <a href="arduino.html#pardalotebegin">Pardalote.begin() / run()</a>
+  <a href="arduino.html#pardaloteshare">share() / send()</a>
+  <a href="arduino.html#the-actuator-objects">Reading actuators</a>
+  <h4>Extensions</h4>
+  <a href="extensions.html">Overview</a>
+  <a href="servo.html">Servo</a>
+  <a href="stepper.html">Stepper</a>
+  <a href="bus-servo.html">Bus servo</a>
+  <a href="groups.html">Groups</a>
+  <a href="neopixel.html">NeoPixel</a>
+  <a href="ultrasonic.html">Ultrasonic</a>
+  <a href="mpu.html">MPU / IMU</a>
+  <a href="camera.html">Camera</a>
+  <h4>Under the hood</h4>
+  <a href="protocol.html">Protocol</a>
+  <a href="troubleshooting.html">Troubleshooting</a>
+</aside>
+    <main class="ref-main">
+      <h1>Ultrasonic</h1>
+      <p class="lede">Up to 4 HC-SR04-style distance sensors, in 3-wire or 4-wire configurations, with polled reads in centimetres or inches.</p>
+<p>Requires <code>&lt;PardaloteUltrasonic.h&gt;</code> in the sketch. No third-party library needed. Examples assume:</p>
+<pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;sonar&#39;</span><span class="p">,</span> <span class="ow">new</span> <span class="nx">Ultrasonic</span><span class="p">());</span>
+</code></pre>
+<h2 id="attach">attach()</h2>
+<p>Attaches the sensor. Call inside <code>on('ready')</code>.</p>
+<div class="sig">arduino.sonar.<span class="fn">attach</span>(trig, [echo])</div>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>trig</code></td>
+<td>number | string</td>
+<td>Trigger pin. For 3-wire sensors this is also the echo pin.</td>
+</tr>
+<tr>
+<td><code>echo</code></td>
+<td>number | string</td>
+<td>Optional. Echo pin (4-wire sensors).</td>
+</tr>
+</tbody>
+</table>
+<div class="code-ex"><div class="bar">Example — 3-wire and 4-wire</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">sonar</span><span class="p">.</span><span class="nx">attach</span><span class="p">(</span><span class="mf">7</span><span class="p">,</span> <span class="mf">8</span><span class="p">);</span>  <span class="c1">// 4-wire: trig 7, echo 8</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">sonar</span><span class="p">.</span><span class="nx">attach</span><span class="p">(</span><span class="mf">6</span><span class="p">);</span>     <span class="c1">// 3-wire: trig and echo on one pin</span>
+</code></pre></div>
+<h2 id="detach">detach()</h2>
+<p>Releases the pins.</p>
+<div class="sig">arduino.sonar.<span class="fn">detach</span>()</div>
+<h2 id="settimeout">setTimeout()</h2>
+<p>How long the Arduino waits for an echo before giving up. Maximum range follows from it: 30 ms ≈ 500 cm.</p>
+<div class="sig">arduino.sonar.<span class="fn">setTimeout</span>(ms)</div>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ms</code></td>
+<td>number</td>
+<td>Echo timeout in ms. Default <code>30</code>.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="read">read()</h2>
+<p>Reads the distance. Same poll-and-cache pattern as <code>analogRead()</code>: the first call starts a poll, later calls return the cached value — safe to call every frame.</p>
+<div class="sig">arduino.sonar.<span class="fn">read</span>([interval], [unit])</div>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>interval</code></td>
+<td>number</td>
+<td>Optional. Poll interval in ms. Pass <code>END</code> to stop.</td>
+</tr>
+<tr>
+<td><code>unit</code></td>
+<td>constant</td>
+<td>Optional. <code>CM</code> or <code>INCH</code> — applies to all subsequent reads.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns</strong> the cached distance, or <code>-1</code> if the echo timed out (nothing in range).</p>
+<div class="code-ex"><div class="bar">Example — distance in a draw loop</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">sonar</span><span class="p">.</span><span class="nx">read</span><span class="p">(</span><span class="mf">200</span><span class="p">,</span> <span class="nx">CM</span><span class="p">);</span>   <span class="c1">// start polling every 200 ms, in cm</span>
+
+<span class="kd">function</span> <span class="nx">draw</span><span class="p">()</span> <span class="p">{</span>
+    <span class="kd">let</span> <span class="nx">cm</span> <span class="o">=</span> <span class="nx">arduino</span><span class="p">.</span><span class="nx">sonar</span><span class="p">.</span><span class="nx">read</span><span class="p">();</span>          <span class="c1">// cached — no extra traffic</span>
+    <span class="k">if</span> <span class="p">(</span><span class="nx">cm</span> <span class="o">===</span> <span class="o">-</span><span class="mf">1</span><span class="p">)</span> <span class="p">{</span> <span class="cm">/* out of range */</span> <span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+<p>Point the sensor at flat, hard surfaces — fabric and foam absorb ultrasound and can read as &quot;nothing there&quot;.</p>
+<h2 id="events">Events</h2>
+<div class="sig">arduino.sonar.<span class="fn">on</span>(event, handler)</div>
+<table>
+<thead>
+<tr>
+<th>Event</th>
+<th>Payload</th>
+<th>Fires when</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>'read'</code></td>
+<td><code>{ distance, unit }</code></td>
+<td>A poll result arrives. <code>unit</code> is <code>CM</code> or <code>INCH</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>Shorthand: <code>onRead(fn)</code>.</p>
+<h2 id="properties-and-state">Properties and state</h2>
+<table>
+<thead>
+<tr>
+<th>Property</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>arduino.sonar.distance</code></td>
+<td>Last reading.</td>
+</tr>
+</tbody>
+</table>
+<div class="sig">arduino.sonar.<span class="fn">getState</span>()</div>
+<p><strong>Returns</strong> <code>{ trigPin, echoPin, attached, timeoutMs, distance, unit, interval }</code>.</p>
+<p>See also: <a href="../examples/ultrasonic-sensor-example.html">Ultrasonic example</a> · <a href="troubleshooting.html">Troubleshooting</a></p>
+
+    </main>
+  </div>
+</div>
+
+<footer class="site-footer speckled">
+  <div class="wrap">
+    <span>Pardalote — created by Scott Mitchell for design education and creative technology.</span>
+    <span><a href="index.html">Reference</a> · <a href="https://github.com/scottmitchell/pardalote">GitHub</a> · GPL-3.0</span>
+  </div>
+</footer>
+
+<script src="../js/site.js"></script>
+</body>
+</html>

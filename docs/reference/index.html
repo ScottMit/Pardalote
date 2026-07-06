@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reference — Pardalote reference</title>
+<meta name="description" content="The full technical documentation — every function on both sides of the wire, the protocol, and the fine print.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../css/site.css">
+</head>
+<body data-nav="reference">
+
+<nav class="site-nav speckled">
+  <a class="logo" href="../index.html">
+    <img src="../assets/logo.svg" width="30" height="30" alt="">
+    Pardalote
+  </a>
+  <div class="links">
+    <a data-nav="home" href="../index.html">Home</a>
+    <a data-nav="download" href="../download.html">Download</a>
+    <a data-nav="examples" href="../examples/index.html">Examples</a>
+    <a data-nav="reference" href="index.html">Reference</a>
+    <a href="https://github.com/scottmitchell/pardalote">GitHub</a>
+  </div>
+</nav>
+
+<div class="wrap">
+  <div class="ref-layout">
+<aside class="ref-nav">
+  <h4>Getting started</h4>
+  <a href="index.html">Overview</a>
+  <a href="installation.html">Installation</a>
+  <a href="wifi.html">WiFi configuration</a>
+  <h4>Core — JavaScript</h4>
+  <a href="connecting.html#connect">connect() / events</a>
+  <a href="pins.html#pinmode">pinMode()</a>
+  <a href="pins.html#digitalwrite">digitalWrite() / analogWrite()</a>
+  <a href="pins.html#analogread">analogRead() / digitalRead()</a>
+  <a href="pins.html#onchange">onChange()</a>
+  <a href="pins.html#pin-aliases">Pin aliases</a>
+  <h4>Core — Arduino</h4>
+  <a href="arduino.html#pardalotebegin">Pardalote.begin() / run()</a>
+  <a href="arduino.html#pardaloteshare">share() / send()</a>
+  <a href="arduino.html#the-actuator-objects">Reading actuators</a>
+  <h4>Extensions</h4>
+  <a href="extensions.html">Overview</a>
+  <a href="servo.html">Servo</a>
+  <a href="stepper.html">Stepper</a>
+  <a href="bus-servo.html">Bus servo</a>
+  <a href="groups.html">Groups</a>
+  <a href="neopixel.html">NeoPixel</a>
+  <a href="ultrasonic.html">Ultrasonic</a>
+  <a href="mpu.html">MPU / IMU</a>
+  <a href="camera.html">Camera</a>
+  <h4>Under the hood</h4>
+  <a href="protocol.html">Protocol</a>
+  <a href="troubleshooting.html">Troubleshooting</a>
+</aside>
+    <main class="ref-main">
+      <h1>Reference</h1>
+      <p class="lede">The full technical documentation — every function on both sides of the wire, the protocol, and the fine print.</p>
+<h2 id="getting-started">Getting started</h2>
+<p>Setting up boards, libraries and WiFi:</p>
+<ul>
+<li><a href="installation.html">Installation</a> — hardware, software, and where the two libraries go</li>
+<li><a href="wifi.html">WiFi configuration</a> — compile-time credentials or the Serial Monitor menu</li>
+</ul>
+<h2 id="core--javascript">Core — JavaScript</h2>
+<p>The browser side of every Pardalote project:</p>
+<ul>
+<li><a href="connecting.html">Connecting</a> — <code>connect()</code>, events, reconnection, and status</li>
+<li><a href="pins.html">Pins and reading</a> — <code>pinMode</code>, <code>digitalWrite</code>, polled reads, callbacks, and pin aliases</li>
+</ul>
+<h2 id="core--arduino">Core — Arduino</h2>
+<p>Writing sketch code alongside the browser:</p>
+<ul>
+<li><a href="arduino.html">The Arduino sketch</a> — <code>begin()</code> / <code>run()</code>, <code>share()</code> / <code>send()</code>, and driving actuators from the sketch</li>
+</ul>
+<h2 id="extensions">Extensions</h2>
+<p>Hardware support, one include at a time:</p>
+<ul>
+<li><a href="extensions.html">Extensions overview</a> — registering, script order, firmware includes</li>
+<li><a href="servo.html">Servo</a> · <a href="stepper.html">Stepper</a> · <a href="bus-servo.html">Bus servo</a> · <a href="groups.html">Groups</a></li>
+<li><a href="neopixel.html">NeoPixel</a> · <a href="ultrasonic.html">Ultrasonic</a> · <a href="mpu.html">MPU / IMU</a> · <a href="camera.html">Camera</a></li>
+</ul>
+<h2 id="under-the-hood">Under the hood</h2>
+<ul>
+<li><a href="protocol.html">Protocol</a> — the binary frame format and state sync</li>
+<li><a href="troubleshooting.html">Troubleshooting</a> — common issues and their usual fixes</li>
+</ul>
+<h2 id="conventions-used-throughout">Conventions used throughout</h2>
+<p>A few patterns repeat across the whole API:</p>
+<ul>
+<li><strong>Reads are polls.</strong> The first call to any <code>read()</code>-style function starts a periodic poll on the Arduino; subsequent calls return the cached value instantly. Pass an interval to change the rate, or <code>END</code> to stop.</li>
+<li><strong><code>target</code> vs <code>position</code>.</strong> Commanded values update immediately; feedback values arrive with polling.</li>
+<li><strong>Last writer wins.</strong> The browser and the sketch share the same hardware as equals.</li>
+<li><strong>Setup goes in <code>on('ready')</code>.</strong> Attach, init and start polls after the Arduino has synced its state.</li>
+</ul>
+
+    </main>
+  </div>
+</div>
+
+<footer class="site-footer speckled">
+  <div class="wrap">
+    <span>Pardalote — created by Scott Mitchell for design education and creative technology.</span>
+    <span><a href="index.html">Reference</a> · <a href="https://github.com/scottmitchell/pardalote">GitHub</a> · GPL-3.0</span>
+  </div>
+</footer>
+
+<script src="../js/site.js"></script>
+</body>
+</html>

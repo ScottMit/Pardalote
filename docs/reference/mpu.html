@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MPU / IMU — Pardalote reference</title>
+<meta name="description" content="Up to 2 inertial measurement units — accelerometer, gyroscope and temperature at up to 50 Hz, with on-board calibration. No third-party library required.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../css/site.css">
+</head>
+<body data-nav="reference">
+
+<nav class="site-nav speckled">
+  <a class="logo" href="../index.html">
+    <img src="../assets/logo.svg" width="30" height="30" alt="">
+    Pardalote
+  </a>
+  <div class="links">
+    <a data-nav="home" href="../index.html">Home</a>
+    <a data-nav="download" href="../download.html">Download</a>
+    <a data-nav="examples" href="../examples/index.html">Examples</a>
+    <a data-nav="reference" href="index.html">Reference</a>
+    <a href="https://github.com/scottmitchell/pardalote">GitHub</a>
+  </div>
+</nav>
+
+<div class="wrap">
+  <div class="ref-layout">
+<aside class="ref-nav">
+  <h4>Getting started</h4>
+  <a href="index.html">Overview</a>
+  <a href="installation.html">Installation</a>
+  <a href="wifi.html">WiFi configuration</a>
+  <h4>Core — JavaScript</h4>
+  <a href="connecting.html#connect">connect() / events</a>
+  <a href="pins.html#pinmode">pinMode()</a>
+  <a href="pins.html#digitalwrite">digitalWrite() / analogWrite()</a>
+  <a href="pins.html#analogread">analogRead() / digitalRead()</a>
+  <a href="pins.html#onchange">onChange()</a>
+  <a href="pins.html#pin-aliases">Pin aliases</a>
+  <h4>Core — Arduino</h4>
+  <a href="arduino.html#pardalotebegin">Pardalote.begin() / run()</a>
+  <a href="arduino.html#pardaloteshare">share() / send()</a>
+  <a href="arduino.html#the-actuator-objects">Reading actuators</a>
+  <h4>Extensions</h4>
+  <a href="extensions.html">Overview</a>
+  <a href="servo.html">Servo</a>
+  <a href="stepper.html">Stepper</a>
+  <a href="bus-servo.html">Bus servo</a>
+  <a href="groups.html">Groups</a>
+  <a href="neopixel.html">NeoPixel</a>
+  <a href="ultrasonic.html">Ultrasonic</a>
+  <a href="mpu.html">MPU / IMU</a>
+  <a href="camera.html">Camera</a>
+  <h4>Under the hood</h4>
+  <a href="protocol.html">Protocol</a>
+  <a href="troubleshooting.html">Troubleshooting</a>
+</aside>
+    <main class="ref-main">
+      <h1>MPU / IMU</h1>
+      <p class="lede">Up to 2 inertial measurement units — accelerometer, gyroscope and temperature at up to 50 Hz, with on-board calibration. No third-party library required.</p>
+<p>Requires <code>&lt;PardaloteMPU.h&gt;</code> in the sketch. One extension covers multiple InvenSense MPU and STMicroelectronics LSM6 families — it reads sensor registers directly over I2C.</p>
+<h2 id="supported-sensors">Supported sensors</h2>
+<table>
+<thead>
+<tr>
+<th>Model string</th>
+<th>Chip</th>
+<th>DOF</th>
+<th>Default address</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>'6050'</code></td>
+<td>InvenSense MPU-6050</td>
+<td>6</td>
+<td>0x68</td>
+</tr>
+<tr>
+<td><code>'6500'</code></td>
+<td>InvenSense MPU-6500</td>
+<td>6</td>
+<td>0x68</td>
+</tr>
+<tr>
+<td><code>'9250'</code></td>
+<td>InvenSense MPU-9250</td>
+<td>9</td>
+<td>0x68</td>
+</tr>
+<tr>
+<td><code>'9255'</code></td>
+<td>InvenSense MPU-9255</td>
+<td>9</td>
+<td>0x68</td>
+</tr>
+<tr>
+<td><code>'LSM6DS3'</code></td>
+<td>STMicro LSM6DS3</td>
+<td>6</td>
+<td>0x6A</td>
+</tr>
+<tr>
+<td><code>'LSM6DSOX'</code></td>
+<td>STMicro LSM6DSOX</td>
+<td>6</td>
+<td>0x6A</td>
+</tr>
+</tbody>
+</table>
+<h2 id="new-mpu">new MPU()</h2>
+<p>The constructor takes the model string.</p>
+<div class="sig">arduino.<span class="fn">add</span>('imu', new <span class="fn">MPU</span>(model))</div>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>model</code></td>
+<td>string</td>
+<td>One of the model strings above. Wrong model → <code>WHO_AM_I mismatch</code> in the Serial Monitor.</td>
+</tr>
+</tbody>
+</table>
+<div class="code-ex"><div class="bar">Example — choose the model</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;imu&#39;</span><span class="p">,</span> <span class="ow">new</span> <span class="nx">MPU</span><span class="p">(</span><span class="s1">&#39;6050&#39;</span><span class="p">));</span>
+</code></pre></div>
+<h2 id="attach">attach()</h2>
+<p>Connects to the sensor over I2C. Call inside <code>on('ready')</code>.</p>
+<div class="sig">arduino.imu.<span class="fn">attach</span>([address], [sda], [scl])</div>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>address</code></td>
+<td>number</td>
+<td>Optional. I2C address — <code>0x68</code> default, <code>0x69</code> with AD0 high (LSM6: <code>0x6A</code>/<code>0x6B</code>).</td>
+</tr>
+<tr>
+<td><code>sda</code>, <code>scl</code></td>
+<td>number | string</td>
+<td>Optional. Custom I2C pins (ESP32 only).</td>
+</tr>
+</tbody>
+</table>
+<div class="code-ex"><div class="bar">Example — attach over I2C</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">imu</span><span class="p">.</span><span class="nx">attach</span><span class="p">(</span><span class="mh">0x68</span><span class="p">);</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">imu</span><span class="p">.</span><span class="nx">attach</span><span class="p">(</span><span class="mh">0x68</span><span class="p">,</span> <span class="mf">21</span><span class="p">,</span> <span class="mf">22</span><span class="p">);</span>   <span class="c1">// ESP32 custom SDA/SCL</span>
+</code></pre></div>
+<h2 id="read">read()</h2>
+<p>Starts polling the sensor. Handlers receive each sample.</p>
+<div class="sig">arduino.imu.<span class="fn">read</span>([interval])</div>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>interval</code></td>
+<td>number</td>
+<td>Optional. Poll interval in ms. Pass <code>END</code> to stop.</td>
+</tr>
+</tbody>
+</table>
+<div class="code-ex"><div class="bar">Example — stream at 50 Hz</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">imu</span><span class="p">.</span><span class="nx">onRead</span><span class="p">(({</span> <span class="nx">accel</span><span class="p">,</span> <span class="nx">gyro</span><span class="p">,</span> <span class="nx">temp</span> <span class="p">})</span> <span class="p">=&gt;</span> <span class="p">{</span>
+    <span class="c1">// accel: { x, y, z } in g</span>
+    <span class="c1">// gyro:  { x, y, z } in °/s</span>
+    <span class="c1">// temp:  °C</span>
+<span class="p">});</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">imu</span><span class="p">.</span><span class="nx">read</span><span class="p">(</span><span class="mf">20</span><span class="p">);</span>   <span class="c1">// 50 Hz</span>
+</code></pre></div>
+<p>The original ESP32 chip's I²C peripheral can stall under sustained high-rate reads — on ESP32-WROVER and other older ESP32 boards keep the interval at 50 ms or higher. Newer ESP32 boards (S3, C3, …) and the UNO R4 poll reliably at 20 ms.</p>
+<h2 id="setaccelrange--setgyrorange">setAccelRange() / setGyroRange()</h2>
+<p>Measurement ranges. Higher range handles bigger motion but reduces resolution. Unknown values are rejected with a console warning; the current range is left unchanged.</p>
+<div class="sig">arduino.imu.<span class="fn">setAccelRange</span>(g) · arduino.imu.<span class="fn">setGyroRange</span>(dps)</div>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>g</code></td>
+<td>number</td>
+<td>Accel range as ±g: <code>2</code> (default), <code>4</code>, <code>8</code>, or <code>16</code>.</td>
+</tr>
+<tr>
+<td><code>dps</code></td>
+<td>number</td>
+<td>Gyro range as ±°/s: <code>250</code> (default), <code>500</code>, <code>1000</code>, or <code>2000</code>.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="calibrate">calibrate()</h2>
+<p>Measures and applies zero offsets. Place the sensor flat with Z pointing up first. Offsets are stored <strong>on the Arduino</strong> and re-sent to any browser that reconnects — no need to recalibrate after a page reload.</p>
+<div class="sig">arduino.imu.<span class="fn">calibrate</span>(samples)</div>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>samples</code></td>
+<td>number</td>
+<td>Number of samples to average, e.g. <code>200</code> (≈ 400 ms).</td>
+</tr>
+</tbody>
+</table>
+<div class="code-ex"><div class="bar">Example — calibrate flat</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">imu</span><span class="p">.</span><span class="nx">calibrate</span><span class="p">(</span><span class="mf">200</span><span class="p">);</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">imu</span><span class="p">.</span><span class="nx">onCalibrate</span><span class="p">(</span><span class="nx">offsets</span> <span class="p">=&gt;</span> <span class="p">{</span>
+    <span class="c1">// { ax, ay, az, gx, gy, gz } — applied automatically</span>
+    <span class="c1">// afterwards: accel.z ≈ +1g, gyro ≈ 0</span>
+<span class="p">});</span>
+</code></pre></div>
+<h2 id="events">Events</h2>
+<div class="sig">arduino.imu.<span class="fn">on</span>(event, handler)</div>
+<table>
+<thead>
+<tr>
+<th>Event</th>
+<th>Payload</th>
+<th>Fires when</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>'read'</code></td>
+<td><code>{ accel, gyro, temp }</code></td>
+<td>A sample arrives.</td>
+</tr>
+<tr>
+<td><code>'calibrate'</code></td>
+<td><code>{ ax, ay, az, gx, gy, gz }</code></td>
+<td>Calibration completes.</td>
+</tr>
+</tbody>
+</table>
+<p>Shorthand: <code>onRead(fn)</code>, <code>onCalibrate(fn)</code>.</p>
+<h2 id="state-snapshot">State snapshot</h2>
+<div class="sig">arduino.imu.<span class="fn">getState</span>()</div>
+<p><strong>Returns</strong> <code>{ logicalId, model, dof, address, attached, accelRange, gyroRange, accel, gyro, temp, calibrated, calibration }</code>.</p>
+<p>See also: <a href="../examples/mpu-example.html">MPU example</a> · <a href="troubleshooting.html">Troubleshooting</a></p>
+
+    </main>
+  </div>
+</div>
+
+<footer class="site-footer speckled">
+  <div class="wrap">
+    <span>Pardalote — created by Scott Mitchell for design education and creative technology.</span>
+    <span><a href="index.html">Reference</a> · <a href="https://github.com/scottmitchell/pardalote">GitHub</a> · GPL-3.0</span>
+  </div>
+</footer>
+
+<script src="../js/site.js"></script>
+</body>
+</html>

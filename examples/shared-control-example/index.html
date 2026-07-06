@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Light Switch — Shared Control</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <main>
+        <h1>Light Switch</h1>
+
+        <div id="light" class="off">OFF</div>
+
+        <div class="buttons">
+            <button id="on-btn">ON</button>
+            <button id="off-btn">OFF</button>
+        </div>
+
+        <p class="hint">
+            Press the physical buttons on the Arduino, or click here.<br>
+            Either side flips the light, both views stay in sync.
+        </p>
+
+        <div id="status" class="disconnected">● DISCONNECTED</div>
+    </main>
+
+    <script src="../../pardalote-js/pardalote.js"></script>
+    <script src="sketch.js"></script>
+</body>
+</html>

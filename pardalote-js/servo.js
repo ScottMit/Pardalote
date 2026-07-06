@@ -26,6 +26,10 @@ const CMD_SERVO_WRITE              = 0x16;
 const CMD_SERVO_WRITE_MICROSECONDS = 0x17;
 const CMD_SERVO_READ               = 0x18;
 const CMD_SERVO_ATTACHED           = 0x19;
+const CMD_SERVO_WRITE_TIMED        = 0x1A;
+const CMD_SERVO_SYNC_TIMED         = 0x1B;
+const CMD_SERVO_STOP               = 0x1C;
+const CMD_SERVO_DONE               = 0x1D;
 
 class Servo extends Extension {
     static deviceId = DEVICE_SERVO;
@@ -208,6 +212,31 @@ class Servo extends Extension {
     }
 
     // -------------------------------------------------------------------
+    // writeTimed(angle, duration)
+    // Move to `angle` over `duration` ms — the Arduino interpolates on-board
+    // (smooth, no WiFi streaming). Fires 'done' when it arrives.
+    // -------------------------------------------------------------------
+    writeTimed(angle, duration = 1000) {
+        this._sweepAbort = true;
+        if (!this.isAttached) { console.warn(`Servo ${this.logicalId}: not attached`); return this; }
+        angle = Math.max(0, Math.min(180, Math.round(angle)));
+        this.arduino.send(encodeFrame(CMD_SERVO_WRITE_TIMED, DEVICE_SERVO,
+            [this.logicalId, angle, Math.max(0, Math.round(duration))]));
+        this.angle          = angle;
+        this.micros         = this._angleToMicros(angle);
+        this._lastSentAngle = angle;
+        this._emit('write', { angle });
+        return this;
+    }
+
+    // stop() — cancel an in-progress timed move, hold the current angle.
+    stop() {
+        this._sweepAbort = true;
+        if (this.isAttached) this.arduino.send(encodeFrame(CMD_SERVO_STOP, DEVICE_SERVO, [this.logicalId]));
+        return this;
+    }
+
+    // -------------------------------------------------------------------
     // read(interval?)
     // Returns the locally cached angle immediately.
     // With no argument: one-shot — returns cached angle, no network traffic.
@@ -299,6 +328,7 @@ class Servo extends Extension {
     onWrite(fn)    { return this.on('write',    fn); }
     onRead(fn)     { return this.on('read',     fn); }
     onAttached(fn) { return this.on('attached', fn); }
+    onDone(fn) { return this.on('done', fn); }
 
     // -------------------------------------------------------------------
     // Configuration
@@ -309,6 +339,49 @@ class Servo extends Extension {
     // last sent angle. Useful for animation loops that produce tiny deltas.
     // Set to 0 to disable. First write after attach is never filtered.
     setThreshold(degrees) { this.writeThreshold = Math.max(0, degrees); return this; }
+
+    // -------------------------------------------------------------------
+    // Group member adapter — used by arduino.group(). Returns the frame(s)
+    // to write `value` WITHOUT sending, so the group can batch every member
+    // into one WebSocket message. Updates local state directly.
+    // -------------------------------------------------------------------
+    _memberWrite(angle) {
+        if (!this.isAttached) { console.warn(`Servo ${this.logicalId}: not attached (group set)`); return []; }
+        this._sweepAbort    = true;
+        angle               = Math.max(0, Math.min(180, Math.round(angle)));
+        this.angle          = angle;
+        this.micros         = this._angleToMicros(angle);
+        this._lastSentAngle = angle;
+        this._emit('write', { angle });
+        return [encodeFrame(CMD_SERVO_WRITE, DEVICE_SERVO, [this.logicalId, angle])];
+    }
+
+    get memberValue() { return this.angle; }
+
+    // -------------------------------------------------------------------
+    // Group timed-move hook (used by group.moveTo()). PWM servos have no
+    // speed input, so arrive-together is done by on-board interpolation:
+    // all servos in the bucket share one CMD_SERVO_SYNC_TIMED with the same
+    // duration and interpolate from their own current angle → they finish
+    // together. entries: [[member, targetAngle, current], ...] of one series.
+    // -------------------------------------------------------------------
+    _memberSyncKey() { return this.isAttached ? 'servo' : null; }
+
+    _memberMoveEncode(entries, durationMs) {
+        const bytes = new Uint8Array(entries.length * 2);
+        entries.forEach(([m, target], i) => {
+            const angle = Math.max(0, Math.min(180, Math.round(target)));
+            bytes[i * 2]     = m.logicalId & 0xFF;
+            bytes[i * 2 + 1] = angle & 0xFF;
+            m.angle          = angle;         // update commanded state
+            m.micros         = m._angleToMicros(angle);
+            m._lastSentAngle = angle;
+            m._sweepAbort    = true;
+            m._emit('write', { angle });
+        });
+        return [encodeFrame(CMD_SERVO_SYNC_TIMED, DEVICE_SERVO,
+            [Math.max(0, Math.round(durationMs))], bytes)];
+    }
 
     // -------------------------------------------------------------------
     // State snapshot
@@ -362,6 +435,12 @@ class Servo extends Extension {
             case CMD_SERVO_ATTACHED:
                 this.isAttached = frame.params[1] === 1;
                 this._emit('attached', { attached: this.isAttached });
+                break;
+
+            case CMD_SERVO_DONE:
+                this.angle  = frame.params[1];
+                this.micros = this._angleToMicros(this.angle);
+                this._emit('done', { angle: this.angle });
                 break;
         }
     }

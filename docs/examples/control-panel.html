@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Control panel — Pardalote examples</title>
+<meta name="description" content="A dashboard for every pin on your board, laid out over a photo of it. Test circuits without writing a line of code.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../css/site.css">
+</head>
+<body data-nav="examples">
+
+<nav class="site-nav speckled">
+  <a class="logo" href="../index.html">
+    <img src="../assets/logo.svg" width="30" height="30" alt="">
+    Pardalote
+  </a>
+  <div class="links">
+    <a data-nav="home" href="../index.html">Home</a>
+    <a data-nav="download" href="../download.html">Download</a>
+    <a data-nav="examples" href="index.html">Examples</a>
+    <a data-nav="reference" href="../reference/index.html">Reference</a>
+    <a href="https://github.com/scottmitchell/pardalote">GitHub</a>
+  </div>
+</nav>
+
+<div class="page-head speckled">
+  <div class="wrap">
+    <div class="crumb"><a href="index.html">Examples</a> / Control panel</div>
+    <h1>Control panel</h1>
+    <p>A dashboard for every pin on your board, laid out over a photo of it. Test circuits without writing a line of code.</p>
+  </div>
+</div>
+
+<div class="wrap md-layout">
+  <div class="md-body">
+    <div class="tags" style="margin-bottom:.5rem;"><span class="tag lvl-start">Beginner</span><span class="tag">Multi-user</span><span class="tag">Tool</span></div>
+    <div class="ex-meta-row">
+      <a class="btn btn-dark" href="https://github.com/scottmitchell/pardalote/tree/main/examples/control-panel">View the code on GitHub</a>
+    </div>
+    <div class="screenshot-slot">Screenshot / video of this example — coming soon</div>
+<h1 id="control-panel">Control Panel</h1>
+<p>A browser-based control panel for interacting with Arduino pins in real time. Each pin is displayed as a row aligned to a photo of the board. Select a mode from the dropdown and the controls appear. Use the control panel to test your Arduino and circuit.</p>
+<hr />
+
+  </div>
+
+  <div class="md-body">
+<h2 id="what-you-can-do">What You Can Do</h2>
+<ul>
+<li>Read digital inputs and see HIGH / LOW update live</li>
+<li>Toggle digital outputs HIGH or LOW from the browser</li>
+<li>Drive PWM outputs with a slider</li>
+<li>Watch analog inputs as a live bar graph</li>
+<li>Open the panel in multiple browser windows simultaneously — all windows stay in sync</li>
+</ul>
+<hr />
+<h2 id="hardware-requirements">Hardware Requirements</h2>
+<ul>
+<li><strong>Arduino UNO R4 WiFi</strong> or <strong>ESP32 development board</strong></li>
+<li>Arduino and browser must be on the same WiFi network</li>
+</ul>
+<p>No additional components are needed to use the panel — just an Arduino with Pardalote firmware running.</p>
+<hr />
+<h2 id="setup">Setup</h2>
+<h3 id="1-upload-the-firmware">1. Upload the firmware</h3>
+<ol>
+<li>
+<p>In Arduino IDE: <strong>File → Examples → Pardalote → basic-LED</strong> (or any other Pardalote example that includes the extensions you need)</p>
+</li>
+<li>
+<p>Select your board and upload</p>
+</li>
+<li>
+<p>Open the Serial Monitor at 115200 baud — on first boot Pardalote asks for your WiFi credentials:</p>
+<pre><code>=== Pardalote ===
+No WiFi networks stored.
+=== WiFi Configuration ===
+[a]dd  [d]elete  [c]lear all  [s]how  [x] exit
+&gt; a
+SSID: YourWiFiName
+Password: ********
+Saved: YourWiFiName
+&gt; x
+</code></pre>
+<p>Credentials are saved to EEPROM and survive re-uploads. Press <code>w</code> within 5 seconds of any boot to update them.</p>
+<p><strong>Prefer compile-time credentials?</strong> Uncomment the two lines in <code>secrets.h</code>:</p>
+<pre><code><span class="cp">#define SECRET_SSID &quot;YourWiFiName&quot;</span>
+<span class="cp">#define SECRET_PASS &quot;YourWiFiPassword&quot;</span>
+</code></pre>
+</li>
+<li>
+<p>Find your Arduino's IP address:</p>
+<ul>
+<li><strong>UNO R4 WiFi:</strong> scrolls across the LED matrix</li>
+<li><strong>ESP32:</strong> printed in the Serial Monitor</li>
+</ul>
+</li>
+</ol>
+<h3 id="2-set-the-default-ip">2. Set the default IP</h3>
+<p><strong>Optional</strong> Open <code>sketch.js</code> and update the IP address at the top:</p>
+<pre><code><span class="kd">const</span> <span class="nx">IP</span> <span class="o">=</span> <span class="s1">&#39;192.168.1.42&#39;</span><span class="p">;</span>
+</code></pre>
+<p>This pre-fills the IP field when the page loads — you can skip this step and change it in the browser.</p>
+<h3 id="3-open-the-panel">3. Open the panel</h3>
+<p>Open <code>index.html</code> in a browser, then click <strong>Connect</strong>.</p>
+<hr />
+<h2 id="using-the-panel">Using the Panel</h2>
+<h3 id="connecting">Connecting</h3>
+<p>Enter your Arduino's IP address in the field at the top (if it's not already there) and click <strong>Connect</strong>. The status indicator turns green when the connection is ready.</p>
+<p>The board layout switches automatically to match the connected Arduino. If you want to view a different board layout, use the board selector dropdown.</p>
+<h3 id="board-selector">Board selector</h3>
+<p>Three boards are included:</p>
+<table>
+<thead>
+<tr>
+<th>Board</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>UNO R4 WiFi</td>
+<td>Analog pins A0–A5, digital D0–D13</td>
+</tr>
+<tr>
+<td>ESP32-WROVER-DEV</td>
+<td>Full GPIO header with analog-capable pins</td>
+</tr>
+<tr>
+<td>FireBeetle 2 ESP32-C5</td>
+<td>Compact ESP32-C5 board</td>
+</tr>
+</tbody>
+</table>
+<p>Selecting a board from the dropdown manually overrides the auto-detection — the panel will stay on your chosen board even if the Arduino auto-reconnects. Clicking <strong>Connect</strong> again re-enables auto-detection of the board.</p>
+<h3 id="pin-modes">Pin modes</h3>
+<p>Each interactive pin has a mode dropdown. Select a mode to activate it:</p>
+<table>
+<thead>
+<tr>
+<th>Mode</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>off</strong></td>
+<td>Pin is inactive — no mode is set</td>
+</tr>
+<tr>
+<td><strong>input</strong></td>
+<td>Sets the pin as a digital input with pull-up. Shows HIGH (green) or LOW (red)</td>
+</tr>
+<tr>
+<td><strong>output</strong></td>
+<td>Sets the pin as a digital output. HI and LO buttons write to the pin</td>
+</tr>
+<tr>
+<td><strong>pwm out</strong></td>
+<td>Sets the pin as a PWM output. A slider controls the value (0–255)</td>
+</tr>
+<tr>
+<td><strong>analog in</strong></td>
+<td>Reads the analog value and shows it as a live bar graph with a numeric readout</td>
+</tr>
+</tbody>
+</table>
+<p>Pins that only support some modes show only those options in the dropdown.</p>
+<h3 id="multiple-windows">Multiple windows</h3>
+<p>Opening the panel in more than one browser window shows the same live state in all windows. Clicking HI in one window updates the output indicator in every other window.</p>
+<h3 id="reconnecting">Reconnecting</h3>
+<p>If the Arduino resets or the connection drops, Pardalote reconnects automatically. Any pin modes you had active are re-applied as soon as the connection is restored.</p>
+<hr />
+<h2 id="supported-boards">Supported Boards</h2>
+<p>The panel layout is driven by the <code>BOARDS</code> table in <code>boards.js</code>. Each entry defines the board image, the display width, and the position and modes of every pin.</p>
+<p>To add a new board, add a new entry to <code>BOARDS</code> with the same name string that the Arduino firmware reports (the <code>PARDALOTE_BOARD</code> value). The control panel auto-detects by matching the name exactly — if no match is found, a warning is printed to the browser console.</p>
+<hr />
+<h2 id="troubleshooting">Troubleshooting</h2>
+<p><strong>&quot;Won't connect&quot;</strong></p>
+<ul>
+<li>Check the IP address matches what the Arduino printed</li>
+<li>Arduino and browser must be on the same WiFi network</li>
+<li>Try refreshing — the Arduino may still be starting up</li>
+</ul>
+<p><strong>&quot;Board doesn't switch automatically&quot;</strong></p>
+<ul>
+<li>Check the browser console for <code>unrecognised board &quot;...&quot;</code> — the name the firmware reports must exactly match a key in <code>BOARDS</code></li>
+<li>If you've already manually selected a board, auto-detection is suppressed until you click Connect again</li>
+</ul>
+<p><strong>&quot;Analog bar doesn't move&quot;</strong></p>
+<ul>
+<li>Confirm the pin supports analog input on your board (not all pins do)</li>
+<li>Check that nothing is driving the pin — a floating pin may read erratically</li>
+</ul>
+<p><strong>&quot;Output state shows — after setting a mode&quot;</strong></p>
+<ul>
+<li>The indicator shows <code>—</code> until the first write. Click HI or LO to set a known state</li>
+</ul>
+<p><strong>&quot;Pin mode resets after reconnect&quot;</strong></p>
+<ul>
+<li>Modes are re-applied automatically on reconnect. If a mode does not come back, check the Serial Monitor for errors</li>
+</ul>
+<hr />
+<h2 id="file-structure">File Structure</h2>
+<pre><code>control-panel/
+├── index.html        # Page shell
+├── sketch.js         # Connection, board selector, status indicator
+├── control-panel.js  # Panel layout and pin mode logic
+├── boards.js         # Board definitions (pins, positions, modes)
+├── style.css         # Panel styling
+├── boards/
+│   ├── uno-r4-wifi.png
+│   ├── esp32-wrover-dev.png
+│   └── firebeetle2-esp32-c5.png
+└── README.md         # This file
+</code></pre>
+
+  </div>
+</div>
+
+<footer class="site-footer speckled">
+  <div class="wrap">
+    <span>Pardalote — created by Scott Mitchell for design education and creative technology.</span>
+    <span><a href="../reference/index.html">Reference</a> · <a href="https://github.com/scottmitchell/pardalote">GitHub</a> · GPL-3.0</span>
+  </div>
+</footer>
+
+<script src="../js/site.js"></script>
+</body>
+</html>

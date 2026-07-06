@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Protocol — Pardalote reference</title>
+<meta name="description" content="The compact binary WebSocket protocol underneath everything — for the curious, and for anyone building their own extension.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../css/site.css">
+</head>
+<body data-nav="reference">
+
+<nav class="site-nav speckled">
+  <a class="logo" href="../index.html">
+    <img src="../assets/logo.svg" width="30" height="30" alt="">
+    Pardalote
+  </a>
+  <div class="links">
+    <a data-nav="home" href="../index.html">Home</a>
+    <a data-nav="download" href="../download.html">Download</a>
+    <a data-nav="examples" href="../examples/index.html">Examples</a>
+    <a data-nav="reference" href="index.html">Reference</a>
+    <a href="https://github.com/scottmitchell/pardalote">GitHub</a>
+  </div>
+</nav>
+
+<div class="wrap">
+  <div class="ref-layout">
+<aside class="ref-nav">
+  <h4>Getting started</h4>
+  <a href="index.html">Overview</a>
+  <a href="installation.html">Installation</a>
+  <a href="wifi.html">WiFi configuration</a>
+  <h4>Core — JavaScript</h4>
+  <a href="connecting.html#connect">connect() / events</a>
+  <a href="pins.html#pinmode">pinMode()</a>
+  <a href="pins.html#digitalwrite">digitalWrite() / analogWrite()</a>
+  <a href="pins.html#analogread">analogRead() / digitalRead()</a>
+  <a href="pins.html#onchange">onChange()</a>
+  <a href="pins.html#pin-aliases">Pin aliases</a>
+  <h4>Core — Arduino</h4>
+  <a href="arduino.html#pardalotebegin">Pardalote.begin() / run()</a>
+  <a href="arduino.html#pardaloteshare">share() / send()</a>
+  <a href="arduino.html#the-actuator-objects">Reading actuators</a>
+  <h4>Extensions</h4>
+  <a href="extensions.html">Overview</a>
+  <a href="servo.html">Servo</a>
+  <a href="stepper.html">Stepper</a>
+  <a href="bus-servo.html">Bus servo</a>
+  <a href="groups.html">Groups</a>
+  <a href="neopixel.html">NeoPixel</a>
+  <a href="ultrasonic.html">Ultrasonic</a>
+  <a href="mpu.html">MPU / IMU</a>
+  <a href="camera.html">Camera</a>
+  <h4>Under the hood</h4>
+  <a href="protocol.html">Protocol</a>
+  <a href="troubleshooting.html">Troubleshooting</a>
+</aside>
+    <main class="ref-main">
+      <h1>Protocol</h1>
+      <p class="lede">The compact binary WebSocket protocol underneath everything — for the curious, and for anyone building their own extension.</p>
+<h2 id="frame-format">Frame format</h2>
+<p>Pardalote uses a compact binary WebSocket protocol. Each frame is:</p>
+<pre><code>Byte 0      CMD          — command code
+Bytes 1–2   TARGET       — pin number or extension device ID
+Byte 3      NPARAMS      — number of parameters
+Bytes 4–5   TYPE_MASK    — bit per param: 0 = int32, 1 = float32
+Bytes 6–7   PAYLOAD_LEN  — length of optional trailing string/blob
+Bytes 8+    PARAMS       — NPARAMS × 4 bytes
+Bytes 8+N×4 PAYLOAD      — optional string or binary data
+</code></pre>
+<h2 id="batching">Batching</h2>
+<p>Multiple frames are batched into a single WebSocket message before sending. The <code>FrameBuilder</code> class (Arduino) and <code>encodeFrame()</code> / <code>encodeBatch()</code> functions (JS) handle this automatically. Batching is what makes <a href="groups.html">group</a> writes land together on the board.</p>
+<h2 id="state-sync-on-connect">State sync on connect</h2>
+<p>On connect, the Arduino sends its full current state — pin modes, output values, extension configuration, NeoPixel colours — before signalling <code>ready</code>. Any browser connecting to a running system immediately sees live state. This is why Pardalote is multi-user by default: every client starts from the same picture.</p>
+<h2 id="building-your-own-extension">Building your own extension</h2>
+<p>Extensions live at both ends: a JS file that encodes frames for your commands, and an Arduino header that registers a handler for them. The built-in extensions are working references — <code>ultrasonic</code> is the smallest, <code>busServo</code> the most complete. See <a href="extensions.html">Extensions overview</a>.</p>
+
+    </main>
+  </div>
+</div>
+
+<footer class="site-footer speckled">
+  <div class="wrap">
+    <span>Pardalote — created by Scott Mitchell for design education and creative technology.</span>
+    <span><a href="index.html">Reference</a> · <a href="https://github.com/scottmitchell/pardalote">GitHub</a> · GPL-3.0</span>
+  </div>
+</footer>
+
+<script src="../js/site.js"></script>
+</body>
+</html>

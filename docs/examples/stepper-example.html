@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stepper motor — Pardalote examples</title>
+<meta name="description" content="Precise position moves, continuous rotation, and a live position readout — the browser as a motor controller.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../css/site.css">
+</head>
+<body data-nav="examples">
+
+<nav class="site-nav speckled">
+  <a class="logo" href="../index.html">
+    <img src="../assets/logo.svg" width="30" height="30" alt="">
+    Pardalote
+  </a>
+  <div class="links">
+    <a data-nav="home" href="../index.html">Home</a>
+    <a data-nav="download" href="../download.html">Download</a>
+    <a data-nav="examples" href="index.html">Examples</a>
+    <a data-nav="reference" href="../reference/index.html">Reference</a>
+    <a href="https://github.com/scottmitchell/pardalote">GitHub</a>
+  </div>
+</nav>
+
+<div class="page-head speckled">
+  <div class="wrap">
+    <div class="crumb"><a href="index.html">Examples</a> / Stepper motor</div>
+    <h1>Stepper motor</h1>
+    <p>Precise position moves, continuous rotation, and a live position readout — the browser as a motor controller.</p>
+  </div>
+</div>
+
+<div class="wrap md-layout">
+  <div class="md-body">
+    <div class="tags" style="margin-bottom:.5rem;"><span class="tag lvl-mid">Intermediate</span><span class="tag">Motion</span></div>
+    <div class="ex-meta-row">
+      <a class="btn btn-dark" href="https://github.com/scottmitchell/pardalote/tree/main/examples/stepper-example">View the code on GitHub</a>
+    </div>
+    <div class="screenshot-slot">Screenshot / video of this example — coming soon</div>
+<h1 id="stepper-example">Stepper example</h1>
+<p>Drive a stepper motor from the browser with Pardalote. Demonstrates
+accel-limited position moves, continuous rotation, live position readout,
+and the <code>done</code> completion event.</p>
+
+  </div>
+    <div class="ex-code-cols">
+      <div class="code-ex scroll">
+        <div class="bar">stepper.ino — the Arduino side</div>
+        <pre><code><span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;Pardalote.h&gt;</span><span class="cp"></span>
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;PardaloteStepper.h&gt;</span><span class="cp"></span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">setup</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">begin</span><span class="p">();</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">loop</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">run</span><span class="p">();</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</code></pre>
+      </div>
+      <div class="code-ex scroll">
+        <div class="bar">sketch.js — the browser side</div>
+        <pre><code><span class="kd">let</span> <span class="nx">ArduinoIP</span> <span class="o">=</span> <span class="s1">&#39;10.1.1.186&#39;</span><span class="p">;</span>   <span class="c1">// Change this to your Arduino&#39;s IP</span>
+
+<span class="c1">// STEP/DIR driver pins (TMC2208/2209, A4988, EasyDriver).</span>
+<span class="kd">let</span> <span class="nx">STEP_PIN</span> <span class="o">=</span> <span class="mf">2</span><span class="p">;</span>
+<span class="kd">let</span> <span class="nx">DIR_PIN</span>  <span class="o">=</span> <span class="mf">3</span><span class="p">;</span>
+<span class="kd">let</span> <span class="nx">EN_PIN</span>   <span class="o">=</span> <span class="mf">4</span><span class="p">;</span>               <span class="c1">// optional; set to -1 if unused</span>
+
+<span class="kd">let</span> <span class="nx">arduino</span><span class="p">;</span>
+<span class="kd">let</span> <span class="nx">ready</span> <span class="o">=</span> <span class="kc">false</span><span class="p">;</span>
+<span class="kd">let</span> <span class="nx">status</span> <span class="o">=</span> <span class="s1">&#39;connecting…&#39;</span><span class="p">;</span>
+
+<span class="kd">function</span> <span class="nx">setup</span><span class="p">()</span> <span class="p">{</span>
+    <span class="nx">createCanvas</span><span class="p">(</span><span class="mf">600</span><span class="p">,</span> <span class="mf">400</span><span class="p">);</span>
+
+    <span class="nx">arduino</span> <span class="o">=</span> <span class="ow">new</span> <span class="nx">Arduino</span><span class="p">();</span>
+    <span class="nx">arduino</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;x&#39;</span><span class="p">,</span> <span class="ow">new</span> <span class="nx">Stepper</span><span class="p">());</span>
+    <span class="nx">arduino</span><span class="p">.</span><span class="nx">connect</span><span class="p">(</span><span class="nx">ArduinoIP</span><span class="p">);</span>
+
+    <span class="c1">// Do all hardware setup inside &#39;ready&#39; — this also re-runs after a</span>
+    <span class="c1">// reconnect if the Arduino reset, so the stepper is always configured.</span>
+    <span class="nx">arduino</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;ready&#39;</span><span class="p">,</span> <span class="p">()</span> <span class="p">=&gt;</span> <span class="p">{</span>
+        <span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">attach</span><span class="p">(</span><span class="nx">STEP_PIN</span><span class="p">,</span> <span class="nx">DIR_PIN</span><span class="p">,</span> <span class="nx">EN_PIN</span><span class="p">);</span>
+        <span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">setMaxSpeed</span><span class="p">(</span><span class="mf">1200</span><span class="p">);</span>        <span class="c1">// steps/sec</span>
+        <span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">setAcceleration</span><span class="p">(</span><span class="mf">600</span><span class="p">);</span>     <span class="c1">// steps/sec^2</span>
+        <span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">setStepsPerRev</span><span class="p">(</span><span class="mf">200</span> <span class="o">*</span> <span class="mf">16</span><span class="p">);</span> <span class="c1">// 1.8° motor at 16 microsteps</span>
+        <span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">setLimits</span><span class="p">(</span><span class="o">-</span><span class="mf">6400</span><span class="p">,</span> <span class="mf">6400</span><span class="p">);</span>   <span class="c1">// safety: ±2 revolutions</span>
+        <span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">setPosition</span><span class="p">(</span><span class="mf">0</span><span class="p">);</span>           <span class="c1">// call this position &quot;home&quot;</span>
+
+        <span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">read</span><span class="p">(</span><span class="mf">100</span><span class="p">);</span>                <span class="c1">// poll live position every 100 ms</span>
+        <span class="nx">ready</span> <span class="o">=</span> <span class="kc">true</span><span class="p">;</span>
+        <span class="nx">status</span> <span class="o">=</span> <span class="s1">&#39;ready&#39;</span><span class="p">;</span>
+    <span class="p">});</span>
+
+    <span class="nx">arduino</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;disconnect&#39;</span><span class="p">,</span> <span class="p">()</span> <span class="p">=&gt;</span> <span class="p">{</span> <span class="nx">ready</span> <span class="o">=</span> <span class="kc">false</span><span class="p">;</span> <span class="nx">status</span> <span class="o">=</span> <span class="s1">&#39;reconnecting…&#39;</span><span class="p">;</span> <span class="p">});</span>
+
+    <span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;done&#39;</span><span class="p">,</span> <span class="p">({</span> <span class="nx">position</span> <span class="p">})</span> <span class="p">=&gt;</span> <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s1">&#39;arrived at&#39;</span><span class="p">,</span> <span class="nx">position</span><span class="p">));</span>
+<span class="p">}</span>
+
+<span class="kd">function</span> <span class="nx">draw</span><span class="p">()</span> <span class="p">{</span>
+    <span class="nx">background</span><span class="p">(</span><span class="mf">30</span><span class="p">);</span>
+
+    <span class="nx">fill</span><span class="p">(</span><span class="mf">255</span><span class="p">);</span>
+    <span class="nx">textSize</span><span class="p">(</span><span class="mf">16</span><span class="p">);</span>
+    <span class="nx">text</span><span class="p">(</span><span class="s1">&#39;Stepper Control Example&#39;</span><span class="p">,</span> <span class="mf">20</span><span class="p">,</span> <span class="mf">30</span><span class="p">);</span>
+    <span class="nx">text</span><span class="p">(</span><span class="sb">`status: </span><span class="si">${</span><span class="nx">status</span><span class="si">}</span><span class="sb">`</span><span class="p">,</span> <span class="mf">20</span><span class="p">,</span> <span class="mf">55</span><span class="p">);</span>
+
+    <span class="nx">textSize</span><span class="p">(</span><span class="mf">14</span><span class="p">);</span>
+    <span class="nx">text</span><span class="p">(</span><span class="s2">&quot;[←] / [→]  jog 1/4 turn      [Space]  stop&quot;</span><span class="p">,</span> <span class="mf">20</span><span class="p">,</span> <span class="mf">90</span><span class="p">);</span>
+    <span class="nx">text</span><span class="p">(</span><span class="s2">&quot;[R]  spin continuously        [H]  return home (0)&quot;</span><span class="p">,</span> <span class="mf">20</span><span class="p">,</span> <span class="mf">112</span><span class="p">);</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="nx">ready</span><span class="p">)</span> <span class="nx">drawDial</span><span class="p">();</span>
+<span class="p">}</span>
+
+<span class="kd">function</span> <span class="nx">drawDial</span><span class="p">()</span> <span class="p">{</span>
+    <span class="kd">const</span> <span class="nx">stepsPerRev</span> <span class="o">=</span> <span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">stepsPerRev</span><span class="p">;</span>
+    <span class="kd">const</span> <span class="nx">angle</span> <span class="o">=</span> <span class="p">(</span><span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">position</span> <span class="o">/</span> <span class="nx">stepsPerRev</span><span class="p">)</span> <span class="o">*</span> <span class="nx">TWO_PI</span><span class="p">;</span>
+
+    <span class="nx">push</span><span class="p">();</span>
+    <span class="nx">translate</span><span class="p">(</span><span class="nx">width</span> <span class="o">/</span> <span class="mf">2</span><span class="p">,</span> <span class="mf">2</span> <span class="o">*</span> <span class="nx">height</span> <span class="o">/</span> <span class="mf">3</span><span class="p">);</span>
+
+    <span class="nx">noFill</span><span class="p">();</span>
+    <span class="nx">stroke</span><span class="p">(</span><span class="mf">90</span><span class="p">);</span>
+    <span class="nx">strokeWeight</span><span class="p">(</span><span class="mf">2</span><span class="p">);</span>
+    <span class="nx">circle</span><span class="p">(</span><span class="mf">0</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="mf">200</span><span class="p">);</span>
+
+    <span class="nx">stroke</span><span class="p">(</span><span class="mf">120</span><span class="p">,</span> <span class="mf">200</span><span class="p">,</span> <span class="mf">255</span><span class="p">);</span>
+    <span class="nx">strokeWeight</span><span class="p">(</span><span class="mf">5</span><span class="p">);</span>
+    <span class="nx">line</span><span class="p">(</span><span class="mf">0</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="nx">cos</span><span class="p">(</span><span class="nx">angle</span> <span class="o">-</span> <span class="nx">HALF_PI</span><span class="p">)</span> <span class="o">*</span> <span class="mf">95</span><span class="p">,</span> <span class="nx">sin</span><span class="p">(</span><span class="nx">angle</span> <span class="o">-</span> <span class="nx">HALF_PI</span><span class="p">)</span> <span class="o">*</span> <span class="mf">95</span><span class="p">);</span>
+
+    <span class="nx">fill</span><span class="p">(</span><span class="mf">255</span><span class="p">);</span>
+    <span class="nx">noStroke</span><span class="p">();</span>
+    <span class="nx">circle</span><span class="p">(</span><span class="mf">0</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="mf">10</span><span class="p">);</span>
+
+    <span class="nx">textAlign</span><span class="p">(</span><span class="nx">CENTER</span><span class="p">);</span>
+    <span class="nx">textSize</span><span class="p">(</span><span class="mf">14</span><span class="p">);</span>
+    <span class="nx">text</span><span class="p">(</span><span class="sb">`position: </span><span class="si">${</span><span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">position</span><span class="si">}</span><span class="sb"> steps`</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="mf">135</span><span class="p">);</span>
+    <span class="nx">text</span><span class="p">(</span><span class="sb">`</span><span class="si">${</span><span class="p">(</span><span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">position</span> <span class="o">/</span> <span class="nx">stepsPerRev</span><span class="p">).</span><span class="nx">toFixed</span><span class="p">(</span><span class="mf">2</span><span class="p">)</span><span class="si">}</span><span class="sb"> rev`</span> <span class="o">+</span>
+         <span class="p">(</span><span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">isRunning</span> <span class="o">?</span> <span class="s1">&#39;   (moving)&#39;</span> <span class="o">:</span> <span class="s1">&#39;&#39;</span><span class="p">),</span> <span class="mf">0</span><span class="p">,</span> <span class="mf">155</span><span class="p">);</span>
+    <span class="nx">pop</span><span class="p">();</span>
+<span class="p">}</span>
+
+<span class="kd">function</span> <span class="nx">keyPressed</span><span class="p">()</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="nx">ready</span><span class="p">)</span> <span class="k">return</span><span class="p">;</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="nx">keyCode</span> <span class="o">===</span> <span class="nx">LEFT_ARROW</span><span class="p">)</span>  <span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">move</span><span class="p">(</span><span class="o">-</span><span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">stepsPerRev</span> <span class="o">/</span> <span class="mf">4</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="nx">keyCode</span> <span class="o">===</span> <span class="nx">RIGHT_ARROW</span><span class="p">)</span> <span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">move</span><span class="p">(</span> <span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">stepsPerRev</span> <span class="o">/</span> <span class="mf">4</span><span class="p">);</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="nx">key</span> <span class="o">===</span> <span class="s1">&#39; &#39;</span><span class="p">)</span>             <span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">stop</span><span class="p">();</span>
+    <span class="k">if</span> <span class="p">(</span><span class="nx">key</span> <span class="o">===</span> <span class="s1">&#39;r&#39;</span> <span class="o">||</span> <span class="nx">key</span> <span class="o">===</span> <span class="s1">&#39;R&#39;</span><span class="p">)</span> <span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">runSpeed</span><span class="p">(</span><span class="mf">600</span><span class="p">);</span>   <span class="c1">// continuous</span>
+    <span class="k">if</span> <span class="p">(</span><span class="nx">key</span> <span class="o">===</span> <span class="s1">&#39;h&#39;</span> <span class="o">||</span> <span class="nx">key</span> <span class="o">===</span> <span class="s1">&#39;H&#39;</span><span class="p">)</span> <span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">moveTo</span><span class="p">(</span><span class="mf">0</span><span class="p">);</span>       <span class="c1">// home</span>
+<span class="p">}</span>
+</code></pre>
+      </div>
+    </div>
+  <div class="md-body">
+<h2 id="hardware">Hardware</h2>
+<ul>
+<li>Arduino UNO R4 WiFi or ESP32</li>
+<li>A STEP/DIR stepper driver: <strong>TMC2208</strong>, <strong>TMC2209</strong>, <strong>A4988</strong>, or
+<strong>EasyDriver</strong> (or a 28BYJ-48 + ULN2003 — see <code>attach4wire</code> below)</li>
+<li>A stepper motor with its <strong>own power supply</strong> (do not run the motor coils
+off the board's 5 V rail)</li>
+</ul>
+<p>Wiring for a STEP/DIR driver:</p>
+<table>
+<thead>
+<tr>
+<th>Driver pin</th>
+<th>Arduino</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>STEP</td>
+<td>pin 2 (<code>STEP_PIN</code>)</td>
+</tr>
+<tr>
+<td>DIR</td>
+<td>pin 3 (<code>DIR_PIN</code>)</td>
+</tr>
+<tr>
+<td>EN</td>
+<td>pin 4 (<code>EN_PIN</code>) — optional, active-LOW on most drivers</td>
+</tr>
+<tr>
+<td>GND</td>
+<td>shared ground with the Arduino</td>
+</tr>
+</tbody>
+</table>
+<p>Set microstepping with the driver's MS pins as usual, then tell the JS side
+how many steps that makes per revolution with <code>setStepsPerRev()</code>.</p>
+<h2 id="arduino">Arduino</h2>
+<p>Install the <strong>AccelStepper</strong> library (Arduino IDE → Manage Libraries), then
+upload <strong>File → Examples → Pardalote → stepper</strong>. Note the IP address the
+board reports (LED matrix on UNO R4, Serial Monitor on ESP32).</p>
+<h2 id="browser">Browser</h2>
+<ol>
+<li>Put the board's IP into <code>ArduinoIP</code> at the top of <code>sketch.js</code>.</li>
+<li>Open <code>index.html</code> in a browser.</li>
+</ol>
+<p>Controls:</p>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>← / →</td>
+<td>jog a quarter turn</td>
+</tr>
+<tr>
+<td>Space</td>
+<td>stop (decelerate)</td>
+</tr>
+<tr>
+<td>R</td>
+<td>spin continuously</td>
+</tr>
+<tr>
+<td>H</td>
+<td>return to home (position 0)</td>
+</tr>
+</tbody>
+</table>
+<h2 id="notes">Notes</h2>
+<ul>
+<li><strong>Motion runs on the board.</strong> The browser sends targets and motion
+profiles; the Arduino generates the step pulses via AccelStepper. You never
+stream individual steps over WiFi.</li>
+<li><strong>Soft limits</strong> (<code>setLimits(-6400, 6400)</code>) are enforced on the Arduino — the
+board clamps every target, so the browser (or an LLM driving it) can't send
+the motor past the set range.</li>
+<li><strong><code>done</code></strong> fires when a position move completes. <code>await arduino.x.moveToAsync(n)</code>
+resolves at the same moment — handy for sequencing moves.</li>
+</ul>
+
+  </div>
+</div>
+
+<footer class="site-footer speckled">
+  <div class="wrap">
+    <span>Pardalote — created by Scott Mitchell for design education and creative technology.</span>
+    <span><a href="../reference/index.html">Reference</a> · <a href="https://github.com/scottmitchell/pardalote">GitHub</a> · GPL-3.0</span>
+  </div>
+</footer>
+
+<script src="../js/site.js"></script>
+</body>
+</html>

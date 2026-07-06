@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bus servos — Pardalote examples</title>
+<meta name="description" content="Drive smart serial servos — the kind used in robot arms. Pose a joint by hand, read it back, and replay it.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../css/site.css">
+</head>
+<body data-nav="examples">
+
+<nav class="site-nav speckled">
+  <a class="logo" href="../index.html">
+    <img src="../assets/logo.svg" width="30" height="30" alt="">
+    Pardalote
+  </a>
+  <div class="links">
+    <a data-nav="home" href="../index.html">Home</a>
+    <a data-nav="download" href="../download.html">Download</a>
+    <a data-nav="examples" href="index.html">Examples</a>
+    <a data-nav="reference" href="../reference/index.html">Reference</a>
+    <a href="https://github.com/scottmitchell/pardalote">GitHub</a>
+  </div>
+</nav>
+
+<div class="page-head speckled">
+  <div class="wrap">
+    <div class="crumb"><a href="index.html">Examples</a> / Bus servos</div>
+    <h1>Bus servos</h1>
+    <p>Drive smart serial servos — the kind used in robot arms. Pose a joint by hand, read it back, and replay it.</p>
+  </div>
+</div>
+
+<div class="wrap md-layout">
+  <div class="md-body">
+    <div class="tags" style="margin-bottom:.5rem;"><span class="tag lvl-adv">Advanced</span><span class="tag">Motion</span></div>
+    <div class="ex-meta-row">
+      <a class="btn btn-dark" href="https://github.com/scottmitchell/pardalote/tree/main/examples/busservo-example">View the code on GitHub</a>
+    </div>
+    <div class="screenshot-slot">Screenshot / video of this example — coming soon</div>
+<h1 id="bus-servo-example">Bus servo example</h1>
+<p>Drive two Feetech ST-series serial bus servos from the browser: drag to
+command position, read live position / load / voltage / temperature back,
+and free a joint to hand-pose it (torque off) then re-hold it.</p>
+
+  </div>
+    <div class="ex-code-cols">
+      <div class="code-ex scroll">
+        <div class="bar">busservo.ino — the Arduino side</div>
+        <pre><code><span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;Pardalote.h&gt;</span><span class="cp"></span>
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;PardaloteBusServo.h&gt;</span><span class="cp"></span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">setup</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">begin</span><span class="p">();</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">loop</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">run</span><span class="p">();</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</code></pre>
+      </div>
+      <div class="code-ex scroll">
+        <div class="bar">sketch.js — the browser side</div>
+        <pre><code><span class="kd">let</span> <span class="nx">ArduinoIP</span> <span class="o">=</span> <span class="s1">&#39;10.1.1.186&#39;</span><span class="p">;</span>   <span class="c1">// Change this to your Arduino&#39;s IP</span>
+
+<span class="kd">let</span> <span class="nx">arduino</span><span class="p">;</span>
+<span class="kd">let</span> <span class="nx">ready</span> <span class="o">=</span> <span class="kc">false</span><span class="p">;</span>
+<span class="kd">let</span> <span class="nx">status</span> <span class="o">=</span> <span class="s1">&#39;connecting…&#39;</span><span class="p">;</span>
+
+<span class="c1">// Two joints on the bus — servo IDs 1 and 2 (ST series, 0–4095).</span>
+<span class="kd">const</span> <span class="nx">JOINTS</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="p">{</span> <span class="nx">name</span><span class="o">:</span> <span class="s1">&#39;shoulder&#39;</span><span class="p">,</span> <span class="nx">servoId</span><span class="o">:</span> <span class="mf">1</span> <span class="p">},</span>
+    <span class="p">{</span> <span class="nx">name</span><span class="o">:</span> <span class="s1">&#39;elbow&#39;</span><span class="p">,</span>    <span class="nx">servoId</span><span class="o">:</span> <span class="mf">2</span> <span class="p">},</span>
+<span class="p">];</span>
+
+<span class="kd">function</span> <span class="nx">setup</span><span class="p">()</span> <span class="p">{</span>
+    <span class="nx">createCanvas</span><span class="p">(</span><span class="mf">600</span><span class="p">,</span> <span class="mf">420</span><span class="p">);</span>
+
+    <span class="nx">arduino</span> <span class="o">=</span> <span class="ow">new</span> <span class="nx">Arduino</span><span class="p">();</span>
+    <span class="nx">JOINTS</span><span class="p">.</span><span class="nx">forEach</span><span class="p">(</span><span class="nx">j</span> <span class="p">=&gt;</span> <span class="nx">arduino</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="nx">j</span><span class="p">.</span><span class="nx">name</span><span class="p">,</span> <span class="ow">new</span> <span class="nx">BusServo</span><span class="p">()));</span>
+    <span class="nx">arduino</span><span class="p">.</span><span class="nx">connect</span><span class="p">(</span><span class="nx">ArduinoIP</span><span class="p">);</span>
+
+    <span class="nx">arduino</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;ready&#39;</span><span class="p">,</span> <span class="p">()</span> <span class="p">=&gt;</span> <span class="p">{</span>
+        <span class="c1">// configureBus() is optional — defaults to Serial1 @ 1 Mbps.</span>
+        <span class="c1">// On ESP32 with custom UART pins: arduino.shoulder.configureBus({ rxPin: 18, txPin: 19 });</span>
+        <span class="nx">JOINTS</span><span class="p">.</span><span class="nx">forEach</span><span class="p">(</span><span class="nx">j</span> <span class="p">=&gt;</span> <span class="p">{</span>
+            <span class="kd">const</span> <span class="nx">s</span> <span class="o">=</span> <span class="nx">arduino</span><span class="p">[</span><span class="nx">j</span><span class="p">.</span><span class="nx">name</span><span class="p">];</span>
+            <span class="nx">s</span><span class="p">.</span><span class="nx">attach</span><span class="p">(</span><span class="nx">j</span><span class="p">.</span><span class="nx">servoId</span><span class="p">,</span> <span class="s1">&#39;ST&#39;</span><span class="p">);</span>
+            <span class="nx">s</span><span class="p">.</span><span class="nx">setLimits</span><span class="p">(</span><span class="mf">1024</span><span class="p">,</span> <span class="mf">3072</span><span class="p">);</span>   <span class="c1">// servo-enforced ±quarter-turn from centre</span>
+            <span class="nx">s</span><span class="p">.</span><span class="nx">center</span><span class="p">();</span>
+            <span class="nx">s</span><span class="p">.</span><span class="nx">read</span><span class="p">(</span><span class="mf">120</span><span class="p">);</span>               <span class="c1">// poll live feedback</span>
+        <span class="p">});</span>
+        <span class="nx">ready</span> <span class="o">=</span> <span class="kc">true</span><span class="p">;</span>
+        <span class="nx">status</span> <span class="o">=</span> <span class="s1">&#39;ready&#39;</span><span class="p">;</span>
+    <span class="p">});</span>
+
+    <span class="nx">arduino</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;disconnect&#39;</span><span class="p">,</span> <span class="p">()</span> <span class="p">=&gt;</span> <span class="p">{</span> <span class="nx">ready</span> <span class="o">=</span> <span class="kc">false</span><span class="p">;</span> <span class="nx">status</span> <span class="o">=</span> <span class="s1">&#39;reconnecting…&#39;</span><span class="p">;</span> <span class="p">});</span>
+<span class="p">}</span>
+
+<span class="kd">function</span> <span class="nx">draw</span><span class="p">()</span> <span class="p">{</span>
+    <span class="nx">background</span><span class="p">(</span><span class="mf">28</span><span class="p">);</span>
+
+    <span class="nx">fill</span><span class="p">(</span><span class="mf">255</span><span class="p">);</span>
+    <span class="nx">textSize</span><span class="p">(</span><span class="mf">16</span><span class="p">);</span>
+    <span class="nx">text</span><span class="p">(</span><span class="s1">&#39;Bus Servo Control Example&#39;</span><span class="p">,</span> <span class="mf">20</span><span class="p">,</span> <span class="mf">30</span><span class="p">);</span>
+    <span class="nx">text</span><span class="p">(</span><span class="sb">`status: </span><span class="si">${</span><span class="nx">status</span><span class="si">}</span><span class="sb">`</span><span class="p">,</span> <span class="mf">20</span><span class="p">,</span> <span class="mf">54</span><span class="p">);</span>
+
+    <span class="nx">textSize</span><span class="p">(</span><span class="mf">13</span><span class="p">);</span>
+    <span class="nx">text</span><span class="p">(</span><span class="s1">&#39;Drag a dial to command position.  [1]/[2] free a joint to pose it by hand,&#39;</span><span class="p">,</span> <span class="mf">20</span><span class="p">,</span> <span class="mf">84</span><span class="p">);</span>
+    <span class="nx">text</span><span class="p">(</span><span class="s1">&#39;then press the same key to re-hold at the posed position.&#39;</span><span class="p">,</span> <span class="mf">20</span><span class="p">,</span> <span class="mf">102</span><span class="p">);</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="nx">ready</span><span class="p">)</span> <span class="nx">JOINTS</span><span class="p">.</span><span class="nx">forEach</span><span class="p">((</span><span class="nx">j</span><span class="p">,</span> <span class="nx">i</span><span class="p">)</span> <span class="p">=&gt;</span> <span class="nx">drawJoint</span><span class="p">(</span><span class="nx">arduino</span><span class="p">[</span><span class="nx">j</span><span class="p">.</span><span class="nx">name</span><span class="p">],</span> <span class="nx">j</span><span class="p">.</span><span class="nx">name</span><span class="p">,</span> <span class="mf">170</span> <span class="o">+</span> <span class="nx">i</span> <span class="o">*</span> <span class="mf">250</span><span class="p">,</span> <span class="mf">260</span><span class="p">));</span>
+<span class="p">}</span>
+
+<span class="kd">function</span> <span class="nx">drawJoint</span><span class="p">(</span><span class="nx">s</span><span class="p">,</span> <span class="nx">label</span><span class="p">,</span> <span class="nx">cx</span><span class="p">,</span> <span class="nx">cy</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kd">const</span> <span class="nx">angle</span> <span class="o">=</span> <span class="nx">map</span><span class="p">(</span><span class="nx">s</span><span class="p">.</span><span class="nx">position</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="nx">s</span><span class="p">.</span><span class="nx">resolution</span><span class="p">,</span> <span class="o">-</span><span class="nx">PI</span><span class="p">,</span> <span class="nx">PI</span><span class="p">);</span>
+
+    <span class="nx">push</span><span class="p">();</span>
+    <span class="nx">translate</span><span class="p">(</span><span class="nx">cx</span><span class="p">,</span> <span class="nx">cy</span><span class="p">);</span>
+
+    <span class="nx">noFill</span><span class="p">();</span>
+    <span class="nx">stroke</span><span class="p">(</span><span class="nx">s</span><span class="p">.</span><span class="nx">torqueOn</span> <span class="o">?</span> <span class="mf">90</span> <span class="o">:</span> <span class="mf">200</span><span class="p">,</span> <span class="nx">s</span><span class="p">.</span><span class="nx">torqueOn</span> <span class="o">?</span> <span class="mf">90</span> <span class="o">:</span> <span class="mf">140</span><span class="p">,</span> <span class="mf">90</span><span class="p">);</span>
+    <span class="nx">strokeWeight</span><span class="p">(</span><span class="mf">2</span><span class="p">);</span>
+    <span class="nx">circle</span><span class="p">(</span><span class="mf">0</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="mf">180</span><span class="p">);</span>
+
+    <span class="nx">stroke</span><span class="p">(</span><span class="mf">120</span><span class="p">,</span> <span class="mf">200</span><span class="p">,</span> <span class="mf">255</span><span class="p">);</span>
+    <span class="nx">strokeWeight</span><span class="p">(</span><span class="mf">5</span><span class="p">);</span>
+    <span class="nx">line</span><span class="p">(</span><span class="mf">0</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="nx">cos</span><span class="p">(</span><span class="nx">angle</span> <span class="o">-</span> <span class="nx">HALF_PI</span><span class="p">)</span> <span class="o">*</span> <span class="mf">82</span><span class="p">,</span> <span class="nx">sin</span><span class="p">(</span><span class="nx">angle</span> <span class="o">-</span> <span class="nx">HALF_PI</span><span class="p">)</span> <span class="o">*</span> <span class="mf">82</span><span class="p">);</span>
+
+    <span class="nx">fill</span><span class="p">(</span><span class="mf">255</span><span class="p">);</span> <span class="nx">noStroke</span><span class="p">();</span>
+    <span class="nx">circle</span><span class="p">(</span><span class="mf">0</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="mf">9</span><span class="p">);</span>
+    <span class="nx">textAlign</span><span class="p">(</span><span class="nx">CENTER</span><span class="p">);</span>
+    <span class="nx">textSize</span><span class="p">(</span><span class="mf">14</span><span class="p">);</span>
+    <span class="nx">text</span><span class="p">(</span><span class="nx">label</span> <span class="o">+</span> <span class="p">(</span><span class="nx">s</span><span class="p">.</span><span class="nx">torqueOn</span> <span class="o">?</span> <span class="s1">&#39;&#39;</span> <span class="o">:</span> <span class="s1">&#39;  (free)&#39;</span><span class="p">),</span> <span class="mf">0</span><span class="p">,</span> <span class="mf">118</span><span class="p">);</span>
+    <span class="nx">textSize</span><span class="p">(</span><span class="mf">12</span><span class="p">);</span>
+    <span class="nx">text</span><span class="p">(</span><span class="sb">`pos </span><span class="si">${</span><span class="nx">s</span><span class="p">.</span><span class="nx">position</span><span class="si">}</span><span class="sb">   </span><span class="si">${</span><span class="nx">s</span><span class="p">.</span><span class="nx">positionDegrees</span><span class="p">.</span><span class="nx">toFixed</span><span class="p">(</span><span class="mf">0</span><span class="p">)</span><span class="si">}</span><span class="sb">°`</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="mf">138</span><span class="p">);</span>
+    <span class="nx">text</span><span class="p">(</span><span class="sb">`load </span><span class="si">${</span><span class="nx">s</span><span class="p">.</span><span class="nx">load</span><span class="si">}</span><span class="sb">   </span><span class="si">${</span><span class="nx">s</span><span class="p">.</span><span class="nx">voltage</span><span class="p">.</span><span class="nx">toFixed</span><span class="p">(</span><span class="mf">1</span><span class="p">)</span><span class="si">}</span><span class="sb">V   </span><span class="si">${</span><span class="nx">s</span><span class="p">.</span><span class="nx">temperature</span><span class="si">}</span><span class="sb">°C`</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="mf">156</span><span class="p">);</span>
+    <span class="nx">pop</span><span class="p">();</span>
+<span class="p">}</span>
+
+<span class="kd">function</span> <span class="nx">mouseDragged</span><span class="p">()</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="nx">ready</span><span class="p">)</span> <span class="k">return</span><span class="p">;</span>
+    <span class="nx">JOINTS</span><span class="p">.</span><span class="nx">forEach</span><span class="p">((</span><span class="nx">j</span><span class="p">,</span> <span class="nx">i</span><span class="p">)</span> <span class="p">=&gt;</span> <span class="p">{</span>
+        <span class="kd">const</span> <span class="nx">cx</span> <span class="o">=</span> <span class="mf">170</span> <span class="o">+</span> <span class="nx">i</span> <span class="o">*</span> <span class="mf">250</span><span class="p">,</span> <span class="nx">cy</span> <span class="o">=</span> <span class="mf">260</span><span class="p">;</span>
+        <span class="k">if</span> <span class="p">(</span><span class="nx">dist</span><span class="p">(</span><span class="nx">mouseX</span><span class="p">,</span> <span class="nx">mouseY</span><span class="p">,</span> <span class="nx">cx</span><span class="p">,</span> <span class="nx">cy</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mf">95</span><span class="p">)</span> <span class="p">{</span>
+            <span class="kd">const</span> <span class="nx">a</span> <span class="o">=</span> <span class="nx">atan2</span><span class="p">(</span><span class="nx">mouseY</span> <span class="o">-</span> <span class="nx">cy</span><span class="p">,</span> <span class="nx">mouseX</span> <span class="o">-</span> <span class="nx">cx</span><span class="p">)</span> <span class="o">+</span> <span class="nx">HALF_PI</span><span class="p">;</span>
+            <span class="kd">const</span> <span class="nx">counts</span> <span class="o">=</span> <span class="nx">map</span><span class="p">(</span><span class="nx">a</span><span class="p">,</span> <span class="o">-</span><span class="nx">PI</span><span class="p">,</span> <span class="nx">PI</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="nx">arduino</span><span class="p">[</span><span class="nx">j</span><span class="p">.</span><span class="nx">name</span><span class="p">].</span><span class="nx">resolution</span><span class="p">);</span>
+            <span class="nx">arduino</span><span class="p">[</span><span class="nx">j</span><span class="p">.</span><span class="nx">name</span><span class="p">].</span><span class="nx">write</span><span class="p">(</span><span class="nx">counts</span><span class="p">,</span> <span class="p">{</span> <span class="nx">speed</span><span class="o">:</span> <span class="mf">3000</span> <span class="p">});</span>
+        <span class="p">}</span>
+    <span class="p">});</span>
+<span class="p">}</span>
+
+<span class="kd">function</span> <span class="nx">keyPressed</span><span class="p">()</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="nx">ready</span><span class="p">)</span> <span class="k">return</span><span class="p">;</span>
+    <span class="kd">const</span> <span class="nx">idx</span> <span class="o">=</span> <span class="nx">key</span> <span class="o">===</span> <span class="s1">&#39;1&#39;</span> <span class="o">?</span> <span class="mf">0</span> <span class="o">:</span> <span class="nx">key</span> <span class="o">===</span> <span class="s1">&#39;2&#39;</span> <span class="o">?</span> <span class="mf">1</span> <span class="o">:</span> <span class="o">-</span><span class="mf">1</span><span class="p">;</span>
+    <span class="k">if</span> <span class="p">(</span><span class="nx">idx</span> <span class="o">&lt;</span> <span class="mf">0</span><span class="p">)</span> <span class="k">return</span><span class="p">;</span>
+    <span class="kd">const</span> <span class="nx">s</span> <span class="o">=</span> <span class="nx">arduino</span><span class="p">[</span><span class="nx">JOINTS</span><span class="p">[</span><span class="nx">idx</span><span class="p">].</span><span class="nx">name</span><span class="p">];</span>
+    <span class="k">if</span> <span class="p">(</span><span class="nx">s</span><span class="p">.</span><span class="nx">torqueOn</span><span class="p">)</span> <span class="nx">s</span><span class="p">.</span><span class="nx">disableTorque</span><span class="p">();</span>   <span class="c1">// go limp — pose by hand</span>
+    <span class="k">else</span>            <span class="nx">s</span><span class="p">.</span><span class="nx">enableTorque</span><span class="p">();</span>    <span class="c1">// re-hold at current position</span>
+<span class="p">}</span>
+</code></pre>
+      </div>
+    </div>
+  <div class="md-body">
+<h2 id="hardware">Hardware</h2>
+<ul>
+<li>Arduino UNO R4 WiFi or ESP32</li>
+<li>A <strong>Waveshare Serial Bus Servo Driver</strong> board (or equivalent half-duplex
+UART adapter), wired to a hardware serial port:
+<ul>
+<li>UNO R4 WiFi → <strong>Serial1</strong> (D0 = RX, D1 = TX)</li>
+<li>ESP32 → Serial1 or Serial2 (set the pins with <code>configureBus({ rxPin, txPin })</code>)</li>
+</ul>
+</li>
+<li>Two <strong>Feetech STS3215</strong> (or other ST/SMS) servos, daisy-chained on the bus,
+set to IDs <strong>1</strong> and <strong>2</strong></li>
+<li>A servo power supply (6–7.4 V typical) — not the board's 5 V rail</li>
+</ul>
+<p>The STS3215 is the same servo used in the LeRobot SO-100/SO-101 arms.</p>
+<h3 id="setting-servo-ids">Setting servo IDs</h3>
+<p>Servos ship as ID 1. To renumber, put a <strong>single</strong> servo on the bus, attach
+it, and call <code>setId(newId)</code> — then repeat one at a time. <code>scan()</code> lists the
+IDs currently responding on the bus.</p>
+<h2 id="arduino">Arduino</h2>
+<p>Install the <strong>SCServo</strong> library (from the Waveshare Bus Servo Adapter wiki or
+the Feetech SDK — usually a ZIP, not in the Library Manager), then upload
+<strong>File → Examples → Pardalote → busservo</strong>. Note the IP the board reports.</p>
+<h2 id="browser">Browser</h2>
+<ol>
+<li>Put the board's IP into <code>ArduinoIP</code> in <code>sketch.js</code>.</li>
+<li>Open <code>index.html</code>.</li>
+</ol>
+<table>
+<thead>
+<tr>
+<th>Input</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Drag a dial</td>
+<td>command that joint's position</td>
+</tr>
+<tr>
+<td><code>1</code> / <code>2</code></td>
+<td>free that joint (torque off) to pose by hand; press again to re-hold</td>
+</tr>
+</tbody>
+</table>
+<h2 id="notes">Notes</h2>
+<ul>
+<li><strong>Positions are raw encoder counts</strong>, not degrees — ST series is 0–4095
+(centre 2048), SC series is 0–1023. <code>write()</code> takes counts; <code>writeDegrees()</code>
+and <code>.positionDegrees</code> convert (accurate for ST, nominal for SC).</li>
+<li><strong>Limits are enforced by the servo itself.</strong> <code>setLimits(min, max)</code> writes the
+servo's own Min/Max position registers, so the range holds even without the
+browser in the loop.</li>
+<li><strong>Torque off = teaching by demonstration.</strong> <code>disableTorque()</code> lets you move
+the joint by hand while <code>read()</code> streams the position back — the basis of the
+record-a-trajectory workflow in projects like LeRobot.</li>
+<li><strong>Calibration:</strong> move a joint to its zero pose (torque off), then
+<code>calibrate()</code> sets that as centre (like LeRobot centring on <code>resolution / 2</code>).</li>
+</ul>
+
+  </div>
+</div>
+
+<footer class="site-footer speckled">
+  <div class="wrap">
+    <span>Pardalote — created by Scott Mitchell for design education and creative technology.</span>
+    <span><a href="../reference/index.html">Reference</a> · <a href="https://github.com/scottmitchell/pardalote">GitHub</a> · GPL-3.0</span>
+  </div>
+</footer>
+
+<script src="../js/site.js"></script>
+</body>
+</html>

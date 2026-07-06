@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Download — Pardalote</title>
+<meta name="description" content="Download the Pardalote libraries for Arduino and JavaScript, and get from zero to blinking in three steps.">
+<link rel="icon" href="assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="css/site.css">
+</head>
+<body data-nav="download">
+
+<nav class="site-nav speckled">
+  <a class="logo" href="index.html">
+    <img src="assets/logo.svg" width="30" height="30" alt="">
+    Pardalote
+  </a>
+  <div class="links">
+    <a data-nav="home" href="index.html">Home</a>
+    <a data-nav="download" href="download.html">Download</a>
+    <a data-nav="examples" href="examples/index.html">Examples</a>
+    <a data-nav="reference" href="reference/index.html">Reference</a>
+    <a href="https://github.com/scottmitchell/pardalote">GitHub</a>
+  </div>
+</nav>
+
+<div class="page-head speckled">
+  <div class="wrap">
+    <h1>Download</h1>
+    <p>Pardalote is two small libraries — one for your Arduino sketch, one for your web page. Get both, then follow the three steps below.</p>
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="dl-grid" style="margin-top:2.5rem;">
+    <div class="dl-card arduino">
+      <div class="lang">Arduino · C++</div>
+      <h3>Pardalote for Arduino</h3>
+      <p>The library your board runs. Handles WiFi, the WebSocket server, and all the hardware extensions. Ships with ready-to-upload examples in the IDE.</p>
+      <a class="btn btn-dark" href="https://github.com/scottmitchell/pardalote/releases">Download .zip — v2.1</a>
+      <div class="meta">For Arduino UNO R4 WiFi &amp; ESP32 boards · GPL-3.0</div>
+    </div>
+    <div class="dl-card js">
+      <div class="lang">Browser · JavaScript</div>
+      <h3>Pardalote for JavaScript</h3>
+      <p>One script tag, no build tools, no Node.js. Includes optional extension files for servos, steppers, NeoPixels, sensors and camera.</p>
+      <a class="btn btn-dark" href="https://github.com/scottmitchell/pardalote/releases">Download .zip — v2.1</a>
+      <div class="meta">Works in any modern browser · pairs beautifully with p5.js</div>
+    </div>
+  </div>
+
+  <section style="padding-top:0;">
+    <div class="kicker">Setup</div>
+    <h2>Three steps to blinking</h2>
+    <div class="steps">
+      <div class="step">
+        <div>
+          <h4>Install the Arduino library</h4>
+          <p>Copy the <code>Pardalote</code> folder into your Arduino libraries folder and restart the IDE. It appears under <code>File → Examples → Pardalote</code>. Full details in <a href="reference/installation.html">Installation</a>.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div>
+          <h4>Upload an example and join your WiFi</h4>
+          <p>Open <code>basic-LED</code>, upload it, and give the board your WiFi details — Pardalote asks for them in the Serial Monitor and remembers them. The board then shows you its IP address. See <a href="reference/wifi.html">WiFi configuration</a> for all the options.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div>
+          <h4>Open a web page</h4>
+          <p>Put the board's IP address into the example's <code>sketch.js</code> and open <code>index.html</code> in your browser. That's the whole toolchain.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section style="padding-top:1rem;">
+    <div class="kicker">What you need</div>
+    <h2>Boards and requirements</h2>
+    <p class="lede" style="margin-bottom:1.2rem;">Pardalote runs on the <strong>Arduino UNO R4 WiFi</strong> and <strong>ESP32</strong> development boards. You'll need the Arduino IDE, a web browser, and a text editor — the Arduino and your browser just have to share the same WiFi network.</p>
+    <p style="color:var(--grey); max-width:60ch;">Some extensions rely on standard Arduino libraries (servo, stepper, NeoPixel support and so on) — the <a href="reference/installation.html">installation guide</a> lists exactly what to install for the hardware you're using.</p>
+  </section>
+</div>
+
+<footer class="site-footer speckled">
+  <div class="wrap">
+    <span>Pardalote — created by Scott Mitchell for design education and creative technology.</span>
+    <span><a href="reference/index.html">Reference</a> · <a href="https://github.com/scottmitchell/pardalote">GitHub</a> · GPL-3.0</span>
+  </div>
+</footer>
+
+<script src="js/site.js"></script>
+</body>
+</html>

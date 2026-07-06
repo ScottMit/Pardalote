@@ -1,0 +1,69 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+    background: #10121a;
+    color: #bbb;
+    font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+main {
+    text-align: center;
+    padding: 40px 20px;
+    max-width: 520px;
+    width: 100%;
+}
+
+h1 {
+    color: #fff;
+    font-weight: 500;
+    margin-bottom: 50px;
+    letter-spacing: 0.5px;
+}
+
+#value {
+    font-size: 88px;
+    font-weight: 300;
+    color: #fff;
+    font-variant-numeric: tabular-nums;
+    margin-bottom: 32px;
+    line-height: 1;
+}
+
+.bar-track {
+    height: 16px;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 50px;
+}
+#bar {
+    height: 100%;
+    width: 0;
+    background: linear-gradient(90deg, #4dd0e1, #4dabf7);
+    transition: width 0.15s ease-out;
+}
+
+.hint {
+    font-size: 13px;
+    line-height: 1.7;
+    color: #666;
+    margin-bottom: 60px;
+}
+.hint code {
+    background: rgba(255, 255, 255, 0.07);
+    padding: 1px 6px;
+    border-radius: 3px;
+    color: #aaa;
+    font-size: 12px;
+}
+
+#status {
+    font-size: 11px;
+    letter-spacing: 2px;
+}
+#status.connected    { color: #4caf50; }
+#status.disconnected { color: #e53935; }

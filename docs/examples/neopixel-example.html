@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NeoPixel colours — Pardalote examples</title>
+<meta name="description" content="An on-screen colour picker drives an LED strip in real time. Sweep the mouse for colour; hover for rainbow.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../css/site.css">
+</head>
+<body data-nav="examples">
+
+<nav class="site-nav speckled">
+  <a class="logo" href="../index.html">
+    <img src="../assets/logo.svg" width="30" height="30" alt="">
+    Pardalote
+  </a>
+  <div class="links">
+    <a data-nav="home" href="../index.html">Home</a>
+    <a data-nav="download" href="../download.html">Download</a>
+    <a data-nav="examples" href="index.html">Examples</a>
+    <a data-nav="reference" href="../reference/index.html">Reference</a>
+    <a href="https://github.com/scottmitchell/pardalote">GitHub</a>
+  </div>
+</nav>
+
+<div class="page-head speckled">
+  <div class="wrap">
+    <div class="crumb"><a href="index.html">Examples</a> / NeoPixel colours</div>
+    <h1>NeoPixel colours</h1>
+    <p>An on-screen colour picker drives an LED strip in real time. Sweep the mouse for colour; hover for rainbow.</p>
+  </div>
+</div>
+
+<div class="wrap md-layout">
+  <div class="md-body">
+    <div class="tags" style="margin-bottom:.5rem;"><span class="tag lvl-mid">Intermediate</span><span class="tag">Light</span><span class="tag">p5.js</span></div>
+    <div class="ex-meta-row">
+      <a class="btn btn-dark" href="https://github.com/scottmitchell/pardalote/tree/main/examples/neopixel-example">View the code on GitHub</a>
+    </div>
+    <div class="screenshot-slot">Screenshot / video of this example — coming soon</div>
+<h1 id="neopixel-example">NeoPixel Example</h1>
+<p>An interactive p5.js colour picker that drives a NeoPixel LED strip in real time. Move the mouse across the canvas to change the strip colour; hover over the centre circle to trigger a rainbow effect.</p>
+
+  </div>
+    <div class="ex-code-cols">
+      <div class="code-ex scroll">
+        <div class="bar">neopixel.ino — the Arduino side</div>
+        <pre><code><span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;Pardalote.h&gt;</span><span class="cp"></span>
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;PardaloteNeoPixel.h&gt;</span><span class="cp"></span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">setup</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">begin</span><span class="p">();</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">loop</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">run</span><span class="p">();</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</code></pre>
+      </div>
+      <div class="code-ex scroll">
+        <div class="bar">sketch.js — the browser side</div>
+        <pre><code><span class="kd">let</span> <span class="nx">ArduinoIP</span> <span class="o">=</span> <span class="s1">&#39;10.1.1.186&#39;</span><span class="p">;</span>   <span class="c1">// Change this to your Arduino&#39;s IP</span>
+
+<span class="kd">let</span> <span class="nx">arduino</span><span class="p">;</span>
+
+<span class="kd">let</span> <span class="nx">pixelPin</span> <span class="o">=</span> <span class="mf">9</span><span class="p">;</span>
+<span class="kd">let</span> <span class="nx">numPixels</span> <span class="o">=</span> <span class="mf">8</span><span class="p">;</span>
+
+<span class="kd">function</span> <span class="nx">setup</span><span class="p">()</span> <span class="p">{</span>
+    <span class="nx">createCanvas</span><span class="p">(</span><span class="mf">600</span><span class="p">,</span> <span class="mf">600</span><span class="p">);</span>
+    <span class="nx">colorMode</span><span class="p">(</span><span class="nx">HSB</span><span class="p">);</span>
+
+    <span class="c1">// create Arduino and register the NeoPixel strip</span>
+    <span class="nx">arduino</span> <span class="o">=</span> <span class="ow">new</span> <span class="nx">Arduino</span><span class="p">();</span>
+    <span class="nx">arduino</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;neoStrip1&#39;</span><span class="p">,</span> <span class="ow">new</span> <span class="nx">NeoPixel</span><span class="p">());</span>
+
+    <span class="c1">// configure the strip once the Arduino is ready</span>
+    <span class="nx">arduino</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;ready&#39;</span><span class="p">,</span> <span class="p">()</span> <span class="p">=&gt;</span> <span class="p">{</span>
+        <span class="c1">// Init strip: pin, num pixels</span>
+        <span class="nx">arduino</span><span class="p">.</span><span class="nx">neoStrip1</span><span class="p">.</span><span class="nx">init</span><span class="p">(</span><span class="nx">pixelPin</span><span class="p">,</span> <span class="nx">numPixels</span><span class="p">);</span>
+        <span class="c1">// set strip brightness</span>
+        <span class="nx">arduino</span><span class="p">.</span><span class="nx">neoStrip1</span><span class="p">.</span><span class="nx">setBrightness</span><span class="p">(</span><span class="mf">50</span><span class="p">);</span>
+        <span class="c1">// Clear everything</span>
+        <span class="nx">arduino</span><span class="p">.</span><span class="nx">neoStrip1</span><span class="p">.</span><span class="nx">clear</span><span class="p">();</span>
+        <span class="c1">// calling show() sends the buffered commands to the Arduino</span>
+        <span class="nx">arduino</span><span class="p">.</span><span class="nx">neoStrip1</span><span class="p">.</span><span class="nx">show</span><span class="p">();</span>
+    <span class="p">});</span>
+
+    <span class="c1">// open the WebSocket connection</span>
+    <span class="nx">arduino</span><span class="p">.</span><span class="nx">connect</span><span class="p">(</span><span class="nx">ArduinoIP</span><span class="p">);</span>
+
+    <span class="c1">// draw color field on screen</span>
+    <span class="nx">noStroke</span><span class="p">();</span>
+    <span class="k">for</span> <span class="p">(</span><span class="kd">let</span> <span class="nx">i</span> <span class="o">=</span> <span class="mf">0</span><span class="p">;</span> <span class="nx">i</span> <span class="o">&lt;</span> <span class="nx">width</span><span class="p">;</span> <span class="nx">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+        <span class="kd">let</span> <span class="nx">newH</span> <span class="o">=</span> <span class="nx">map</span><span class="p">(</span><span class="nx">i</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="nx">width</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="mf">360</span><span class="p">);</span>
+        <span class="k">for</span> <span class="p">(</span><span class="kd">let</span> <span class="nx">j</span> <span class="o">=</span> <span class="mf">0</span><span class="p">;</span> <span class="nx">j</span> <span class="o">&lt;</span> <span class="nx">height</span><span class="p">;</span> <span class="nx">j</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+            <span class="kd">let</span> <span class="nx">newB</span> <span class="o">=</span> <span class="nx">map</span><span class="p">(</span><span class="nx">j</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="nx">height</span><span class="p">,</span> <span class="mf">110</span><span class="p">,</span> <span class="mf">0</span><span class="p">);</span>
+            <span class="nx">fill</span><span class="p">(</span><span class="nx">newH</span><span class="p">,</span> <span class="mf">255</span><span class="p">,</span> <span class="nx">newB</span><span class="p">);</span>
+            <span class="nx">rect</span><span class="p">(</span><span class="nx">i</span><span class="p">,</span> <span class="nx">j</span><span class="p">,</span> <span class="mf">1</span><span class="p">,</span> <span class="mf">1</span><span class="p">);</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+    <span class="nx">colorMode</span><span class="p">(</span><span class="nx">RGB</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="kd">function</span> <span class="nx">draw</span><span class="p">()</span> <span class="p">{</span>
+    <span class="kd">let</span> <span class="nx">circleRadius</span> <span class="o">=</span> <span class="mf">50</span><span class="p">;</span>
+    <span class="c1">// set NeoPixel colors based on mouse location</span>
+    <span class="k">if</span> <span class="p">(</span><span class="nx">dist</span><span class="p">(</span><span class="nx">mouseX</span><span class="p">,</span> <span class="nx">mouseY</span><span class="p">,</span> <span class="nx">width</span> <span class="o">/</span> <span class="mf">2</span><span class="p">,</span> <span class="nx">height</span> <span class="o">/</span> <span class="mf">2</span><span class="p">)</span> <span class="o">&lt;</span> <span class="nx">circleRadius</span><span class="p">){</span>
+        <span class="c1">// make a rainbow</span>
+        <span class="nx">rainbowEffect</span><span class="p">(</span><span class="nx">arduino</span><span class="p">.</span><span class="nx">neoStrip1</span><span class="p">,</span> <span class="nx">numPixels</span><span class="p">);</span>
+        <span class="nx">fill</span><span class="p">(</span><span class="mf">255</span><span class="p">);</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+        <span class="c1">// get pixel color at mouse location</span>
+        <span class="kd">let</span> <span class="nx">pixelColor</span> <span class="o">=</span> <span class="nx">get</span><span class="p">(</span><span class="nx">mouseX</span><span class="p">,</span> <span class="nx">mouseY</span><span class="p">);</span>
+        <span class="nx">fill</span><span class="p">(</span><span class="nx">pixelColor</span><span class="p">);</span>
+        <span class="c1">// calculate NeoPixel color</span>
+        <span class="kd">let</span> <span class="nx">neoColor</span> <span class="o">=</span> <span class="nx">arduino</span><span class="p">.</span><span class="nx">neoStrip1</span><span class="p">.</span><span class="nx">Color</span><span class="p">(</span><span class="nx">red</span><span class="p">(</span><span class="nx">pixelColor</span><span class="p">),</span> <span class="nx">green</span><span class="p">(</span><span class="nx">pixelColor</span><span class="p">),</span> <span class="nx">blue</span><span class="p">(</span><span class="nx">pixelColor</span><span class="p">));</span>
+        <span class="c1">// fill(the_color, starting_pixel, number_of_pixels)</span>
+        <span class="nx">arduino</span><span class="p">.</span><span class="nx">neoStrip1</span><span class="p">.</span><span class="nx">fill</span><span class="p">(</span><span class="nx">neoColor</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="mf">8</span><span class="p">);</span>
+        <span class="nx">arduino</span><span class="p">.</span><span class="nx">neoStrip1</span><span class="p">.</span><span class="nx">show</span><span class="p">();</span>
+    <span class="p">}</span>
+    <span class="c1">// draw central circle on screen</span>
+    <span class="nx">circle</span><span class="p">(</span><span class="nx">width</span> <span class="o">/</span> <span class="mf">2</span><span class="p">,</span> <span class="nx">height</span> <span class="o">/</span> <span class="mf">2</span><span class="p">,</span> <span class="nx">circleRadius</span><span class="o">*</span><span class="mf">2</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="kd">function</span> <span class="nx">rainbowEffect</span><span class="p">(</span><span class="nx">strip</span><span class="p">,</span> <span class="nx">nPix</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">for</span> <span class="p">(</span><span class="kd">let</span> <span class="nx">i</span> <span class="o">=</span> <span class="mf">0</span><span class="p">;</span> <span class="nx">i</span> <span class="o">&lt;</span> <span class="nx">nPix</span><span class="p">;</span> <span class="nx">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+        <span class="c1">// map the pixel number to a hue on the color wheel</span>
+        <span class="kd">let</span> <span class="nx">hIndex</span> <span class="o">=</span> <span class="nx">i</span> <span class="o">+</span> <span class="p">(</span><span class="nx">frameCount</span> <span class="o">*</span> <span class="mf">0.05</span><span class="p">)</span>
+        <span class="nx">hIndex</span> <span class="o">=</span> <span class="nx">hIndex</span> <span class="o">%</span> <span class="nx">nPix</span><span class="p">;</span>
+        <span class="kd">let</span> <span class="nx">hue</span> <span class="o">=</span> <span class="nx">map</span><span class="p">(</span><span class="nx">hIndex</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="nx">nPix</span> <span class="o">-</span> <span class="mf">1</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="mf">360</span><span class="p">);</span>
+        <span class="nx">colorMode</span><span class="p">(</span><span class="nx">HSB</span><span class="p">);</span>
+        <span class="kd">let</span> <span class="nx">rainbowColor</span> <span class="o">=</span> <span class="nx">color</span><span class="p">(</span><span class="nx">hue</span><span class="p">,</span> <span class="mf">255</span><span class="p">,</span> <span class="mf">255</span><span class="p">);</span>
+        <span class="nx">colorMode</span><span class="p">(</span><span class="nx">RGB</span><span class="p">);</span>
+        <span class="c1">// calculate the color</span>
+        <span class="kd">let</span> <span class="nx">c</span> <span class="o">=</span> <span class="nx">strip</span><span class="p">.</span><span class="nx">Color</span><span class="p">(</span><span class="nx">red</span><span class="p">(</span><span class="nx">rainbowColor</span><span class="p">),</span> <span class="nx">green</span><span class="p">(</span><span class="nx">rainbowColor</span><span class="p">),</span> <span class="nx">blue</span><span class="p">(</span><span class="nx">rainbowColor</span><span class="p">));</span>
+        <span class="c1">// set the NeoPixel color</span>
+        <span class="nx">strip</span><span class="p">.</span><span class="nx">setPixelColor</span><span class="p">(</span><span class="nx">i</span><span class="p">,</span> <span class="nx">c</span><span class="p">);</span>
+    <span class="p">}</span>
+    <span class="c1">// calling show() sends the commands to the Arduino</span>
+    <span class="nx">strip</span><span class="p">.</span><span class="nx">show</span><span class="p">();</span>
+<span class="p">}</span>
+</code></pre>
+      </div>
+    </div>
+  <div class="md-body">
+<h2 id="what-this-example-does">What This Example Does</h2>
+<ul>
+<li>Draws an HSB colour field on a 600×600 p5.js canvas</li>
+<li>Samples the canvas colour at the mouse position and sets all 8 LEDs to match</li>
+<li>Hovering over the centre circle runs a per-pixel rainbow</li>
+<li>The circle on screen shows the colour currently sent to the strip</li>
+</ul>
+<h2 id="hardware-requirements">Hardware Requirements</h2>
+<ul>
+<li><strong>Arduino UNO R4 WiFi</strong> or <strong>ESP32 development board</strong></li>
+<li><strong>NeoPixel LED strip</strong> — WS2812B or compatible, 8 LEDs (configurable)</li>
+<li>Arduino and browser must be on the same WiFi network</li>
+</ul>
+<h3 id="wiring">Wiring</h3>
+<table>
+<thead>
+<tr>
+<th>NeoPixel wire</th>
+<th>Arduino</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>VCC (red)</td>
+<td>5 V</td>
+</tr>
+<tr>
+<td>GND (black)</td>
+<td>GND</td>
+</tr>
+<tr>
+<td>Data (white/yellow)</td>
+<td>Pin 6 (configurable in sketch.js)</td>
+</tr>
+</tbody>
+</table>
+<p>For strips longer than ~30 LEDs use an external 5 V supply. Connect all grounds (Arduino, strip, supply) together. The data line still goes to the Arduino pin.</p>
+<h3 id="arduino-libraries">Arduino libraries</h3>
+<p>Install via Arduino IDE → Tools → Manage Libraries:</p>
+<ul>
+<li><code>WebSocketsServer</code> (by Markus Sattler)</li>
+<li><code>Adafruit NeoPixel</code> (by Adafruit)</li>
+</ul>
+<p>Install Pardalote itself by copying <code>pardalote-arduino/library/Pardalote/</code> into your Arduino libraries folder (see the <a href="../reference/installation.html">top-level README</a>).</p>
+<h2 id="quick-start">Quick Start</h2>
+<h3 id="1-upload-the-firmware">1. Upload the firmware</h3>
+<ol>
+<li>
+<p>In Arduino IDE: <strong>File → Examples → Pardalote → neopixel</strong>. The sketch is two lines:</p>
+<pre><code><span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;Pardalote.h&gt;</span><span class="cp"></span>
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;PardaloteNeoPixel.h&gt;</span><span class="cp"></span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">setup</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">begin</span><span class="p">();</span><span class="w"> </span><span class="p">}</span><span class="w"></span>
+<span class="kt">void</span><span class="w"> </span><span class="nf">loop</span><span class="p">()</span><span class="w">  </span><span class="p">{</span><span class="w"> </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">run</span><span class="p">();</span><span class="w">   </span><span class="p">}</span><span class="w"></span>
+</code></pre>
+</li>
+<li>
+<p>Select your board and upload</p>
+</li>
+<li>
+<p>Open the Serial Monitor at 115200 baud — on first boot Pardalote asks for your WiFi credentials:</p>
+<pre><code>=== Pardalote ===
+No WiFi networks stored.
+=== WiFi Configuration ===
+[a]dd  [d]elete  [c]lear all  [s]how  [x] exit
+&gt; a
+SSID: YourWiFiName
+Password: ********
+Saved: YourWiFiName
+&gt; x
+</code></pre>
+<p>Credentials are saved to EEPROM and survive re-uploads. Press <code>w</code> within 5 seconds of any boot to update them.</p>
+<p><strong>Prefer compile-time credentials?</strong> Create a <code>secrets.h</code> file in the sketch folder with:</p>
+<pre><code><span class="cp">#define SECRET_SSID &quot;YourWiFiName&quot;</span>
+<span class="cp">#define SECRET_PASS &quot;YourWiFiPassword&quot;</span>
+</code></pre>
+<p>If both are configured, <code>secrets.h</code> is tried first.</p>
+</li>
+<li>
+<p>Find your Arduino's IP address:</p>
+<ul>
+<li><strong>UNO R4 WiFi:</strong> scrolls across the LED matrix</li>
+<li><strong>ESP32:</strong> printed in the Serial Monitor</li>
+</ul>
+</li>
+</ol>
+<h3 id="2-configure-sketchjs">2. Configure sketch.js</h3>
+<pre><code><span class="kd">let</span> <span class="nx">ArduinoIP</span> <span class="o">=</span> <span class="s1">&#39;192.168.1.42&#39;</span><span class="p">;</span>   <span class="c1">// your Arduino&#39;s IP</span>
+</code></pre>
+<p>To change the pin or number of LEDs, edit the <code>init()</code> call:</p>
+<pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">neoStrip1</span><span class="p">.</span><span class="nx">init</span><span class="p">(</span><span class="mf">6</span><span class="p">,</span> <span class="mf">8</span><span class="p">);</span>     <span class="c1">// pin 6, 8 pixels</span>
+</code></pre>
+<h3 id="3-open-the-example">3. Open the example</h3>
+<p>Open <code>index.html</code> in a browser. Move the mouse around the colour field — the LEDs should follow. Hover over the white circle in the centre for the rainbow effect.</p>
+<h2 id="how-it-works">How It Works</h2>
+<pre><code><span class="nx">arduino</span> <span class="o">=</span> <span class="ow">new</span> <span class="nx">Arduino</span><span class="p">();</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">connect</span><span class="p">(</span><span class="nx">ArduinoIP</span><span class="p">);</span>
+
+<span class="c1">// Register the NeoPixel extension before connecting</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;neoStrip1&#39;</span><span class="p">,</span> <span class="ow">new</span> <span class="nx">NeoPixel</span><span class="p">());</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">neoStrip1</span><span class="p">.</span><span class="nx">init</span><span class="p">(</span><span class="mf">6</span><span class="p">,</span> <span class="mf">8</span><span class="p">);</span>          <span class="c1">// pin 6, 8 pixels</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">neoStrip1</span><span class="p">.</span><span class="nx">setBrightness</span><span class="p">(</span><span class="mf">50</span><span class="p">);</span>   <span class="c1">// 0–255</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">neoStrip1</span><span class="p">.</span><span class="nx">clear</span><span class="p">();</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">neoStrip1</span><span class="p">.</span><span class="nx">show</span><span class="p">();</span>
+</code></pre>
+<p>In <code>draw()</code>, colour at the mouse position is sampled from the canvas and sent to the strip:</p>
+<pre><code><span class="kd">let</span> <span class="nx">pixelColor</span> <span class="o">=</span> <span class="nx">get</span><span class="p">(</span><span class="nx">mouseX</span><span class="p">,</span> <span class="nx">mouseY</span><span class="p">);</span>
+<span class="kd">let</span> <span class="nx">neoColor</span> <span class="o">=</span> <span class="nx">arduino</span><span class="p">.</span><span class="nx">neoStrip1</span><span class="p">.</span><span class="nx">Color</span><span class="p">(</span><span class="nx">red</span><span class="p">(</span><span class="nx">pixelColor</span><span class="p">),</span> <span class="nx">green</span><span class="p">(</span><span class="nx">pixelColor</span><span class="p">),</span> <span class="nx">blue</span><span class="p">(</span><span class="nx">pixelColor</span><span class="p">));</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">neoStrip1</span><span class="p">.</span><span class="nx">fill</span><span class="p">(</span><span class="nx">neoColor</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="mf">8</span><span class="p">);</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">neoStrip1</span><span class="p">.</span><span class="nx">show</span><span class="p">();</span>    <span class="c1">// must call show() to push changes to the LEDs</span>
+</code></pre>
+<p>Changes are buffered locally until <code>show()</code> is called — this means you can set many pixels in one <code>draw()</code> pass and send them all in a single message.</p>
+<h2 id="script-loading-order">Script loading order</h2>
+<p><code>pardalote.js</code> must load before <code>neoPixel.js</code>:</p>
+<pre><code><span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;../../pardalote-js/pardalote.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
+<span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;../../pardalote-js/neoPixel.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
+<span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;sketch.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
+</code></pre>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<p><strong>&quot;LEDs don't light up&quot;</strong></p>
+<ul>
+<li>Check VCC → 5 V, GND → GND, data → pin 6</li>
+<li>Verify the sketch has <code>#include &lt;PardaloteNeoPixel.h&gt;</code></li>
+<li>Try a lower brightness: <code>arduino.neoStrip1.setBrightness(20)</code></li>
+<li>Always call <code>show()</code> after setting colours</li>
+</ul>
+<p><strong>&quot;Wrong colours&quot;</strong></p>
+<ul>
+<li>Most WS2812B strips use <code>NEO_GRB</code>. Try:<pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">neoStrip1</span><span class="p">.</span><span class="nx">init</span><span class="p">(</span><span class="mf">6</span><span class="p">,</span> <span class="mf">8</span><span class="p">,</span> <span class="nx">NEO_GRB</span> <span class="o">+</span> <span class="nx">NEO_KHZ800</span><span class="p">);</span>
+</code></pre>
+</li>
+<li>SK6812 RGBW strips use <code>NEO_GRBW + NEO_KHZ800</code></li>
+</ul>
+<p><strong>&quot;LEDs flicker&quot;</strong></p>
+<ul>
+<li>Power issue — add an external 5 V supply for strips longer than ~30 LEDs</li>
+<li>Add a 470 Ω resistor between the Arduino data pin and the strip for longer runs</li>
+</ul>
+<p><strong>&quot;Performance is slow&quot; or &quot;colours lag behind the cursor&quot; (UNO R4)</strong></p>
+<ul>
+<li>The UNO R4 WiFi WebSocket implementation occasionally drops connections — Pardalote reconnects automatically</li>
+<li>Raise the colour-distance threshold to skip tiny changes: <code>arduino.neoStrip1.setThreshold(10)</code></li>
+<li>Raise the show throttle to cap how often updates are sent: <code>arduino.neoStrip1.setThrottle(50)</code> (default 20 ms = ~50 Hz; 50 ms = ~20 Hz is gentler on slow WiFi)</li>
+</ul>
+<h2 id="file-structure">File Structure</h2>
+<pre><code>neopixel-example/
+├── index.html      # Canvas page (loads p5.js, pardalote.js, neoPixel.js)
+├── sketch.js       # NeoPixel colour picker
+└── README.md       # This file
+
+pardalote-js/
+├── pardalote.js    # Core Pardalote library
+└── neoPixel.js     # NeoPixel extension
+</code></pre>
+<h2 id="next-steps">Next Steps</h2>
+<ul>
+<li>Add a second strip: <code>arduino.add('strip2', new NeoPixel())</code> — up to 4 strips simultaneously</li>
+<li>Drive colours from a sensor: combine with <code>analogRead()</code> or the Ultrasonic extension</li>
+<li>Try the <code>control-panel</code> example for a multi-device dashboard</li>
+</ul>
+
+  </div>
+</div>
+
+<footer class="site-footer speckled">
+  <div class="wrap">
+    <span>Pardalote — created by Scott Mitchell for design education and creative technology.</span>
+    <span><a href="../reference/index.html">Reference</a> · <a href="https://github.com/scottmitchell/pardalote">GitHub</a> · GPL-3.0</span>
+  </div>
+</footer>
+
+<script src="../js/site.js"></script>
+</body>
+</html>

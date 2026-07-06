@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Coordinated motion — Pardalote examples</title>
+<meta name="description" content="Two different motors — mix a servo, stepper, or bus servo — sweep in perfect unison using a group.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../css/site.css">
+</head>
+<body data-nav="examples">
+
+<nav class="site-nav speckled">
+  <a class="logo" href="../index.html">
+    <img src="../assets/logo.svg" width="30" height="30" alt="">
+    Pardalote
+  </a>
+  <div class="links">
+    <a data-nav="home" href="../index.html">Home</a>
+    <a data-nav="download" href="../download.html">Download</a>
+    <a data-nav="examples" href="index.html">Examples</a>
+    <a data-nav="reference" href="../reference/index.html">Reference</a>
+    <a href="https://github.com/scottmitchell/pardalote">GitHub</a>
+  </div>
+</nav>
+
+<div class="page-head speckled">
+  <div class="wrap">
+    <div class="crumb"><a href="index.html">Examples</a> / Coordinated motion</div>
+    <h1>Coordinated motion</h1>
+    <p>Two different motors — mix a servo, stepper, or bus servo — sweep in perfect unison using a group.</p>
+  </div>
+</div>
+
+<div class="wrap md-layout">
+  <div class="md-body">
+    <div class="tags" style="margin-bottom:.5rem;"><span class="tag lvl-adv">Advanced</span><span class="tag">Motion</span></div>
+    <div class="ex-meta-row">
+      <a class="btn btn-dark" href="https://github.com/scottmitchell/pardalote/tree/main/examples/coordinated-motion-example">View the code on GitHub</a>
+    </div>
+    <div class="screenshot-slot">Screenshot / video of this example — coming soon</div>
+<h1 id="coordinated-motion-example">Coordinated motion example</h1>
+<p>Two motors sweep <strong>in unison</strong> using a Pardalote <a href="../reference/groups.html">group</a>.
+Each motor's type — <strong>PWM servo</strong>, <strong>serial bus servo</strong>, or <strong>stepper</strong> — is
+chosen independently from the popup under its dial, so the pair can be <strong>mixed</strong>
+(the default is a servo + a stepper). Both motors ping-pong between two positions,
+arriving together on every leg. Each dial visualises the motion — a <strong>180° gauge</strong>
+for PWM servos, a <strong>360° dial</strong> for bus servos and steppers.</p>
+<p>This is the p5.js demonstration of <code>group.moveTo()</code> / <code>moveToAsync()</code>: one call
+moves both motors, and each motor type reaches its target its own way (bus
+servos via matched-speed SyncWrite, PWM servos via on-board interpolation,
+steppers via a board-timed constant-speed move) — all in one WebSocket message.</p>
+
+  </div>
+    <div class="ex-code-cols">
+      <div class="code-ex scroll">
+        <div class="bar">sketch.ino — the Arduino side</div>
+        <pre><code><span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;Pardalote.h&gt;</span><span class="cp"></span>
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;PardaloteServo.h&gt;</span><span class="cp"></span>
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;PardaloteBusServo.h&gt;</span><span class="cp"></span>
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;PardaloteStepper.h&gt;</span><span class="cp"></span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">setup</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">begin</span><span class="p">();</span><span class="w"> </span><span class="p">}</span><span class="w"></span>
+<span class="kt">void</span><span class="w"> </span><span class="nf">loop</span><span class="p">()</span><span class="w">  </span><span class="p">{</span><span class="w"> </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">run</span><span class="p">();</span><span class="w">   </span><span class="p">}</span><span class="w"></span>
+</code></pre>
+      </div>
+      <div class="code-ex scroll">
+        <div class="bar">sketch.js — the browser side</div>
+        <pre><code><span class="kd">let</span> <span class="nx">ArduinoIP</span> <span class="o">=</span> <span class="s1">&#39;10.1.1.186&#39;</span><span class="p">;</span>   <span class="c1">// Change this to your Arduino&#39;s IP</span>
+
+<span class="c1">// Per-type config. low/high are the sweep endpoints in each motor&#39;s own units;</span>
+<span class="c1">// fullRange + span drive the dial (servo = 180° gauge, bus/stepper = 360° dial).</span>
+<span class="c1">// pinsA / pinsB are the pins (or bus IDs) for motor A and B — edit to match wiring.</span>
+<span class="kd">const</span> <span class="nx">TYPES</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="nx">servo</span><span class="o">:</span>    <span class="p">{</span> <span class="nx">label</span><span class="o">:</span> <span class="s1">&#39;Servo (PWM)&#39;</span><span class="p">,</span>    <span class="nx">low</span><span class="o">:</span> <span class="mf">15</span><span class="p">,</span>  <span class="nx">high</span><span class="o">:</span> <span class="mf">165</span><span class="p">,</span>  <span class="nx">fullRange</span><span class="o">:</span> <span class="mf">180</span><span class="p">,</span>  <span class="nx">span</span><span class="o">:</span> <span class="mf">180</span><span class="p">,</span> <span class="nx">pinsA</span><span class="o">:</span> <span class="p">[</span><span class="mf">5</span><span class="p">],</span>    <span class="nx">pinsB</span><span class="o">:</span> <span class="p">[</span><span class="mf">6</span><span class="p">]</span>    <span class="p">},</span>
+    <span class="nx">busservo</span><span class="o">:</span> <span class="p">{</span> <span class="nx">label</span><span class="o">:</span> <span class="s1">&#39;Bus Servo (ST)&#39;</span><span class="p">,</span> <span class="nx">low</span><span class="o">:</span> <span class="mf">200</span><span class="p">,</span> <span class="nx">high</span><span class="o">:</span> <span class="mf">3900</span><span class="p">,</span> <span class="nx">fullRange</span><span class="o">:</span> <span class="mf">4096</span><span class="p">,</span> <span class="nx">span</span><span class="o">:</span> <span class="mf">360</span><span class="p">,</span> <span class="nx">pinsA</span><span class="o">:</span> <span class="p">[</span><span class="mf">1</span><span class="p">],</span>    <span class="nx">pinsB</span><span class="o">:</span> <span class="p">[</span><span class="mf">2</span><span class="p">]</span>    <span class="p">},</span>
+    <span class="nx">stepper</span><span class="o">:</span>  <span class="p">{</span> <span class="nx">label</span><span class="o">:</span> <span class="s1">&#39;Stepper&#39;</span><span class="p">,</span>        <span class="nx">low</span><span class="o">:</span> <span class="mf">0</span><span class="p">,</span>   <span class="nx">high</span><span class="o">:</span> <span class="mf">3200</span><span class="p">,</span> <span class="nx">fullRange</span><span class="o">:</span> <span class="mf">3200</span><span class="p">,</span> <span class="nx">span</span><span class="o">:</span> <span class="mf">360</span><span class="p">,</span> <span class="nx">pinsA</span><span class="o">:</span> <span class="p">[</span><span class="mf">2</span><span class="p">,</span> <span class="mf">3</span><span class="p">],</span> <span class="nx">pinsB</span><span class="o">:</span> <span class="p">[</span><span class="mf">8</span><span class="p">,</span> <span class="mf">9</span><span class="p">]</span> <span class="p">},</span>
+<span class="p">};</span>
+<span class="kd">const</span> <span class="nx">CTOR</span> <span class="o">=</span> <span class="p">{</span> <span class="nx">servo</span><span class="o">:</span> <span class="nx">Servo</span><span class="p">,</span> <span class="nx">busservo</span><span class="o">:</span> <span class="nx">BusServo</span><span class="p">,</span> <span class="nx">stepper</span><span class="o">:</span> <span class="nx">Stepper</span> <span class="p">};</span>
+
+<span class="kd">const</span> <span class="nx">W</span> <span class="o">=</span> <span class="mf">680</span><span class="p">,</span> <span class="nx">H</span> <span class="o">=</span> <span class="mf">400</span><span class="p">,</span> <span class="nx">cxA</span> <span class="o">=</span> <span class="mf">180</span><span class="p">,</span> <span class="nx">cxB</span> <span class="o">=</span> <span class="mf">500</span><span class="p">,</span> <span class="nx">cy</span> <span class="o">=</span> <span class="mf">175</span><span class="p">;</span>
+
+<span class="kd">let</span> <span class="nx">arduino</span><span class="p">,</span> <span class="nx">group</span><span class="p">,</span> <span class="nx">motorA</span><span class="p">,</span> <span class="nx">motorB</span><span class="p">;</span>
+<span class="kd">let</span> <span class="nx">typeA</span> <span class="o">=</span> <span class="s1">&#39;servo&#39;</span><span class="p">,</span> <span class="nx">typeB</span> <span class="o">=</span> <span class="s1">&#39;servo&#39;</span><span class="p">;</span>
+
+<span class="kd">let</span> <span class="nx">selectA</span><span class="p">,</span> <span class="nx">selectB</span><span class="p">,</span> <span class="nx">toggleButton</span><span class="p">,</span> <span class="nx">durSlider</span><span class="p">,</span> <span class="nx">durValEl</span><span class="p">,</span> <span class="nx">statusEl</span><span class="p">;</span>
+<span class="kd">let</span> <span class="nx">running</span> <span class="o">=</span> <span class="kc">false</span><span class="p">,</span> <span class="nx">ready</span> <span class="o">=</span> <span class="kc">false</span><span class="p">;</span>
+<span class="kd">let</span> <span class="nx">status</span> <span class="o">=</span> <span class="s1">&#39;starting…&#39;</span><span class="p">;</span>
+<span class="kd">let</span> <span class="nx">loopToken</span> <span class="o">=</span> <span class="mf">0</span><span class="p">;</span>
+<span class="kd">let</span> <span class="nx">legDur</span> <span class="o">=</span> <span class="mf">1500</span><span class="p">;</span>
+
+<span class="c1">// Display interpolation (per motor) so the dials animate smoothly, with or</span>
+<span class="c1">// without hardware. legStart/legDur are shared → the two dials stay in unison.</span>
+<span class="kd">let</span> <span class="nx">dispA</span> <span class="o">=</span> <span class="mf">0</span><span class="p">,</span> <span class="nx">fromA</span> <span class="o">=</span> <span class="mf">0</span><span class="p">,</span> <span class="nx">toA</span> <span class="o">=</span> <span class="mf">0</span><span class="p">;</span>
+<span class="kd">let</span> <span class="nx">dispB</span> <span class="o">=</span> <span class="mf">0</span><span class="p">,</span> <span class="nx">fromB</span> <span class="o">=</span> <span class="mf">0</span><span class="p">,</span> <span class="nx">toB</span> <span class="o">=</span> <span class="mf">0</span><span class="p">;</span>
+<span class="kd">let</span> <span class="nx">legStart</span> <span class="o">=</span> <span class="mf">0</span><span class="p">;</span>
+
+<span class="kd">const</span> <span class="nx">wait</span> <span class="o">=</span> <span class="nx">ms</span> <span class="p">=&gt;</span> <span class="ow">new</span> <span class="nb">Promise</span><span class="p">(</span><span class="nx">r</span> <span class="p">=&gt;</span> <span class="nx">setTimeout</span><span class="p">(</span><span class="nx">r</span><span class="p">,</span> <span class="nx">ms</span><span class="p">));</span>
+<span class="kd">const</span> <span class="nx">easeInOut</span> <span class="o">=</span> <span class="nx">t</span> <span class="p">=&gt;</span> <span class="p">(</span><span class="nx">t</span> <span class="o">&lt;</span> <span class="mf">0.5</span> <span class="o">?</span> <span class="mf">2</span> <span class="o">*</span> <span class="nx">t</span> <span class="o">*</span> <span class="nx">t</span> <span class="o">:</span> <span class="mf">1</span> <span class="o">-</span> <span class="nb">Math</span><span class="p">.</span><span class="nx">pow</span><span class="p">(</span><span class="o">-</span><span class="mf">2</span> <span class="o">*</span> <span class="nx">t</span> <span class="o">+</span> <span class="mf">2</span><span class="p">,</span> <span class="mf">2</span><span class="p">)</span> <span class="o">/</span> <span class="mf">2</span><span class="p">);</span>
+
+<span class="kd">function</span> <span class="nx">setup</span><span class="p">()</span> <span class="p">{</span>
+    <span class="kd">const</span> <span class="nx">main</span> <span class="o">=</span> <span class="nx">select</span><span class="p">(</span><span class="s1">&#39;main&#39;</span><span class="p">);</span>
+
+    <span class="c1">// --- top: heading, connection status, transport controls ---</span>
+    <span class="kd">const</span> <span class="nx">topBar</span> <span class="o">=</span> <span class="nx">createDiv</span><span class="p">().</span><span class="nx">id</span><span class="p">(</span><span class="s1">&#39;top&#39;</span><span class="p">).</span><span class="nx">parent</span><span class="p">(</span><span class="nx">main</span><span class="p">);</span>
+    <span class="nx">createDiv</span><span class="p">(</span><span class="s1">&#39;Coordinated Motion — two motors in unison&#39;</span><span class="p">).</span><span class="kd">class</span><span class="p">(</span><span class="s1">&#39;heading&#39;</span><span class="p">).</span><span class="nx">parent</span><span class="p">(</span><span class="nx">topBar</span><span class="p">);</span>
+    <span class="nx">statusEl</span> <span class="o">=</span> <span class="nx">createDiv</span><span class="p">(</span><span class="s1">&#39;&#39;</span><span class="p">).</span><span class="nx">id</span><span class="p">(</span><span class="s1">&#39;status&#39;</span><span class="p">).</span><span class="nx">parent</span><span class="p">(</span><span class="nx">topBar</span><span class="p">);</span>
+    <span class="kd">const</span> <span class="nx">ctrlRow</span> <span class="o">=</span> <span class="nx">createDiv</span><span class="p">().</span><span class="kd">class</span><span class="p">(</span><span class="s1">&#39;row&#39;</span><span class="p">).</span><span class="nx">parent</span><span class="p">(</span><span class="nx">topBar</span><span class="p">);</span>
+    <span class="nx">toggleButton</span> <span class="o">=</span> <span class="nx">createButton</span><span class="p">(</span><span class="s1">&#39;Pause&#39;</span><span class="p">).</span><span class="nx">parent</span><span class="p">(</span><span class="nx">ctrlRow</span><span class="p">);</span>
+    <span class="nx">toggleButton</span><span class="p">.</span><span class="nx">mousePressed</span><span class="p">(</span><span class="nx">toggleRun</span><span class="p">);</span>
+    <span class="nx">createSpan</span><span class="p">(</span><span class="s1">&#39;Duration&#39;</span><span class="p">).</span><span class="nx">parent</span><span class="p">(</span><span class="nx">ctrlRow</span><span class="p">);</span>
+    <span class="nx">durSlider</span> <span class="o">=</span> <span class="nx">createSlider</span><span class="p">(</span><span class="mf">400</span><span class="p">,</span> <span class="mf">3000</span><span class="p">,</span> <span class="mf">1500</span><span class="p">,</span> <span class="mf">100</span><span class="p">).</span><span class="nx">parent</span><span class="p">(</span><span class="nx">ctrlRow</span><span class="p">);</span>
+    <span class="nx">durValEl</span> <span class="o">=</span> <span class="nx">createSpan</span><span class="p">(</span><span class="s1">&#39;1500 ms&#39;</span><span class="p">).</span><span class="nx">parent</span><span class="p">(</span><span class="nx">ctrlRow</span><span class="p">);</span>
+    <span class="nx">durSlider</span><span class="p">.</span><span class="nx">input</span><span class="p">(()</span> <span class="p">=&gt;</span> <span class="nx">durValEl</span><span class="p">.</span><span class="nx">html</span><span class="p">(</span><span class="nx">durSlider</span><span class="p">.</span><span class="nx">value</span><span class="p">()</span> <span class="o">+</span> <span class="s1">&#39; ms&#39;</span><span class="p">));</span>
+
+    <span class="nx">createCanvas</span><span class="p">(</span><span class="nx">W</span><span class="p">,</span> <span class="nx">H</span><span class="p">).</span><span class="nx">parent</span><span class="p">(</span><span class="nx">main</span><span class="p">);</span>
+
+    <span class="c1">// --- motor-type popups, one under each dial ---</span>
+    <span class="kd">const</span> <span class="nx">selrow</span> <span class="o">=</span> <span class="nx">createDiv</span><span class="p">().</span><span class="nx">id</span><span class="p">(</span><span class="s1">&#39;motorSelects&#39;</span><span class="p">).</span><span class="nx">parent</span><span class="p">(</span><span class="nx">main</span><span class="p">);</span>
+    <span class="nx">selectA</span> <span class="o">=</span> <span class="nx">makeMotorSelect</span><span class="p">(</span><span class="nx">selrow</span><span class="p">,</span> <span class="nx">cxA</span><span class="p">);</span>
+    <span class="nx">selectB</span> <span class="o">=</span> <span class="nx">makeMotorSelect</span><span class="p">(</span><span class="nx">selrow</span><span class="p">,</span> <span class="nx">cxB</span><span class="p">);</span>
+    <span class="nx">selectB</span><span class="p">.</span><span class="nx">elt</span><span class="p">.</span><span class="nx">value</span> <span class="o">=</span> <span class="s1">&#39;stepper&#39;</span><span class="p">;</span>   <span class="c1">// default to a mixed pair, to show both dial styles</span>
+
+    <span class="nx">buildRig</span><span class="p">();</span>
+<span class="p">}</span>
+
+<span class="kd">function</span> <span class="nx">makeMotorSelect</span><span class="p">(</span><span class="nx">parent</span><span class="p">,</span> <span class="nx">cx</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kd">const</span> <span class="nx">cell</span> <span class="o">=</span> <span class="nx">createDiv</span><span class="p">().</span><span class="kd">class</span><span class="p">(</span><span class="s1">&#39;mcell&#39;</span><span class="p">).</span><span class="nx">parent</span><span class="p">(</span><span class="nx">parent</span><span class="p">).</span><span class="nx">style</span><span class="p">(</span><span class="s1">&#39;left&#39;</span><span class="p">,</span> <span class="nx">cx</span> <span class="o">+</span> <span class="s1">&#39;px&#39;</span><span class="p">);</span>
+    <span class="kd">const</span> <span class="nx">sel</span> <span class="o">=</span> <span class="nx">createSelect</span><span class="p">().</span><span class="nx">parent</span><span class="p">(</span><span class="nx">cell</span><span class="p">);</span>
+    <span class="k">for</span> <span class="p">(</span><span class="kd">const</span> <span class="nx">key</span> <span class="ow">in</span> <span class="nx">TYPES</span><span class="p">)</span> <span class="nx">sel</span><span class="p">.</span><span class="nx">option</span><span class="p">(</span><span class="nx">TYPES</span><span class="p">[</span><span class="nx">key</span><span class="p">].</span><span class="nx">label</span><span class="p">,</span> <span class="nx">key</span><span class="p">);</span>
+    <span class="nx">sel</span><span class="p">.</span><span class="nx">changed</span><span class="p">(</span><span class="nx">buildRig</span><span class="p">);</span>
+    <span class="k">return</span> <span class="nx">sel</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="c1">// -------------------------------------------------------------------</span>
+<span class="c1">// Build (or rebuild) the group from the two selected motor types.</span>
+<span class="c1">// -------------------------------------------------------------------</span>
+<span class="kd">function</span> <span class="nx">buildRig</span><span class="p">()</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="nx">arduino</span><span class="p">)</span> <span class="nx">arduino</span><span class="p">.</span><span class="nx">disconnect</span><span class="p">();</span>
+    <span class="nx">loopToken</span><span class="o">++</span><span class="p">;</span>
+    <span class="nx">typeA</span> <span class="o">=</span> <span class="nx">selectA</span><span class="p">.</span><span class="nx">value</span><span class="p">();</span>
+    <span class="nx">typeB</span> <span class="o">=</span> <span class="nx">selectB</span><span class="p">.</span><span class="nx">value</span><span class="p">();</span>
+    <span class="nx">ready</span> <span class="o">=</span> <span class="kc">false</span><span class="p">;</span>
+    <span class="nx">setStatus</span><span class="p">(</span><span class="s1">&#39;connecting…&#39;</span><span class="p">);</span>
+
+    <span class="nx">arduino</span> <span class="o">=</span> <span class="ow">new</span> <span class="nx">Arduino</span><span class="p">();</span>
+    <span class="nx">motorA</span> <span class="o">=</span> <span class="ow">new</span> <span class="p">(</span><span class="nx">CTOR</span><span class="p">[</span><span class="nx">typeA</span><span class="p">])();</span>
+    <span class="nx">motorB</span> <span class="o">=</span> <span class="ow">new</span> <span class="p">(</span><span class="nx">CTOR</span><span class="p">[</span><span class="nx">typeB</span><span class="p">])();</span>
+    <span class="nx">arduino</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;a&#39;</span><span class="p">,</span> <span class="nx">motorA</span><span class="p">);</span>
+    <span class="nx">arduino</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;b&#39;</span><span class="p">,</span> <span class="nx">motorB</span><span class="p">);</span>
+    <span class="nx">group</span> <span class="o">=</span> <span class="nx">arduino</span><span class="p">.</span><span class="nx">group</span><span class="p">(</span><span class="s1">&#39;pair&#39;</span><span class="p">,</span> <span class="p">{</span> <span class="nx">a</span><span class="o">:</span> <span class="nx">motorA</span><span class="p">,</span> <span class="nx">b</span><span class="o">:</span> <span class="nx">motorB</span> <span class="p">});</span>
+
+    <span class="nx">arduino</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;ready&#39;</span><span class="p">,</span> <span class="nx">onReady</span><span class="p">);</span>
+    <span class="nx">arduino</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;disconnect&#39;</span><span class="p">,</span> <span class="p">()</span> <span class="p">=&gt;</span> <span class="p">{</span> <span class="nx">ready</span> <span class="o">=</span> <span class="kc">false</span><span class="p">;</span> <span class="nx">setStatus</span><span class="p">(</span><span class="s1">&#39;reconnecting…&#39;</span><span class="p">);</span> <span class="p">});</span>
+
+    <span class="nx">dispA</span> <span class="o">=</span> <span class="nx">fromA</span> <span class="o">=</span> <span class="nx">toA</span> <span class="o">=</span> <span class="nx">TYPES</span><span class="p">[</span><span class="nx">typeA</span><span class="p">].</span><span class="nx">low</span><span class="p">;</span>
+    <span class="nx">dispB</span> <span class="o">=</span> <span class="nx">fromB</span> <span class="o">=</span> <span class="nx">toB</span> <span class="o">=</span> <span class="nx">TYPES</span><span class="p">[</span><span class="nx">typeB</span><span class="p">].</span><span class="nx">low</span><span class="p">;</span>
+    <span class="nx">legStart</span> <span class="o">=</span> <span class="nx">millis</span><span class="p">();</span>
+
+    <span class="nx">running</span> <span class="o">=</span> <span class="kc">true</span><span class="p">;</span>
+    <span class="nx">toggleButton</span><span class="p">.</span><span class="nx">html</span><span class="p">(</span><span class="s1">&#39;Pause&#39;</span><span class="p">);</span>
+    <span class="nx">arduino</span><span class="p">.</span><span class="nx">connect</span><span class="p">(</span><span class="nx">ArduinoIP</span><span class="p">);</span>
+    <span class="nx">sweepLoop</span><span class="p">(</span><span class="nx">loopToken</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="kd">function</span> <span class="nx">onReady</span><span class="p">()</span> <span class="p">{</span>
+    <span class="nx">attachOne</span><span class="p">(</span><span class="nx">motorA</span><span class="p">,</span> <span class="nx">typeA</span><span class="p">,</span> <span class="nx">TYPES</span><span class="p">[</span><span class="nx">typeA</span><span class="p">].</span><span class="nx">pinsA</span><span class="p">);</span>
+    <span class="nx">attachOne</span><span class="p">(</span><span class="nx">motorB</span><span class="p">,</span> <span class="nx">typeB</span><span class="p">,</span> <span class="nx">TYPES</span><span class="p">[</span><span class="nx">typeB</span><span class="p">].</span><span class="nx">pinsB</span><span class="p">);</span>
+    <span class="c1">// Snap to the low pose so moveTo() measures distance from a known start.</span>
+    <span class="nx">group</span><span class="p">.</span><span class="nx">set</span><span class="p">({</span> <span class="nx">a</span><span class="o">:</span> <span class="nx">TYPES</span><span class="p">[</span><span class="nx">typeA</span><span class="p">].</span><span class="nx">low</span><span class="p">,</span> <span class="nx">b</span><span class="o">:</span> <span class="nx">TYPES</span><span class="p">[</span><span class="nx">typeB</span><span class="p">].</span><span class="nx">low</span> <span class="p">});</span>
+    <span class="nx">ready</span> <span class="o">=</span> <span class="kc">true</span><span class="p">;</span>
+    <span class="nx">setStatus</span><span class="p">(</span><span class="sb">`sweeping — A: </span><span class="si">${</span><span class="nx">TYPES</span><span class="p">[</span><span class="nx">typeA</span><span class="p">].</span><span class="nx">label</span><span class="si">}</span><span class="sb">, B: </span><span class="si">${</span><span class="nx">TYPES</span><span class="p">[</span><span class="nx">typeB</span><span class="p">].</span><span class="nx">label</span><span class="si">}</span><span class="sb">`</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="kd">function</span> <span class="nx">attachOne</span><span class="p">(</span><span class="nx">motor</span><span class="p">,</span> <span class="nx">type</span><span class="p">,</span> <span class="nx">pins</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="nx">type</span> <span class="o">===</span> <span class="s1">&#39;servo&#39;</span><span class="p">)</span> <span class="p">{</span>
+        <span class="nx">motor</span><span class="p">.</span><span class="nx">attach</span><span class="p">(...</span><span class="nx">pins</span><span class="p">);</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="nx">type</span> <span class="o">===</span> <span class="s1">&#39;busservo&#39;</span><span class="p">)</span> <span class="p">{</span>
+        <span class="nx">motor</span><span class="p">.</span><span class="nx">attach</span><span class="p">(</span><span class="nx">pins</span><span class="p">[</span><span class="mf">0</span><span class="p">],</span> <span class="s1">&#39;ST&#39;</span><span class="p">);</span>
+        <span class="nx">motor</span><span class="p">.</span><span class="nx">read</span><span class="p">(</span><span class="mf">80</span><span class="p">);</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="nx">type</span> <span class="o">===</span> <span class="s1">&#39;stepper&#39;</span><span class="p">)</span> <span class="p">{</span>
+        <span class="nx">motor</span><span class="p">.</span><span class="nx">attach</span><span class="p">(...</span><span class="nx">pins</span><span class="p">);</span>
+        <span class="nx">motor</span><span class="p">.</span><span class="nx">setMaxSpeed</span><span class="p">(</span><span class="mf">3000</span><span class="p">);</span>
+        <span class="nx">motor</span><span class="p">.</span><span class="nx">setAcceleration</span><span class="p">(</span><span class="mf">2000</span><span class="p">);</span>
+        <span class="nx">motor</span><span class="p">.</span><span class="nx">setPosition</span><span class="p">(</span><span class="mf">0</span><span class="p">);</span>
+        <span class="nx">motor</span><span class="p">.</span><span class="nx">read</span><span class="p">(</span><span class="mf">80</span><span class="p">);</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="c1">// -------------------------------------------------------------------</span>
+<span class="c1">// The sweep: ping-pong both motors between their low and high poses.</span>
+<span class="c1">// One group.moveToAsync() per leg → they arrive together.</span>
+<span class="c1">// -------------------------------------------------------------------</span>
+<span class="k">async</span> <span class="kd">function</span> <span class="nx">sweepLoop</span><span class="p">(</span><span class="nx">token</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kd">let</span> <span class="nx">goHigh</span> <span class="o">=</span> <span class="kc">true</span><span class="p">;</span>
+    <span class="k">while</span> <span class="p">(</span><span class="nx">running</span> <span class="o">&amp;&amp;</span> <span class="nx">token</span> <span class="o">===</span> <span class="nx">loopToken</span><span class="p">)</span> <span class="p">{</span>
+        <span class="kd">const</span> <span class="nx">cA</span> <span class="o">=</span> <span class="nx">TYPES</span><span class="p">[</span><span class="nx">typeA</span><span class="p">],</span> <span class="nx">cB</span> <span class="o">=</span> <span class="nx">TYPES</span><span class="p">[</span><span class="nx">typeB</span><span class="p">];</span>
+        <span class="kd">const</span> <span class="nx">targetA</span> <span class="o">=</span> <span class="nx">goHigh</span> <span class="o">?</span> <span class="nx">cA</span><span class="p">.</span><span class="nx">high</span> <span class="o">:</span> <span class="nx">cA</span><span class="p">.</span><span class="nx">low</span><span class="p">;</span>
+        <span class="kd">const</span> <span class="nx">targetB</span> <span class="o">=</span> <span class="nx">goHigh</span> <span class="o">?</span> <span class="nx">cB</span><span class="p">.</span><span class="nx">high</span> <span class="o">:</span> <span class="nx">cB</span><span class="p">.</span><span class="nx">low</span><span class="p">;</span>
+        <span class="nx">legDur</span> <span class="o">=</span> <span class="nx">durSlider</span><span class="p">.</span><span class="nx">value</span><span class="p">();</span>
+        <span class="nx">startDisplayLeg</span><span class="p">(</span><span class="nx">targetA</span><span class="p">,</span> <span class="nx">targetB</span><span class="p">);</span>
+
+        <span class="kd">const</span> <span class="nx">leg</span> <span class="o">=</span> <span class="nx">ready</span>
+            <span class="o">?</span> <span class="nx">group</span><span class="p">.</span><span class="nx">moveToAsync</span><span class="p">({</span> <span class="nx">a</span><span class="o">:</span> <span class="nx">targetA</span><span class="p">,</span> <span class="nx">b</span><span class="o">:</span> <span class="nx">targetB</span> <span class="p">},</span> <span class="p">{</span> <span class="nx">duration</span><span class="o">:</span> <span class="nx">legDur</span> <span class="p">})</span>
+            <span class="o">:</span> <span class="nx">wait</span><span class="p">(</span><span class="nx">legDur</span><span class="p">);</span>
+        <span class="k">await</span> <span class="nx">leg</span><span class="p">;</span>
+
+        <span class="nx">goHigh</span> <span class="o">=</span> <span class="o">!</span><span class="nx">goHigh</span><span class="p">;</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="kd">function</span> <span class="nx">startDisplayLeg</span><span class="p">(</span><span class="nx">targetA</span><span class="p">,</span> <span class="nx">targetB</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nx">fromA</span> <span class="o">=</span> <span class="nx">dispA</span><span class="p">;</span> <span class="nx">toA</span> <span class="o">=</span> <span class="nx">targetA</span><span class="p">;</span>
+    <span class="nx">fromB</span> <span class="o">=</span> <span class="nx">dispB</span><span class="p">;</span> <span class="nx">toB</span> <span class="o">=</span> <span class="nx">targetB</span><span class="p">;</span>
+    <span class="nx">legStart</span> <span class="o">=</span> <span class="nx">millis</span><span class="p">();</span>
+<span class="p">}</span>
+
+<span class="kd">function</span> <span class="nx">toggleRun</span><span class="p">()</span> <span class="p">{</span>
+    <span class="nx">running</span> <span class="o">=</span> <span class="o">!</span><span class="nx">running</span><span class="p">;</span>
+    <span class="nx">toggleButton</span><span class="p">.</span><span class="nx">html</span><span class="p">(</span><span class="nx">running</span> <span class="o">?</span> <span class="s1">&#39;Pause&#39;</span> <span class="o">:</span> <span class="s1">&#39;Resume&#39;</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="nx">running</span><span class="p">)</span> <span class="nx">sweepLoop</span><span class="p">(</span><span class="o">++</span><span class="nx">loopToken</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="kd">function</span> <span class="nx">setStatus</span><span class="p">(</span><span class="nx">s</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nx">status</span> <span class="o">=</span> <span class="nx">s</span><span class="p">;</span>
+    <span class="k">if</span> <span class="p">(</span><span class="nx">statusEl</span><span class="p">)</span> <span class="nx">statusEl</span><span class="p">.</span><span class="nx">html</span><span class="p">(</span><span class="s1">&#39;status: &#39;</span> <span class="o">+</span> <span class="nx">s</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="c1">// -------------------------------------------------------------------</span>
+<span class="c1">// Visualisation — a dial per motor. Servo = 180° gauge, bus/stepper = 360°.</span>
+<span class="c1">// -------------------------------------------------------------------</span>
+<span class="kd">function</span> <span class="nx">draw</span><span class="p">()</span> <span class="p">{</span>
+    <span class="nx">background</span><span class="p">(</span><span class="mf">28</span><span class="p">);</span>
+
+    <span class="kd">const</span> <span class="nx">t</span> <span class="o">=</span> <span class="nx">legDur</span> <span class="o">&gt;</span> <span class="mf">0</span> <span class="o">?</span> <span class="nx">constrain</span><span class="p">((</span><span class="nx">millis</span><span class="p">()</span> <span class="o">-</span> <span class="nx">legStart</span><span class="p">)</span> <span class="o">/</span> <span class="nx">legDur</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="mf">1</span><span class="p">)</span> <span class="o">:</span> <span class="mf">1</span><span class="p">;</span>
+    <span class="kd">const</span> <span class="nx">e</span> <span class="o">=</span> <span class="nx">easeInOut</span><span class="p">(</span><span class="nx">t</span><span class="p">);</span>
+    <span class="nx">dispA</span> <span class="o">=</span> <span class="nx">lerp</span><span class="p">(</span><span class="nx">fromA</span><span class="p">,</span> <span class="nx">toA</span><span class="p">,</span> <span class="nx">e</span><span class="p">);</span>
+    <span class="nx">dispB</span> <span class="o">=</span> <span class="nx">lerp</span><span class="p">(</span><span class="nx">fromB</span><span class="p">,</span> <span class="nx">toB</span><span class="p">,</span> <span class="nx">e</span><span class="p">);</span>
+
+    <span class="nx">drawDial</span><span class="p">(</span><span class="nx">cxA</span><span class="p">,</span> <span class="nx">cy</span><span class="p">,</span> <span class="s1">&#39;Motor A&#39;</span><span class="p">,</span> <span class="nx">motorA</span><span class="p">,</span> <span class="nx">TYPES</span><span class="p">[</span><span class="nx">typeA</span><span class="p">],</span> <span class="nx">dispA</span><span class="p">);</span>
+    <span class="nx">drawDial</span><span class="p">(</span><span class="nx">cxB</span><span class="p">,</span> <span class="nx">cy</span><span class="p">,</span> <span class="s1">&#39;Motor B&#39;</span><span class="p">,</span> <span class="nx">motorB</span><span class="p">,</span> <span class="nx">TYPES</span><span class="p">[</span><span class="nx">typeB</span><span class="p">],</span> <span class="nx">dispB</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="kd">function</span> <span class="nx">drawDial</span><span class="p">(</span><span class="nx">cx</span><span class="p">,</span> <span class="nx">cy</span><span class="p">,</span> <span class="nx">label</span><span class="p">,</span> <span class="nx">motor</span><span class="p">,</span> <span class="nx">cfg</span><span class="p">,</span> <span class="nx">val</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kd">const</span> <span class="nx">R</span> <span class="o">=</span> <span class="mf">95</span><span class="p">,</span> <span class="nx">D</span> <span class="o">=</span> <span class="mf">220</span><span class="p">;</span>
+    <span class="kd">const</span> <span class="nx">frac</span> <span class="o">=</span> <span class="nx">constrain</span><span class="p">(</span><span class="nx">val</span> <span class="o">/</span> <span class="nx">cfg</span><span class="p">.</span><span class="nx">fullRange</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="mf">1</span><span class="p">);</span>
+
+    <span class="nx">push</span><span class="p">();</span>
+    <span class="nx">translate</span><span class="p">(</span><span class="nx">cx</span><span class="p">,</span> <span class="nx">cy</span><span class="p">);</span>
+
+    <span class="c1">// gauge: 180° top arc for servos, full ring for 360° motors</span>
+    <span class="nx">noFill</span><span class="p">();</span>
+    <span class="nx">stroke</span><span class="p">(</span><span class="mf">70</span><span class="p">);</span>
+    <span class="nx">strokeWeight</span><span class="p">(</span><span class="mf">2</span><span class="p">);</span>
+    <span class="kd">let</span> <span class="nx">a</span><span class="p">;</span>
+    <span class="k">if</span> <span class="p">(</span><span class="nx">cfg</span><span class="p">.</span><span class="nx">span</span> <span class="o">===</span> <span class="mf">180</span><span class="p">)</span> <span class="p">{</span>
+        <span class="nx">arc</span><span class="p">(</span><span class="mf">0</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="nx">D</span><span class="p">,</span> <span class="nx">D</span><span class="p">,</span> <span class="nx">PI</span><span class="p">,</span> <span class="nx">TWO_PI</span><span class="p">);</span>          <span class="c1">// top semicircle</span>
+        <span class="nx">a</span> <span class="o">=</span> <span class="nx">map</span><span class="p">(</span><span class="nx">frac</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="mf">1</span><span class="p">,</span> <span class="nx">PI</span><span class="p">,</span> <span class="nx">TWO_PI</span><span class="p">);</span>      <span class="c1">// 0 → left, ½ → up, 1 → right</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+        <span class="nx">circle</span><span class="p">(</span><span class="mf">0</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="nx">D</span><span class="p">);</span>                      <span class="c1">// full circle</span>
+        <span class="nx">a</span> <span class="o">=</span> <span class="o">-</span><span class="nx">HALF_PI</span> <span class="o">+</span> <span class="nx">frac</span> <span class="o">*</span> <span class="nx">TWO_PI</span><span class="p">;</span>         <span class="c1">// 0 → up, then clockwise</span>
+    <span class="p">}</span>
+
+    <span class="nx">stroke</span><span class="p">(</span><span class="mf">120</span><span class="p">,</span> <span class="mf">200</span><span class="p">,</span> <span class="mf">255</span><span class="p">);</span>
+    <span class="nx">strokeWeight</span><span class="p">(</span><span class="mf">6</span><span class="p">);</span>
+    <span class="nx">line</span><span class="p">(</span><span class="mf">0</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="nx">cos</span><span class="p">(</span><span class="nx">a</span><span class="p">)</span> <span class="o">*</span> <span class="nx">R</span><span class="p">,</span> <span class="nx">sin</span><span class="p">(</span><span class="nx">a</span><span class="p">)</span> <span class="o">*</span> <span class="nx">R</span><span class="p">);</span>
+
+    <span class="nx">fill</span><span class="p">(</span><span class="mf">255</span><span class="p">);</span> <span class="nx">noStroke</span><span class="p">();</span>
+    <span class="nx">circle</span><span class="p">(</span><span class="mf">0</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="mf">12</span><span class="p">);</span>
+
+    <span class="nx">textAlign</span><span class="p">(</span><span class="nx">CENTER</span><span class="p">);</span>
+    <span class="nx">fill</span><span class="p">(</span><span class="mf">255</span><span class="p">);</span> <span class="nx">textSize</span><span class="p">(</span><span class="mf">15</span><span class="p">);</span>
+    <span class="nx">text</span><span class="p">(</span><span class="nx">label</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="nx">D</span> <span class="o">/</span> <span class="mf">2</span> <span class="o">+</span> <span class="mf">30</span><span class="p">);</span>
+    <span class="nx">fill</span><span class="p">(</span><span class="mf">150</span><span class="p">);</span> <span class="nx">textSize</span><span class="p">(</span><span class="mf">12</span><span class="p">);</span>
+    <span class="nx">text</span><span class="p">(</span><span class="sb">`</span><span class="si">${</span><span class="nx">cfg</span><span class="p">.</span><span class="nx">label</span><span class="si">}</span><span class="sb"> · </span><span class="si">${</span><span class="nx">cfg</span><span class="p">.</span><span class="nx">span</span><span class="si">}</span><span class="sb">°`</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="nx">D</span> <span class="o">/</span> <span class="mf">2</span> <span class="o">+</span> <span class="mf">50</span><span class="p">);</span>
+    <span class="nx">text</span><span class="p">(</span><span class="sb">`commanded </span><span class="si">${</span><span class="nb">Math</span><span class="p">.</span><span class="nx">round</span><span class="p">(</span><span class="nx">val</span><span class="p">)</span><span class="si">}</span><span class="sb">`</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="nx">D</span> <span class="o">/</span> <span class="mf">2</span> <span class="o">+</span> <span class="mf">68</span><span class="p">);</span>
+    <span class="nx">text</span><span class="p">(</span><span class="sb">`feedback </span><span class="si">${</span><span class="nb">Math</span><span class="p">.</span><span class="nx">round</span><span class="p">((</span><span class="nx">motor</span> <span class="o">&amp;&amp;</span> <span class="nx">motor</span><span class="p">.</span><span class="nx">memberValue</span><span class="p">)</span> <span class="o">||</span> <span class="mf">0</span><span class="p">)</span><span class="si">}</span><span class="sb">`</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="nx">D</span> <span class="o">/</span> <span class="mf">2</span> <span class="o">+</span> <span class="mf">86</span><span class="p">);</span>
+    <span class="nx">textAlign</span><span class="p">(</span><span class="nx">LEFT</span><span class="p">);</span>
+    <span class="nx">pop</span><span class="p">();</span>
+<span class="p">}</span>
+</code></pre>
+      </div>
+    </div>
+  <div class="md-body">
+<h2 id="hardware">Hardware</h2>
+<p>Any Pardalote board (UNO R4 WiFi or ESP32) plus <strong>two motors of any type</strong>:</p>
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>Wiring (edit <code>TYPES</code> in <code>sketch.js</code>)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Servo (PWM)</td>
+<td>two servos on pins <strong>5</strong> and <strong>6</strong></td>
+</tr>
+<tr>
+<td>Bus Servo (ST)</td>
+<td>two Feetech ST servos, IDs <strong>1</strong> and <strong>2</strong>, on the serial bus</td>
+</tr>
+<tr>
+<td>Stepper</td>
+<td>two STEP/DIR drivers on pins <strong>2,3</strong> and <strong>4,5</strong></td>
+</tr>
+</tbody>
+</table>
+<p>The Arduino sketch just needs the matching extension(s) included — the simplest
+is to include all three so you can switch type without re-flashing:</p>
+<pre><code><span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;Pardalote.h&gt;</span><span class="cp"></span>
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;PardaloteServo.h&gt;</span><span class="cp"></span>
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;PardaloteBusServo.h&gt;</span><span class="cp"></span>
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;PardaloteStepper.h&gt;</span><span class="cp"></span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">setup</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">begin</span><span class="p">();</span><span class="w"> </span><span class="p">}</span><span class="w"></span>
+<span class="kt">void</span><span class="w"> </span><span class="nf">loop</span><span class="p">()</span><span class="w">  </span><span class="p">{</span><span class="w"> </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">run</span><span class="p">();</span><span class="w">   </span><span class="p">}</span><span class="w"></span>
+</code></pre>
+<h2 id="browser">Browser</h2>
+<ol>
+<li>Put the board's IP into <code>ArduinoIP</code> at the top of <code>sketch.js</code>.</li>
+<li>Open <code>index.html</code>.</li>
+</ol>
+<table>
+<thead>
+<tr>
+<th>Control</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Popup under each dial</td>
+<td>choose Servo / Bus Servo / Stepper for that motor (rebuilds the group)</td>
+</tr>
+<tr>
+<td>Pause / Resume</td>
+<td>stop and start the sweep</td>
+</tr>
+<tr>
+<td>Duration slider</td>
+<td>time per leg — both motors still arrive together</td>
+</tr>
+</tbody>
+</table>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>The dials animate a <strong>display interpolation</strong> of the commanded sweep, so they
+move smoothly even before the board connects (you'll see <code>status: reconnecting…</code> until it does). The <code>feedback</code> readout shows each motor's real
+position once polling returns values (bus servo / stepper).</li>
+<li>The sweep starts each leg from the last commanded position, so the motors are
+snapped to the low pose once on connect (<code>group.set</code>) to establish a known
+start — see the note on first moves in the <a href="../reference/groups.html">Groups docs</a>.</li>
+<li>Edit the <code>low</code> / <code>high</code> values in <code>TYPES</code> to change each type's sweep range.</li>
+</ul>
+
+  </div>
+</div>
+
+<footer class="site-footer speckled">
+  <div class="wrap">
+    <span>Pardalote — created by Scott Mitchell for design education and creative technology.</span>
+    <span><a href="../reference/index.html">Reference</a> · <a href="https://github.com/scottmitchell/pardalote">GitHub</a> · GPL-3.0</span>
+  </div>
+</footer>
+
+<script src="../js/site.js"></script>
+</body>
+</html>

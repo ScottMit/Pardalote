@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Potentiometer — Shared Input</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <main>
+        <h1>Potentiometer</h1>
+
+        <div id="value">—</div>
+
+        <div class="bar-track">
+            <div id="bar"></div>
+        </div>
+
+        <p class="hint">
+            Turn the potentiometer.<br>
+            The Arduino told the browser to poll this pin —
+            no <code>pinMode</code> or <code>analogRead</code> in the JS.
+        </p>
+
+        <div id="status" class="disconnected">● DISCONNECTED</div>
+    </main>
+
+    <!-- Pin alias scripts — let the JS use 'A0' as the pin name -->
+    <script src="../../pardalote-js/pardalote.js"></script>
+    <script src="../../pardalote-js/pardalote-pins-uno-r4-wifi.js"></script>
+    <script src="../../pardalote-js/pardalote-pins-esp32-wrover-dev.js"></script>
+    <script src="sketch.js"></script>
+</body>
+</html>

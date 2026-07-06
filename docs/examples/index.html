@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Examples — Pardalote</title>
+<meta name="description" content="Complete, working Pardalote projects: an Arduino sketch, a web page, and a wiring note for each.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../css/site.css">
+</head>
+<body data-nav="examples">
+
+<nav class="site-nav speckled">
+  <a class="logo" href="../index.html">
+    <img src="../assets/logo.svg" width="30" height="30" alt="">
+    Pardalote
+  </a>
+  <div class="links">
+    <a data-nav="home" href="../index.html">Home</a>
+    <a data-nav="download" href="../download.html">Download</a>
+    <a data-nav="examples" href="index.html">Examples</a>
+    <a data-nav="reference" href="../reference/index.html">Reference</a>
+    <a href="https://github.com/scottmitchell/pardalote">GitHub</a>
+  </div>
+</nav>
+
+<div class="page-head speckled">
+  <div class="wrap">
+    <h1>Examples</h1>
+    <p>Every example is a complete, working project: an Arduino sketch, a web page, and a wiring note. Start at the top and work down, or jump to the hardware you have.</p>
+  </div>
+</div>
+
+<div class="wrap" style="padding-top:2.5rem;">
+  <div class="filter-row">
+      <button class="filter active" data-filter="all">All</button>
+      <button class="filter" data-filter="Basics">Basics</button>
+      <button class="filter" data-filter="Light">Light</button>
+      <button class="filter" data-filter="Motion">Motion</button>
+      <button class="filter" data-filter="Multi-user">Multi-user</button>
+      <button class="filter" data-filter="Sensors">Sensors</button>
+      <button class="filter" data-filter="Tool">Tool</button>
+      <button class="filter" data-filter="Vision">Vision</button>
+      <button class="filter" data-filter="p5.js">p5.js</button>
+  </div>
+  <div class="ex-grid">
+      <a class="ex-card" href="control-panel.html" data-tags="Multi-user Tool">
+        <div class="ex-thumb" style="background:linear-gradient(135deg,#232129,#4a4652); color:#f2b705;">🎛️</div>
+        <div class="ex-body">
+          <h3>Control panel</h3>
+          <p>A dashboard for every pin on your board, laid out over a photo of it. Test circuits without writing a line of code.</p>
+          <div class="tags"><span class="tag lvl-start">Beginner</span><span class="tag">Multi-user</span><span class="tag">Tool</span></div>
+        </div>
+      </a>
+      <a class="ex-card" href="basic-LED-example.html" data-tags="Basics">
+        <div class="ex-thumb" style="background:linear-gradient(135deg,#fdf0d4,#f2b705);">💡</div>
+        <div class="ex-body">
+          <h3>Basic LED</h3>
+          <p>Two buttons on a web page turn the board&#x27;s LED on and off. The simplest possible start — no frameworks at all.</p>
+          <div class="tags"><span class="tag lvl-start">Beginner</span><span class="tag">Basics</span></div>
+        </div>
+      </a>
+      <a class="ex-card" href="basic-p5js-example.html" data-tags="Basics p5.js">
+        <div class="ex-thumb" style="background:linear-gradient(135deg,#e3eef5,#8ec6e6);">◉</div>
+        <div class="ex-body">
+          <h3>Sensor + p5.js</h3>
+          <p>Turn a knob, and a circle on screen grows and shrinks with it. Your first taste of live data flowing into a p5.js sketch.</p>
+          <div class="tags"><span class="tag lvl-start">Beginner</span><span class="tag">Basics</span><span class="tag">p5.js</span></div>
+        </div>
+      </a>
+      <a class="ex-card" href="shared-control-example.html" data-tags="Multi-user">
+        <div class="ex-thumb" style="background:linear-gradient(135deg,#fbe3dc,#e08b6d);">🔦</div>
+        <div class="ex-body">
+          <h3>Shared light switch</h3>
+          <p>One light, four switches: two physical buttons and two on screen. Press any of them — everything stays in sync.</p>
+          <div class="tags"><span class="tag lvl-start">Beginner</span><span class="tag">Multi-user</span></div>
+        </div>
+      </a>
+      <a class="ex-card" href="shared-input-example.html" data-tags="Multi-user Basics">
+        <div class="ex-thumb" style="background:linear-gradient(135deg,#efe7d8,#d9bf8c);">🎚️</div>
+        <div class="ex-body">
+          <h3>Shared potentiometer</h3>
+          <p>The Arduino announces its own analog input and the browser listens — a turn of the knob shows up live on screen with no JS setup.</p>
+          <div class="tags"><span class="tag lvl-start">Beginner</span><span class="tag">Multi-user</span><span class="tag">Basics</span></div>
+        </div>
+      </a>
+      <a class="ex-card" href="servo-example.html" data-tags="Motion p5.js">
+        <div class="ex-thumb" style="background:linear-gradient(135deg,#e8e2d4,#c9bea4);">🦾</div>
+        <div class="ex-body">
+          <h3>Servo control</h3>
+          <p>Move a servo with your mouse or keyboard while its arm angle is drawn live on screen.</p>
+          <div class="tags"><span class="tag lvl-mid">Intermediate</span><span class="tag">Motion</span><span class="tag">p5.js</span></div>
+        </div>
+      </a>
+      <a class="ex-card" href="stepper-example.html" data-tags="Motion">
+        <div class="ex-thumb" style="background:linear-gradient(135deg,#e5e0f0,#b0a3d4);">⚙️</div>
+        <div class="ex-body">
+          <h3>Stepper motor</h3>
+          <p>Precise position moves, continuous rotation, and a live position readout — the browser as a motor controller.</p>
+          <div class="tags"><span class="tag lvl-mid">Intermediate</span><span class="tag">Motion</span></div>
+        </div>
+      </a>
+      <a class="ex-card" href="busservo-example.html" data-tags="Motion">
+        <div class="ex-thumb" style="background:linear-gradient(135deg,#dcefe0,#8fc79a);">🤖</div>
+        <div class="ex-body">
+          <h3>Bus servos</h3>
+          <p>Drive smart serial servos — the kind used in robot arms. Pose a joint by hand, read it back, and replay it.</p>
+          <div class="tags"><span class="tag lvl-adv">Advanced</span><span class="tag">Motion</span></div>
+        </div>
+      </a>
+      <a class="ex-card" href="coordinated-motion-example.html" data-tags="Motion">
+        <div class="ex-thumb" style="background:linear-gradient(135deg,#fdf0d4,#f5c95c);">🎛️</div>
+        <div class="ex-body">
+          <h3>Coordinated motion</h3>
+          <p>Two different motors — mix a servo, stepper, or bus servo — sweep in perfect unison using a group.</p>
+          <div class="tags"><span class="tag lvl-adv">Advanced</span><span class="tag">Motion</span></div>
+        </div>
+      </a>
+      <a class="ex-card" href="neopixel-example.html" data-tags="Light p5.js">
+        <div class="ex-thumb" style="background:linear-gradient(135deg,#f3dce8,#d989b8);">🌈</div>
+        <div class="ex-body">
+          <h3>NeoPixel colours</h3>
+          <p>An on-screen colour picker drives an LED strip in real time. Sweep the mouse for colour; hover for rainbow.</p>
+          <div class="tags"><span class="tag lvl-mid">Intermediate</span><span class="tag">Light</span><span class="tag">p5.js</span></div>
+        </div>
+      </a>
+      <a class="ex-card" href="ultrasonic-sensor-example.html" data-tags="Sensors p5.js">
+        <div class="ex-thumb" style="background:linear-gradient(135deg,#dceef3,#7db8c9);">📏</div>
+        <div class="ex-body">
+          <h3>Ultrasonic distance</h3>
+          <p>A distance sensor paints a colour bar that responds as you move your hand closer and further away.</p>
+          <div class="tags"><span class="tag lvl-mid">Intermediate</span><span class="tag">Sensors</span><span class="tag">p5.js</span></div>
+        </div>
+      </a>
+      <a class="ex-card" href="mpu-example.html" data-tags="Sensors p5.js">
+        <div class="ex-thumb" style="background:linear-gradient(135deg,#e2e6f0,#94a3cc);">🧭</div>
+        <div class="ex-body">
+          <h3>Motion sensor (IMU)</h3>
+          <p>Tilt the sensor and watch a 3D model rotate with it, live, in all three axes.</p>
+          <div class="tags"><span class="tag lvl-adv">Advanced</span><span class="tag">Sensors</span><span class="tag">p5.js</span></div>
+        </div>
+      </a>
+      <a class="ex-card" href="camera-example.html" data-tags="Vision p5.js">
+        <div class="ex-thumb" style="background:linear-gradient(135deg,#e8ddd2,#c4a284);">📷</div>
+        <div class="ex-body">
+          <h3>Camera stream</h3>
+          <p>Live video from an ESP32 camera lands on a p5.js canvas, pixels and all — ready for creative coding.</p>
+          <div class="tags"><span class="tag lvl-adv">Advanced</span><span class="tag">Vision</span><span class="tag">p5.js</span></div>
+        </div>
+      </a>
+  </div>
+</div>
+
+<footer class="site-footer speckled">
+  <div class="wrap">
+    <span>Pardalote — created by Scott Mitchell for design education and creative technology.</span>
+    <span><a href="../reference/index.html">Reference</a> · <a href="https://github.com/scottmitchell/pardalote">GitHub</a> · GPL-3.0</span>
+  </div>
+</footer>
+
+<script src="../js/site.js"></script>
+<script>
+document.querySelectorAll('.filter').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.filter').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const f = btn.dataset.filter;
+    document.querySelectorAll('.ex-card').forEach(card => {
+      card.style.display =
+        (f === 'all' || card.dataset.tags.split(' ').includes(f)) ? '' : 'none';
+    });
+  });
+});
+</script>
+</body>
+</html>

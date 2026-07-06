@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NeoPixel — Pardalote reference</title>
+<meta name="description" content="Up to 4 addressable LED strips — buffered pixel changes, brightness control, and throttled updates for smooth animation.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../css/site.css">
+</head>
+<body data-nav="reference">
+
+<nav class="site-nav speckled">
+  <a class="logo" href="../index.html">
+    <img src="../assets/logo.svg" width="30" height="30" alt="">
+    Pardalote
+  </a>
+  <div class="links">
+    <a data-nav="home" href="../index.html">Home</a>
+    <a data-nav="download" href="../download.html">Download</a>
+    <a data-nav="examples" href="../examples/index.html">Examples</a>
+    <a data-nav="reference" href="index.html">Reference</a>
+    <a href="https://github.com/scottmitchell/pardalote">GitHub</a>
+  </div>
+</nav>
+
+<div class="wrap">
+  <div class="ref-layout">
+<aside class="ref-nav">
+  <h4>Getting started</h4>
+  <a href="index.html">Overview</a>
+  <a href="installation.html">Installation</a>
+  <a href="wifi.html">WiFi configuration</a>
+  <h4>Core — JavaScript</h4>
+  <a href="connecting.html#connect">connect() / events</a>
+  <a href="pins.html#pinmode">pinMode()</a>
+  <a href="pins.html#digitalwrite">digitalWrite() / analogWrite()</a>
+  <a href="pins.html#analogread">analogRead() / digitalRead()</a>
+  <a href="pins.html#onchange">onChange()</a>
+  <a href="pins.html#pin-aliases">Pin aliases</a>
+  <h4>Core — Arduino</h4>
+  <a href="arduino.html#pardalotebegin">Pardalote.begin() / run()</a>
+  <a href="arduino.html#pardaloteshare">share() / send()</a>
+  <a href="arduino.html#the-actuator-objects">Reading actuators</a>
+  <h4>Extensions</h4>
+  <a href="extensions.html">Overview</a>
+  <a href="servo.html">Servo</a>
+  <a href="stepper.html">Stepper</a>
+  <a href="bus-servo.html">Bus servo</a>
+  <a href="groups.html">Groups</a>
+  <a href="neopixel.html">NeoPixel</a>
+  <a href="ultrasonic.html">Ultrasonic</a>
+  <a href="mpu.html">MPU / IMU</a>
+  <a href="camera.html">Camera</a>
+  <h4>Under the hood</h4>
+  <a href="protocol.html">Protocol</a>
+  <a href="troubleshooting.html">Troubleshooting</a>
+</aside>
+    <main class="ref-main">
+      <h1>NeoPixel</h1>
+      <p class="lede">Up to 4 addressable LED strips — buffered pixel changes, brightness control, and throttled updates for smooth animation.</p>
+<p>Requires the <code>Adafruit NeoPixel</code> library and <code>&lt;PardaloteNeoPixel.h&gt;</code> in the sketch. Examples assume:</p>
+<pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;strip&#39;</span><span class="p">,</span> <span class="ow">new</span> <span class="nx">NeoPixel</span><span class="p">());</span>
+</code></pre>
+<h2 id="init">init()</h2>
+<p>Initialises the strip. Call inside <code>on('ready')</code>.</p>
+<div class="sig">arduino.strip.<span class="fn">init</span>(pin, numPixels, [type])</div>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>pin</code></td>
+<td>number | string</td>
+<td>Data pin the strip is wired to.</td>
+</tr>
+<tr>
+<td><code>numPixels</code></td>
+<td>number</td>
+<td>Number of LEDs on the strip.</td>
+</tr>
+<tr>
+<td><code>type</code></td>
+<td>constant</td>
+<td>Optional. Colour order + speed, e.g. <code>NEO_GRB + NEO_KHZ800</code> (the default, right for most WS2812B strips).</td>
+</tr>
+</tbody>
+</table>
+<div class="code-ex"><div class="bar">Example — init two strips</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">strip</span><span class="p">.</span><span class="nx">init</span><span class="p">(</span><span class="mf">6</span><span class="p">,</span> <span class="mf">30</span><span class="p">);</span>                     <span class="c1">// pin 6, 30 pixels</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">strip</span><span class="p">.</span><span class="nx">init</span><span class="p">(</span><span class="mf">7</span><span class="p">,</span> <span class="mf">16</span><span class="p">,</span> <span class="nx">NEO_GRB</span> <span class="o">+</span> <span class="nx">NEO_KHZ800</span><span class="p">);</span>
+</code></pre></div>
+<h2 id="setpixelcolor">setPixelColor()</h2>
+<p>Sets one pixel in the local buffer. Nothing reaches the LEDs until <code>show()</code>.</p>
+<div class="sig">arduino.strip.<span class="fn">setPixelColor</span>(index, r, g, b, [w])</div>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>index</code></td>
+<td>number</td>
+<td>Pixel index, <code>0</code>-based.</td>
+</tr>
+<tr>
+<td><code>r</code>, <code>g</code>, <code>b</code></td>
+<td>number</td>
+<td>Colour components, <code>0</code>–<code>255</code>.</td>
+</tr>
+<tr>
+<td><code>w</code></td>
+<td>number</td>
+<td>Optional white channel (RGBW strips).</td>
+</tr>
+</tbody>
+</table>
+<p>Also accepts a packed colour: <code>setPixelColor(index, color)</code>.</p>
+<h2 id="color">Color()</h2>
+<p>Packs r, g, b into a single 32-bit colour value.</p>
+<div class="sig">arduino.strip.<span class="fn">Color</span>(r, g, b)</div>
+<div class="code-ex"><div class="bar">Example — pack a colour</div><pre><code><span class="kd">let</span> <span class="nx">red</span> <span class="o">=</span> <span class="nx">arduino</span><span class="p">.</span><span class="nx">strip</span><span class="p">.</span><span class="nx">Color</span><span class="p">(</span><span class="mf">255</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="mf">0</span><span class="p">);</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">strip</span><span class="p">.</span><span class="nx">setPixelColor</span><span class="p">(</span><span class="mf">0</span><span class="p">,</span> <span class="nx">red</span><span class="p">);</span>
+</code></pre></div>
+<h2 id="fill">fill()</h2>
+<p>Fills the whole strip, or a range, with one colour (buffered).</p>
+<div class="sig">arduino.strip.<span class="fn">fill</span>(color, [first], [count])</div>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>color</code></td>
+<td>number</td>
+<td>Packed colour from <code>Color()</code>.</td>
+</tr>
+<tr>
+<td><code>first</code></td>
+<td>number</td>
+<td>Optional. First pixel to fill.</td>
+</tr>
+<tr>
+<td><code>count</code></td>
+<td>number</td>
+<td>Optional. Number of pixels to fill.</td>
+</tr>
+</tbody>
+</table>
+<div class="code-ex"><div class="bar">Example — fill a range</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">strip</span><span class="p">.</span><span class="nx">fill</span><span class="p">(</span><span class="nx">red</span><span class="p">);</span>          <span class="c1">// entire strip</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">strip</span><span class="p">.</span><span class="nx">fill</span><span class="p">(</span><span class="nx">red</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="mf">10</span><span class="p">);</span>   <span class="c1">// pixels 0–9</span>
+</code></pre></div>
+<h2 id="clear">clear()</h2>
+<p>Sets all pixels to off (buffered).</p>
+<div class="sig">arduino.strip.<span class="fn">clear</span>()</div>
+<h2 id="setbrightness">setBrightness()</h2>
+<p>Global brightness scale.</p>
+<div class="sig">arduino.strip.<span class="fn">setBrightness</span>(level)</div>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>level</code></td>
+<td>number</td>
+<td><code>0</code>–<code>255</code>. Default <code>255</code> — strips vary, start lower.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="show">show()</h2>
+<p>Sends the buffered changes to the LEDs. Debounced: rapid draw-loop calls coalesce into a single send (the latest pending state wins).</p>
+<div class="sig">arduino.strip.<span class="fn">show</span>()</div>
+<h2 id="getpixelcolor--numpixels">getPixelColor() / numPixels()</h2>
+<p>Reading back the local buffer.</p>
+<div class="sig">arduino.strip.<span class="fn">getPixelColor</span>(index) · arduino.strip.<span class="fn">numPixels</span>()</div>
+<p><strong>Returns</strong> a 32-bit packed colour / the pixel count.</p>
+<h2 id="setthreshold">setThreshold()</h2>
+<p>Pixel changes below the colour distance threshold are ignored — useful for animation loops that might send identical values.</p>
+<div class="sig">arduino.strip.<span class="fn">setThreshold</span>(distance)</div>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>distance</code></td>
+<td>number</td>
+<td>Minimum colour distance to count as a change. Default <code>5</code>.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="setthrottle">setThrottle()</h2>
+<p>Minimum time between <code>show()</code> flushes. Default 20 ms (~50 Hz max). Raise it if you see queue-buildup lag on a slow link; set <code>0</code> to disable debouncing.</p>
+<div class="sig">arduino.strip.<span class="fn">setThrottle</span>(ms)</div>
+<div class="code-ex"><div class="bar">Example — tune the flush rate</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">strip</span><span class="p">.</span><span class="nx">setThrottle</span><span class="p">(</span><span class="mf">50</span><span class="p">);</span>  <span class="c1">// gentler on the UNO R4&#39;s WiFi</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">strip</span><span class="p">.</span><span class="nx">setThrottle</span><span class="p">(</span><span class="mf">0</span><span class="p">);</span>   <span class="c1">// every show() flushes</span>
+</code></pre></div>
+<h2 id="type-constants">Type constants</h2>
+<pre><code><span class="c1">// Colour order</span>
+<span class="nx">NEO_RGB</span>   <span class="nx">NEO_RBG</span>   <span class="nx">NEO_GRB</span>   <span class="nx">NEO_GBR</span>   <span class="nx">NEO_BRG</span>   <span class="nx">NEO_BGR</span>
+
+<span class="c1">// Speed</span>
+<span class="nx">NEO_KHZ800</span>  <span class="c1">// most strips (default)</span>
+<span class="nx">NEO_KHZ400</span>  <span class="c1">// older strips</span>
+
+<span class="c1">// Combine:</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">strip</span><span class="p">.</span><span class="nx">init</span><span class="p">(</span><span class="mf">6</span><span class="p">,</span> <span class="mf">30</span><span class="p">,</span> <span class="nx">NEO_GRB</span> <span class="o">+</span> <span class="nx">NEO_KHZ800</span><span class="p">);</span>
+</code></pre>
+<div class="sig">arduino.strip.<span class="fn">getState</span>()</div>
+<p><strong>Returns</strong> a snapshot of all strip state.</p>
+<p>See also: <a href="../examples/neopixel-example.html">NeoPixel example</a> · <a href="troubleshooting.html">Troubleshooting</a></p>
+
+    </main>
+  </div>
+</div>
+
+<footer class="site-footer speckled">
+  <div class="wrap">
+    <span>Pardalote — created by Scott Mitchell for design education and creative technology.</span>
+    <span><a href="index.html">Reference</a> · <a href="https://github.com/scottmitchell/pardalote">GitHub</a> · GPL-3.0</span>
+  </div>
+</footer>
+
+<script src="../js/site.js"></script>
+</body>
+</html>

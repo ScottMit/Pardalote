@@ -1,6 +1,6 @@
 # Pardalote
 
-Control Arduino hardware directly from a web browser over WiFi — no USB cable, no server, no Node.js. Write JavaScript that reads sensors and drives LEDs, servos, and NeoPixel strips using an API that mirrors Arduino's own function names.
+Control Arduino hardware directly from a web browser over WiFi — no USB cable, no server, no Node.js. Write JavaScript that reads sensors and drives LEDs, servos (PWM and serial bus), stepper motors, and NeoPixel strips — with an API that mirrors Arduino's own function names, and [groups](#groups) that move multiple actuators together.
 
 Designed for creative coders, design students, and makers who want to connect physical hardware to web interfaces with minimal setup.
 
@@ -21,6 +21,8 @@ Designed for creative coders, design students, and makers who want to connect ph
 - `WebSocketsServer` (by Markus Sattler)
 - `Adafruit NeoPixel` (if using LED strips)
 - `ESP32Servo` (if using servos on ESP32)
+- `AccelStepper` (by Mike McCauley, if using stepper motors)
+- `SCServo` (Feetech/Waveshare, if using serial bus servos — usually a ZIP from the Waveshare wiki or Feetech SDK, not in the Library Manager)
 
 No extra library is needed for the MPU / IMU extension — it reads sensor registers directly over I2C.
 
@@ -105,6 +107,147 @@ If `SECRET_SSID` is defined and EEPROM networks are also stored, Pardalote tries
 ### 3. Open a browser example
 
 Navigate to the `examples/` folder in this repo, and pick an example. Update the IP address in `sketch.js` to match your Arduino, and open `index.html` in a browser.
+
+---
+
+## Sharing control with the Arduino sketch
+
+The minimal sketch is `Pardalote.begin()` + `Pardalote.run()`, but you can also write Arduino code that reads sensors, drives pins, runs a state machine — alongside the browser. The model is:
+
+> **The Arduino is just another voice in a flat command structure.**
+> Both the Arduino sketch and the browser can read and write any pin using the standard Arduino / JS APIs. Whoever wrote last wins on the actual pin state. There's no pin reservation, no negotiation — your sketch and your JS code share the same hardware and you keep them coherent.
+
+When the Arduino changes a pin, the browser doesn't know unless you tell it. Two calls do that:
+
+```cpp
+Pardalote.share(pin, mode);    // declare a pin's mode to the browser
+Pardalote.send (pin, value);   // push a current value to the browser
+```
+
+Neither one touches the hardware — they only inform the browser. You still use Arduino's standard `pinMode` / `digitalWrite` / `digitalRead` / `analogRead` for the actual pin operations.
+
+### `Pardalote.share(pin, mode)`
+
+Tells the browser "this pin exists, it's in this mode." Use Arduino's constants (`INPUT`, `OUTPUT`, `INPUT_PULLUP`, `INPUT_PULLDOWN`) or Pardalote's `MODE_ANALOG_INPUT`. **For input modes, the browser auto-starts a default-interval (200 ms) poll for the pin** — so the browser starts receiving values without having to declare anything itself.
+
+For `OUTPUT` it's purely a declaration (no polling).
+
+### `Pardalote.send(pin, value)`
+
+Push a value. The browser caches it, fires `arduino.onChange(pin, …)` handlers, and makes it available via `arduino.digitalRead(pin)` / `analogRead(pin)`.
+
+### Two examples
+
+**Light switch** ([examples/shared-control-example/](examples/shared-control-example/)) — an LED controlled by two physical buttons *and* two browser buttons. Either side flips it; both stay in sync. The Arduino calls `share` once and `send` whenever its buttons fire:
+
+```cpp
+void setup() {
+    Pardalote.begin();
+    pinMode(LIGHT,  OUTPUT);
+    pinMode(BTN_ON,  INPUT_PULLUP);
+    pinMode(BTN_OFF, INPUT_PULLUP);
+    Pardalote.share(LIGHT, OUTPUT);
+}
+
+void loop() {
+    Pardalote.run();
+    if (button_on_pressed) {
+        digitalWrite(LIGHT, HIGH);
+        Pardalote.send(LIGHT, HIGH);
+    }
+    // ... mirror for off ...
+}
+```
+
+**Potentiometer** ([examples/shared-input-example/](examples/shared-input-example/)) — the Arduino announces an analog input; the browser receives values automatically with no JS-side setup:
+
+```cpp
+void setup() {
+    Pardalote.begin();
+    pinMode(A0, INPUT);
+    Pardalote.share(A0, MODE_ANALOG_INPUT);   // browser auto-starts polling
+}
+
+void loop() {
+    Pardalote.run();   // that's it — browser's polls are handled here
+}
+```
+
+```js
+arduino.onChange('A0', value => updateDisplay(value));   // no pinMode, no analogRead
+```
+
+### When *not* to share
+
+Not every pin needs to be shared. In the light-switch example, the two button pins (`BTN_ON`, `BTN_OFF`) are only used by the Arduino — the browser has its own buttons for that, so there's no reason to tell it about the physical ones. Share only the pins you want the browser to see.
+
+### Reading and writing actuators from the sketch
+
+`share`/`send` cover raw pins. For the **extension actuators** (servos, steppers, bus servos) that the browser configured, each type gives the sketch a small **bus object** — `scan()` lists what's there, `read(id)` reads one, and `write(id, …)` drives one. The browser and the sketch share the same actuator (last writer wins), the way they already share raw pins — so the sketch can react to a position *and* command motion.
+
+```cpp
+#include <Pardalote.h>
+#include <PardaloteBusServo.h>
+
+void loop() {
+    Pardalote.run();
+    int pos = PardaloteBusServo.read(1);              // servo ID 1 → position (counts)
+    if (pos >= 0) digitalWrite(LED_BUILTIN, pos > 2048 ? HIGH : LOW);
+}
+```
+
+The three objects, and how each is addressed:
+
+| Object | `scan()` returns | `read(id)` returns | `id` is |
+|---|---|---|---|
+| `PardaloteServo` | attached servo ids | angle (0–180) | logical id (the `arduino.add()` order) |
+| `PardaloteStepper` | attached stepper ids | position (steps) | logical id |
+| `PardaloteBusServo` | responding servo ids | position (counts) | **hardware** servo ID |
+
+```cpp
+// Discover, then read — same pattern for each type
+int ids[8];
+int n = PardaloteServo.scan(ids, 8);
+for (int i = 0; i < n; i++) Serial.println(PardaloteServo.read(ids[i]));
+
+uint8_t bus[16];
+int m = PardaloteBusServo.scan(bus, 16);              // pings the bus
+for (int i = 0; i < m; i++) Serial.println(PardaloteBusServo.read(bus[i]));
+```
+
+Also: `PardaloteServo.isMoving(id)`, `PardaloteStepper.distanceToGo(id)` / `.isRunning(id)`, and `PardaloteBusServo.feedback(id)` (position, load, voltage, temperature, … in one read).
+
+For bus servos, `PardaloteBusServo.isMoving(id)` / `.arrived(id)` read the servo's own **Moving flag** — its honest "am I still moving?", accounting for deadband and settling. It's one bus read (the servo can't notify you — you ask when you want to know):
+
+```cpp
+PardaloteBusServo.write(1, 3000);
+while (PardaloteBusServo.isMoving(1)) { /* do other work */ }
+// arrived — trigger the next thing
+```
+
+#### Writing
+
+The same objects command the actuators — addressed the same way (logical id for servo/stepper, hardware ID for bus servo):
+
+```cpp
+PardaloteServo.write(id, 90);            // angle 0–180
+PardaloteServo.writeTimed(id, 90, 1000); // over 1 s (board-interpolated)
+PardaloteServo.stop(id);
+
+PardaloteStepper.moveTo(id, 2000);       // steps
+PardaloteStepper.move(id, -400);
+PardaloteStepper.stop(id);
+
+PardaloteBusServo.write(id, 2048);       // counts (optional speed, acc)
+PardaloteBusServo.torque(id, false);     // release / hold
+```
+
+Servo/stepper writes run through the **same command path the browser uses** (so they respect limits, cancel timed moves, etc.); bus-servo writes go straight to the bus by hardware ID.
+
+Notes:
+- A **bus servo read/scan/write is a blocking bus transaction** — fine in `setup()` or a throttled `loop()`, not a tight high-rate loop competing with the browser's own polling.
+- **Sketch writes update the browser's record automatically.** A sketch write echoes the commanded value to the browser exactly as if the browser had issued it — a PWM servo sets the browser's `angle`, a stepper or bus servo sets its `target`. So the browser's record stays coherent with no `read()` needed. (The live `position` feedback is separate — that still comes from polling, as always.)
+- See **File → Examples → Pardalote → arduino-read**.
 
 ---
 
@@ -276,6 +419,8 @@ Each extension automatically gets a logical ID based on its type. Multiple insta
 <script src="pardalote.js"></script>
 <script src="pardalote-pins-esp32-wrover-dev.js"></script>  <!-- optional -->
 <script src="servo.js"></script>       <!-- optional extensions -->
+<script src="stepper.js"></script>
+<script src="busServo.js"></script>
 <script src="neoPixel.js"></script>
 <script src="ultrasonic.js"></script>
 <script src="mpu.js"></script>
@@ -337,17 +482,32 @@ await arduino.pan.sweep(0, 180, 2000, 100); // more steps = smoother
 arduino.pan.write(90); // stops sweep immediately
 ```
 
+#### Timed moves
+
+`writeTimed(angle, duration)` moves to an angle over a set time — the Arduino interpolates on-board (smooth, no WiFi streaming) and fires `done` on arrival. It's the modern replacement for `sweep()`, and it's what lets PWM servos **arrive together** inside a [group](#groups).
+
+```javascript
+arduino.pan.writeTimed(120, 1500);   // move to 120° over 1.5 s
+arduino.pan.stop();                  // cancel a timed move, hold current angle
+
+arduino.pan.on('done', ({ angle }) => { /* arrived */ });
+```
+
+An immediate `write()` cancels an in-progress timed move.
+
 #### Events
 
 ```javascript
 arduino.pan.on('read',     ({ angle }) => { });
 arduino.pan.on('write',    ({ angle }) => { });
 arduino.pan.on('attached', ({ attached }) => { });
+arduino.pan.on('done', ({ angle }) => { });   // timed move reached target
 
 // Shorthand
 arduino.pan.onRead(fn);
 arduino.pan.onWrite(fn);
 arduino.pan.onAttached(fn);
+arduino.pan.onDone(fn);
 ```
 
 #### Configuration
@@ -356,6 +516,358 @@ arduino.pan.onAttached(fn);
 arduino.pan.setThrottle(20);   // min ms between writes (default 20)
 arduino.pan.setThreshold(1);   // min degrees change to send (default 1)
 arduino.pan.getState();        // snapshot of all servo state
+```
+
+---
+
+## Stepper
+
+Up to **6 steppers** simultaneously. Requires the AccelStepper library. Works with STEP/DIR drivers (**TMC2208**, **TMC2209**, **A4988**, **EasyDriver**) and 4-wire coil drivers (28BYJ-48 via ULN2003, bipolar via H-bridge).
+
+**Motion runs on the Arduino.** You send targets and motion profiles; the board generates the step pulses via `AccelStepper::run()`. You never stream individual steps over WiFi — that's why the API mirrors AccelStepper (non-blocking) rather than the built-in `Stepper` library, whose `step()` blocks and would stall the connection mid-move.
+
+```javascript
+arduino.add('x', new Stepper());
+arduino.add('y', new Stepper());
+
+arduino.on('ready', () => {
+    arduino.x.attach(2, 3, 4);      // STEP, DIR, EN (EN optional)
+    arduino.x.setMaxSpeed(1200);    // steps/sec
+    arduino.x.setAcceleration(600); // steps/sec²
+});
+```
+
+Give the motor its own power supply — don't run the coils off the board's 5 V rail.
+
+#### Attaching
+
+```javascript
+// STEP/DIR driver (TMC2208/2209, A4988, EasyDriver)
+arduino.x.attach(STEP, DIR);          // no enable pin
+arduino.x.attach(STEP, DIR, EN);      // with enable pin
+
+// Override invert defaults (EN is treated as active-LOW by default)
+arduino.x.attach(STEP, DIR, EN, { invertDir: true, invertEnable: false });
+
+// 4-wire (28BYJ-48 via ULN2003, or bipolar via H-bridge)
+arduino.x.attach4wire(8, 9, 10, 11);
+
+arduino.x.detach();                   // release the pins
+```
+
+#### Motion profile
+
+```javascript
+arduino.x.setMaxSpeed(1200);          // steps/sec ceiling for moves
+arduino.x.setAcceleration(600);       // steps/sec²
+```
+
+#### Position moves
+
+Accel-limited moves to an absolute or relative target. Chainable.
+
+```javascript
+arduino.x.moveTo(2000);               // absolute target (steps)
+arduino.x.move(-400);                 // relative to current position
+
+// Promise variants resolve when the move completes — handy for sequencing
+await arduino.x.moveToAsync(2000);
+await arduino.x.moveToAsync(0);
+```
+
+#### Timed moves
+
+`moveToTimed(target, duration)` runs a **constant-speed** move sized to arrive in about `duration` ms — the board computes the speed from its own exact position. This is what lets steppers **arrive together** inside a [group](#groups). (Constant speed skips the acceleration ramp, so keep the speed reasonable to avoid stalling; use `moveTo()` when arrival timing doesn't matter.)
+
+```javascript
+arduino.x.moveToTimed(3200, 2000);    // reach step 3200 in ~2 s
+```
+
+#### Continuous rotation
+
+Velocity mode spins at a constant speed until stopped. Sign sets direction.
+
+```javascript
+arduino.x.runSpeed(600);              // spin at 600 steps/sec
+arduino.x.runSpeed(-600);             // reverse
+arduino.x.stop();                     // decelerate to a stop
+```
+
+#### Reading position
+
+Same pattern as `analogRead()` / servo `read()` — the first call starts a poll, later calls return the cached value:
+
+```javascript
+arduino.x.read(100);                  // poll every 100 ms
+arduino.x.read(END);                  // stop polling
+
+let pos = arduino.x.position;         // cached currentPosition (steps) — feedback, needs polling
+arduino.x.target;                     // commanded destination (set immediately by moveTo)
+arduino.x.distanceToGo;               // steps remaining to target
+arduino.x.speed;                      // current speed (steps/sec)
+arduino.x.isRunning;                  // boolean
+```
+
+`target` vs `position`: `moveTo(n)` sets `target` to `n` **right away**, so you can show where it's headed without waiting for a poll; `position` is real feedback and only advances toward `target` as read polls (or the `done` event) arrive. `target` also self-corrects from read feedback — so it stays right even when the *Arduino sketch* issued the move.
+
+#### Zeroing and homing
+
+Steppers have no absolute position feedback. Move the motor to a reference point (by hand or against a stop), then declare it position 0:
+
+```javascript
+arduino.x.setPosition(0);             // "here is home"
+```
+
+Limit-switch homing is planned for a future version.
+
+#### Enable pin (hold torque)
+
+```javascript
+arduino.x.enable();                   // energise coils — hold position
+arduino.x.disable();                  // release coils — free to turn by hand
+```
+
+#### Soft limits
+
+Limits are enforced **on the Arduino** — every target is clamped to the range before the board acts on it. The browser (or an LLM driving it) can't send the motor past the set bounds.
+
+```javascript
+arduino.x.setLimits(-6400, 6400);     // clamp targets to [min, max]
+arduino.x.clearLimits();
+```
+
+#### Working in degrees or revolutions
+
+Convenience helpers convert to raw steps on the JS side. Set steps-per-revolution to match your microstepping first (a 1.8° motor at 16 microsteps = 200 × 16 = 3200):
+
+```javascript
+arduino.x.setStepsPerRev(200 * 16);
+arduino.x.moveToDegrees(90);          // absolute
+arduino.x.moveDegrees(-45);           // relative
+arduino.x.moveToRevolutions(2);
+arduino.x.moveRevolutions(0.5);
+```
+
+#### Events
+
+```javascript
+arduino.x.on('read', ({ position, distanceToGo, speed, isRunning }) => { });
+arduino.x.on('done', ({ position }) => { });   // position-mode target reached
+arduino.x.on('move', ({ target })   => { });   // a move was issued
+
+// Shorthand
+arduino.x.onRead(fn);
+arduino.x.onDone(fn);
+arduino.x.onMove(fn);
+```
+
+#### State snapshot
+
+```javascript
+arduino.x.getState();
+// { logicalId, interface, pins, enPin, attached,
+//   maxSpeed, acceleration, stepsPerRev,
+//   target, position, distanceToGo, speed, isRunning, limits, interval }
+```
+
+---
+
+## Bus Servo
+
+Up to **16 serial bus servos** on a single shared UART. Supports Feetech **ST / SMS** series (0–4095 counts, e.g. the **STS3215** used in the LeRobot SO-100/SO-101 arms) and **SC / SCS** series (0–1023 counts). Requires the Feetech/Waveshare `SCServo` library.
+
+Unlike PWM servos, every bus servo shares **one UART** and is addressed by a hardware **servo ID (1–253)**, and **positions are raw encoder counts, not degrees**. Wiring is via a Waveshare Serial Bus Servo Driver board (or equivalent) on a hardware serial port: UNO R4 WiFi → `Serial1` (D0/D1), ESP32 → `Serial1`/`Serial2`.
+
+```javascript
+arduino.add('shoulder', new BusServo());
+arduino.add('elbow',    new BusServo());
+
+arduino.on('ready', () => {
+    arduino.shoulder.attach(1);       // servo ID 1 (ST series by default)
+    arduino.elbow.attach(2);
+    arduino.shoulder.center();        // → 2048
+    arduino.elbow.write(3000);        // raw counts
+});
+```
+
+Give the servos their own power supply (6–7.4 V typical) — not the board's 5 V rail.
+
+#### Configuring the bus
+
+Optional — defaults to `Serial1` at 1 Mbps, brought up lazily on first `attach()`. Call once from any instance; it affects all bus servos.
+
+```javascript
+arduino.shoulder.configureBus({ serial: 1, baud: 1000000 });
+arduino.shoulder.configureBus({ rxPin: 18, txPin: 19 });   // ESP32 custom UART pins
+```
+
+#### Attaching
+
+```javascript
+arduino.shoulder.attach(1);         // servo ID 1, ST series (default)
+arduino.wrist.attach(3, 'SC');      // SC / SCS series (0–1023)
+arduino.shoulder.detach();          // releases torque
+```
+
+#### Position moves
+
+Raw counts (ST 0–4095, SC 0–1023). Optional per-move speed and acceleration.
+
+```javascript
+arduino.shoulder.write(2048);                        // centre
+arduino.shoulder.write(3000, { speed: 3000, acc: 50 });
+arduino.shoulder.center();                           // resolution / 2
+
+// Degree helpers — accurate for ST (4096/360°), nominal for SC
+arduino.shoulder.writeDegrees(90);
+let deg = arduino.shoulder.positionDegrees;
+
+// Default speed/acc used by group set() and moveTo()
+arduino.shoulder.setMoveDefaults(2400, 50);
+
+// Reach a position in about a set time (speed picked from the move distance)
+arduino.shoulder.writeTimed(3000, 1500);   // ~1.5 s
+
+arduino.shoulder.stop();                    // halt — hold the last-read position
+```
+
+#### Continuous rotation (wheel mode)
+
+```javascript
+arduino.wheel.setMode('wheel');
+arduino.wheel.writeSpeed(2000);     // sign sets direction
+arduino.wheel.writeSpeed(0);        // stop
+arduino.wheel.setMode('position');  // back to positioning
+```
+
+#### Torque — pose by hand and read back
+
+Disabling torque lets you move a joint by hand while `read()` streams the position — the basis of the teach-a-trajectory workflow in projects like LeRobot.
+
+```javascript
+arduino.shoulder.disableTorque();   // go limp
+arduino.shoulder.enableTorque();    // hold position
+```
+
+#### Reading feedback
+
+One bus transaction per poll returns position, velocity, load, voltage, temperature, and (ST) current.
+
+```javascript
+arduino.shoulder.read(120);         // poll every 120 ms
+arduino.shoulder.read(END);         // stop
+
+arduino.shoulder.position;          // raw counts — feedback, needs polling
+arduino.shoulder.target;            // commanded goal (set immediately by write)
+arduino.shoulder.velocity;
+arduino.shoulder.load;
+arduino.shoulder.voltage;           // volts
+arduino.shoulder.temperature;       // °C
+arduino.shoulder.current;           // raw units (ST only)
+
+arduino.shoulder.on('read', ({ position, velocity, load, voltage, temperature }) => { });
+```
+
+`target` vs `position`: `write(n)` sets `target` to `n` immediately (where you told it to go); `position` is real encoder feedback and only tracks toward `target` while you're polling. Unlike the stepper, bus-servo `target` is browser-side only — the servo has no board-replayed goal, so it isn't restored after a board reset.
+
+#### Limits and calibration
+
+Limits are written into the servo's own registers, so the **servo enforces them** even without the browser in the loop.
+
+```javascript
+arduino.shoulder.setLimits(1024, 3072);   // servo-enforced position range
+
+// Move the joint to its zero pose by hand (torque off), then:
+arduino.shoulder.calibrate();             // declare current position as centre
+```
+
+#### Setup utilities
+
+Servos ship as ID 1. To renumber, put a **single** servo on the bus and `setId()`, one at a time. `scan()` lists responding IDs; `ping()` checks one.
+
+```javascript
+await arduino.shoulder.scan(1, 20);       // → [1, 2, 3]
+await arduino.shoulder.ping(1);           // → true / false
+arduino.shoulder.setId(2);                // renumber (one servo on bus only!)
+```
+
+#### State snapshot
+
+```javascript
+arduino.shoulder.getState();
+// { logicalId, servoId, series, attached, mode, torque, resolution,
+//   target, position, velocity, load, voltage, temperature, current, limits, interval }
+```
+
+---
+
+## Groups
+
+A **group** is a named collection of actuators you drive together. `group.set()` writes every member in a **single WebSocket message**, and `group.moveTo()` coordinates a move so all members **arrive together**. Groups currently take **Servo**, **BusServo**, and **Stepper** members (pins and NeoPixels are planned).
+
+```javascript
+arduino.add('shoulder', new BusServo());
+arduino.add('elbow',    new BusServo());
+arduino.add('base',     new Stepper());
+arduino.add('wrist',    new Servo());
+
+arduino.on('ready', () => {
+    // ... attach each member ...
+    const arm = arduino.group('arm', {
+        shoulder: arduino.shoulder,
+        elbow:    arduino.elbow,
+        base:     arduino.base,
+        wrist:    arduino.wrist,
+    });
+});
+```
+
+The group is also available as `arduino.arm`.
+
+#### Coordinated set
+
+`set()` writes all named members at once. Every member's frame is packed into **one** WebSocket message, so the board applies them back-to-back within a single receive — they move together. Bus servos of the same series are additionally coalesced into a single hardware **SyncWrite** packet (a truly simultaneous latch).
+
+```javascript
+arm.set({ shoulder: 2048, elbow: 3000, base: 1600, wrist: 90 });
+```
+
+#### Reading
+
+```javascript
+arm.read(100);       // start polling every member at 100 ms
+arm.read();          // snapshot of cached values → { shoulder, elbow, base, wrist }
+arm.read(END);       // stop polling every member
+arm.values();        // same snapshot, no polling change
+```
+
+#### Arrive-together moves
+
+`moveTo(targets, { duration })` moves every member to its target so they all finish after about `duration` ms. Each actuator type does this with its own native mechanism:
+
+| Member | How it arrives together |
+|---|---|
+| Bus servo | one SyncWrite with per-servo speeds matched to distance |
+| PWM servo | on-board interpolation over the shared duration |
+| Stepper | constant-speed move, the board sizing speed from its own position |
+
+All of it still goes out in **one** batched message — including mixed groups.
+
+```javascript
+arm.moveTo({ shoulder: 3000, elbow: 1200, base: 0, wrist: 120 }, { duration: 1500 });
+
+// Promise variant resolves after `duration` (time-based, for sequencing)
+await arm.moveToAsync({ shoulder: 2048, elbow: 2048 }, { duration: 1000 });
+await arm.moveToAsync({ shoulder: 1000, elbow: 3000 }, { duration: 800 });
+```
+
+`duration` is approximate — it's the *arrival synchronisation* that's exact. For an accurate first move from an unknown pose, either poll `read()` first or start from a known pose (`center()` / `set()`), since `moveTo` measures distance from each member's last commanded position.
+
+#### State snapshot
+
+```javascript
+arm.getState();   // { name, members: { shoulder: {...}, base: {...}, ... } }
+arm.stop();       // stop polling every member
 ```
 
 ---
@@ -743,6 +1255,8 @@ Extensions are opt-in. Add the headers you need to your sketch:
 #include <Pardalote.h>
 #include <PardaloteServo.h>
 #include <PardaloteNeoPixel.h>
+// #include <PardaloteStepper.h>
+// #include <PardaloteBusServo.h>
 // #include <PardaloteUltrasonic.h>
 // #include <PardaloteMPU.h>
 // #define CAMERA_MODEL_XIAO_ESP32S3
@@ -769,6 +1283,8 @@ Pardalote/
 │           │   ├── Pardalote.h              # Public API
 │           │   ├── Pardalote.cpp            # PardaloteClass implementation
 │           │   ├── PardaloteServo.h         # Servo support (up to 8)
+│           │   ├── PardaloteStepper.h       # Stepper support (up to 6, AccelStepper)
+│           │   ├── PardaloteBusServo.h      # Serial bus servos (Feetech ST/SC, up to 16)
 │           │   ├── PardaloteNeoPixel.h      # NeoPixel support (up to 4 strips)
 │           │   ├── PardaloteUltrasonic.h    # Ultrasonic support (up to 4 sensors)
 │           │   ├── PardaloteMPU.h           # IMU support — MPU-6050/6500/9250/9255, LSM6DS3/DSOX
@@ -786,6 +1302,9 @@ Pardalote/
 │           └── examples/                    # IDE-visible example sketches
 │               ├── basic-LED/
 │               ├── servo/
+│               ├── stepper/
+│               ├── busservo/
+│               ├── arduino-read/
 │               ├── neopixel/
 │               ├── ultrasonic/
 │               ├── mpu/
@@ -794,6 +1313,8 @@ Pardalote/
 ├── pardalote-js/
 │   ├── pardalote.js                       # Core library — always include first
 │   ├── servo.js                           # Servo extension
+│   ├── stepper.js                         # Stepper extension
+│   ├── busServo.js                        # Serial bus servo extension
 │   ├── neoPixel.js                        # NeoPixel extension
 │   ├── ultrasonic.js                      # Ultrasonic extension
 │   ├── mpu.js                             # MPU / IMU extension
@@ -807,6 +1328,9 @@ Pardalote/
     ├── basic-p5js-example/         # analogRead with p5.js
     ├── servo-example/              # Servo sweep with p5.js
     ├── servo-test/                 # Servo angle control
+    ├── stepper-example/            # Stepper position + continuous control
+    ├── busservo-example/           # Feetech ST bus servos — pose & read back
+    ├── coordinated-motion-example/ # Two motors sweeping in unison via a group
     ├── neopixel-example/           # NeoPixel colour picker
     ├── ultrasonic-sensor-example/  # Distance visualisation
     ├── mpu-example/                # IMU 3D orientation visualiser
@@ -868,6 +1392,28 @@ On connect, the Arduino sends its full current state — pin modes, output value
 **"Servo jitters"**
 - Use `setThrottle()` to limit write frequency
 - Make sure the servo has adequate power (not just USB)
+
+**"Stepper doesn't move / moves the wrong way"**
+- Confirm the AccelStepper library is installed and the sketch has `#include <PardaloteStepper.h>`
+- Give the motor its own supply — the coils can't run off the board's 5 V
+- Nothing happens on `moveTo()`? Set a non-zero `setMaxSpeed()` and `setAcceleration()` first
+- Runs backwards: swap the direction with `attach(STEP, DIR, EN, { invertDir: true })`
+- Motor buzzes but won't turn: lower `setMaxSpeed()` — software step generation shares the CPU with WiFi and tops out at a few kHz
+- Won't move past a point: check you haven't hit a `setLimits()` boundary
+
+**"Stepper motor is hot / won't turn by hand when idle"**
+- That's the enable pin holding torque. Call `disable()` to release the coils; `enable()` to hold again
+
+**"Bus servo doesn't respond / `[NO RESPONSE]` in Serial Monitor"**
+- Confirm the `SCServo` library is installed and the sketch has `#include <PardaloteBusServo.h>`
+- Check the servo ID matches what you passed to `attach()` — run `scan()` to list responding IDs
+- Baud mismatch: bus servos default to 1,000,000; set it with `configureBus({ baud })` if yours differs
+- Wrong UART or swapped RX/TX — UNO R4 uses `Serial1` (D0/D1); on ESP32 set the pins with `configureBus({ rxPin, txPin })`
+- Give the servos their own 6–7.4 V supply with a common ground to the board
+- Using the wrong series: ST/SMS servos are `'ST'` (0–4095), SC/SCS are `'SC'` (0–1023)
+
+**"Two bus servos both moved when I set an ID"**
+- `setId()` addresses the current ID — with several servos sharing it, they all take the new ID. Renumber with a single servo on the bus at a time
 
 **"Ultrasonic returns -1"**
 - Increase timeout: `arduino.sonar.setTimeout(50)`

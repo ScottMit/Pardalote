@@ -71,7 +71,8 @@
 #define DEVICE_NEO_PIXEL      200
 #define DEVICE_SERVO          201
 #define DEVICE_ULTRASONIC     202
-// Future: DEVICE_OLED 203, DEVICE_MMWAVE 204
+// DEVICE_MPU 203, DEVICE_CAMERA 204 and DEVICE_STEPPER 205 are defined
+// alongside their command blocks lower in this file. Next free ID: 206.
 
 // -------------------------------------------------------------------
 // NeoPixel Commands (0x0A–0x13)
@@ -92,6 +93,12 @@
 #define CMD_SERVO_WRITE_MICROSECONDS 0x17  // params: [instanceId, microseconds]
 #define CMD_SERVO_READ               0x18  // params: [instanceId]  — response: [instanceId, angle]
 #define CMD_SERVO_ATTACHED           0x19  // params: [instanceId]  — response: [instanceId, 0|1]
+#define CMD_SERVO_WRITE_TIMED        0x1A  // params: [instanceId, angle, durationMs] — board interpolates
+#define CMD_SERVO_SYNC_TIMED         0x1B  // JS→Ar (global): [durationMs] + payload:
+                                           //   N × { logicalId u8, targetAngle u8 } (2 bytes each)
+                                           // All listed servos interpolate over the SAME duration → arrive together
+#define CMD_SERVO_STOP               0x1C  // params: [instanceId] — cancel a timed move, hold current angle
+#define CMD_SERVO_DONE          0x1D  // Ar→JS (unsolicited): [instanceId, angle] — timed move reached target
 
 // -------------------------------------------------------------------
 // Ultrasonic Commands (0x1E–0x27)
@@ -138,5 +145,94 @@
 // CMD_MPU_ATTACH and matched against SENSORS[i].name in PardaloteMPU.h.
 // See mpu.js MPU_MODELS for the JS-side list — row order in either table
 // is irrelevant; the two are coupled by name only.
+
+// -------------------------------------------------------------------
+// Stepper Device ID and Commands (0x33–0x40)
+// Motion executes on-board via AccelStepper::run() / runSpeed() in the
+// extension loop hook. JS sends targets and motion profiles; the board
+// generates the step pulses. Mirrors the AccelStepper API (non-blocking)
+// rather than the built-in Stepper library (whose step() blocks and
+// would stall Pardalote.run()).
+//
+// Requires the AccelStepper library (by Mike McCauley), installable via
+// Arduino IDE → Manage Libraries.
+// -------------------------------------------------------------------
+#define DEVICE_STEPPER  205
+
+#define CMD_STEPPER_ATTACH        0x33  // JS→Ar: [id, interface, pin1, pin2, pin3?, pin4?, enPin?, invertMask?]
+                                        // Ar→JS (announce): same shape, replays attach state
+#define CMD_STEPPER_DETACH        0x34  // JS→Ar: [id]
+#define CMD_STEPPER_MOVE_TO       0x35  // JS→Ar: [id, absPosition]   — position mode, accel profile
+#define CMD_STEPPER_MOVE          0x36  // JS→Ar: [id, relSteps]      — position mode, accel profile
+#define CMD_STEPPER_SET_MAX_SPEED 0x37  // JS→Ar: [id, speed]         — steps/sec ceiling (int or float)
+#define CMD_STEPPER_SET_ACCEL     0x38  // JS→Ar: [id, accel]         — steps/sec^2 (int or float)
+#define CMD_STEPPER_RUN_SPEED     0x39  // JS→Ar: [id, speed]         — velocity mode, continuous rotation
+#define CMD_STEPPER_STOP          0x3A  // JS→Ar: [id]                — decelerate to a stop
+#define CMD_STEPPER_SET_POSITION  0x3B  // JS→Ar: [id, position]      — setCurrentPosition (zero / manual home)
+#define CMD_STEPPER_ENABLE        0x3C  // JS→Ar: [id, enable]        — EN pin: 1=hold torque, 0=release
+#define CMD_STEPPER_SET_LIMITS    0x3D  // JS→Ar: [id, min, max, enabled] — soft position limits (safety)
+#define CMD_STEPPER_READ          0x3E  // JS→Ar: [id]
+                                        // Ar→JS: [id, position, distanceToGo, speed(f), isRunning]
+#define CMD_STEPPER_DONE          0x3F  // Ar→JS (unsolicited): [id, position] — position-mode target reached
+#define CMD_STEPPER_HOME          0x40  // JS→Ar: [id, dir, speed]    — RESERVED v2 (limit-switch homing)
+// Timed / coordinated moves. Numbered after the bus-servo block (0x41–0x4E)
+// because the 0x33–0x40 stepper block was full; dispatch is by (deviceId, cmd)
+// so the numeric gap is cosmetic only.
+#define CMD_STEPPER_MOVE_TIMED    0x4F  // JS→Ar: [id, target, durationMs] — arrive in ~duration (constant speed)
+#define CMD_STEPPER_SYNC_MOVE     0x50  // JS→Ar (global): [durationMs] + payload:
+                                        //   N × { logicalId u8, target i32 } (5 bytes each)
+                                        // Board computes matched speeds from its own positions → arrive together
+
+// Stepper interface types (param 1 of CMD_STEPPER_ATTACH) — match AccelStepper
+#define STEPPER_DRIVER     1   // STEP/DIR: pin1=STEP, pin2=DIR (TMC2208/2209, A4988, EasyDriver)
+#define STEPPER_FULL4WIRE  4   // 4 coil pins (28BYJ-48 via ULN2003, bare bipolar via H-bridge)
+
+// invertMask bits (optional param of CMD_STEPPER_ATTACH):
+//   bit0 = DIR inverted, bit1 = STEP inverted, bit2 = ENABLE inverted.
+// ENABLE defaults to inverted (mask 0x04) — most driver EN pins are active-LOW.
+
+// -------------------------------------------------------------------
+// Bus Servo Device ID and Commands (0x41–0x4E)
+// Serial-bus smart servos (Feetech ST/SMS and SC/SCS series) on a shared
+// half-duplex UART, e.g. via a Waveshare Serial Bus Servo Driver board.
+// Unlike PWM servos, all bus servos share ONE UART and are addressed by a
+// hardware servo ID (1–253); positions are raw encoder counts
+// (ST: 0–4095, SC: 0–1023), not degrees.
+//
+// Requires the Feetech/Waveshare SCServo library (SMS_STS + SCSCL classes),
+// which handles the packet protocol, half-duplex direction, and the
+// sign-magnitude encoding of the offset/speed registers for us.
+// -------------------------------------------------------------------
+#define DEVICE_BUSSERVO  206
+
+#define CMD_BUSSERVO_BUS_CONFIG  0x41  // JS→Ar (global): [serialIndex, baud, rxPin, txPin]
+#define CMD_BUSSERVO_ATTACH      0x42  // JS→Ar: [id, servoId, series]  series 0=ST(0-4095), 1=SC(0-1023)
+#define CMD_BUSSERVO_DETACH      0x43  // JS→Ar: [id]
+#define CMD_BUSSERVO_WRITE       0x44  // JS→Ar: [id, position, speed, acc]  position-mode goal (counts)
+#define CMD_BUSSERVO_WRITE_SPEED 0x45  // JS→Ar: [id, speed, acc]  wheel-mode speed (sign = direction)
+#define CMD_BUSSERVO_SET_MODE    0x46  // JS→Ar: [id, mode]  0=position, 1=wheel (continuous)
+#define CMD_BUSSERVO_TORQUE      0x47  // JS→Ar: [id, enable]  0 = go limp (hand-pose / read)
+#define CMD_BUSSERVO_READ        0x48  // JS→Ar: [id]
+                                       // Ar→JS: [id, position, speed, load, voltage, temp, current]
+#define CMD_BUSSERVO_SET_LIMITS  0x49  // JS→Ar: [id, minPos, maxPos]  (servo-enforced, EEPROM)
+#define CMD_BUSSERVO_CALIBRATE   0x4A  // JS→Ar: [id]  set current position as centre (homing offset)
+#define CMD_BUSSERVO_SET_ID      0x4B  // JS→Ar: [id, newServoId]  (renumber — one servo on the bus!)
+#define CMD_BUSSERVO_PING        0x4C  // JS→Ar: [id, servoId]  Ar→JS: [id, servoId, found]
+#define CMD_BUSSERVO_SCAN        0x4D  // JS→Ar: [firstId, lastId]  Ar→JS: [count, id1, id2, ...]
+#define CMD_BUSSERVO_SYNC_WRITE  0x4E  // JS→Ar (global): [series] + payload:
+                                       //   N × { servoId u8, position i16, speed u16, acc u8 } (6 bytes each)
+                                       // One hardware SyncWrite packet — all listed servos latch together.
+// (0x4F–0x50 are stepper timed commands, numbered after this block.)
+#define CMD_BUSSERVO_DONE        0x51  // Ar→JS (unsolicited): [id, position] — servo settled at its goal.
+                                       // The board polls the servo's Moving flag after a write and emits this
+                                       // when it stops, so bus servos get a done like steppers/servos.
+
+// Series (param 2 of CMD_BUSSERVO_ATTACH)
+#define BUSSERVO_SERIES_ST  0   // STS / SMS series — 0–4095 counts (STS3215 etc.)
+#define BUSSERVO_SERIES_SC  1   // SCS series      — 0–1023 counts (SCS15 etc.)
+
+// Operating mode (param of CMD_BUSSERVO_SET_MODE)
+#define BUSSERVO_MODE_POSITION  0
+#define BUSSERVO_MODE_WHEEL     1
 
 #endif

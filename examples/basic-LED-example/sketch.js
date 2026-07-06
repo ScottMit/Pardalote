@@ -5,8 +5,7 @@
 // GPL-3.0 License
 // ==============================================================
 
-// UPDATE THIS IP ADDRESS TO MATCH YOUR ARDUINO
-let ArduinoIP = '10.1.1.186';
+let ArduinoIP = '10.1.1.186';   // Change this to your Arduino's IP
 
 let arduino;
 let LEDpin = 13;

@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Motion sensor (IMU) — Pardalote examples</title>
+<meta name="description" content="Tilt the sensor and watch a 3D model rotate with it, live, in all three axes.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../css/site.css">
+</head>
+<body data-nav="examples">
+
+<nav class="site-nav speckled">
+  <a class="logo" href="../index.html">
+    <img src="../assets/logo.svg" width="30" height="30" alt="">
+    Pardalote
+  </a>
+  <div class="links">
+    <a data-nav="home" href="../index.html">Home</a>
+    <a data-nav="download" href="../download.html">Download</a>
+    <a data-nav="examples" href="index.html">Examples</a>
+    <a data-nav="reference" href="../reference/index.html">Reference</a>
+    <a href="https://github.com/scottmitchell/pardalote">GitHub</a>
+  </div>
+</nav>
+
+<div class="page-head speckled">
+  <div class="wrap">
+    <div class="crumb"><a href="index.html">Examples</a> / Motion sensor (IMU)</div>
+    <h1>Motion sensor (IMU)</h1>
+    <p>Tilt the sensor and watch a 3D model rotate with it, live, in all three axes.</p>
+  </div>
+</div>
+
+<div class="wrap md-layout">
+  <div class="md-body">
+    <div class="tags" style="margin-bottom:.5rem;"><span class="tag lvl-adv">Advanced</span><span class="tag">Sensors</span><span class="tag">p5.js</span></div>
+    <div class="ex-meta-row">
+      <a class="btn btn-dark" href="https://github.com/scottmitchell/pardalote/tree/main/examples/mpu-example">View the code on GitHub</a>
+    </div>
+    <div class="screenshot-slot">Screenshot / video of this example — coming soon</div>
+<h1 id="mpu--imu-example">MPU / IMU Example</h1>
+<p>A p5.js sketch that reads a 6-DOF inertial measurement unit and renders a live 3D model that rotates with the physical sensor in all three axes. Roll, pitch and yaw are shown on a HUD overlay.</p>
+
+  </div>
+    <div class="ex-code-cols">
+      <div class="code-ex scroll">
+        <div class="bar">mpu.ino — the Arduino side</div>
+        <pre><code><span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;Pardalote.h&gt;</span><span class="cp"></span>
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;PardaloteMPU.h&gt;</span><span class="cp"></span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">setup</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">begin</span><span class="p">();</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">loop</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">run</span><span class="p">();</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</code></pre>
+      </div>
+      <div class="code-ex scroll">
+        <div class="bar">sketch.js — the browser side</div>
+        <pre><code><span class="kd">const</span> <span class="nx">ARDUINO_IP</span> <span class="o">=</span> <span class="s1">&#39;10.1.1.186&#39;</span><span class="p">;</span>   <span class="c1">// Change this to your Arduino&#39;s IP</span>
+
+<span class="c1">// ── Tuning ───────────────────────────────────────────────────</span>
+<span class="kd">const</span> <span class="nx">POLL_MS</span> <span class="o">=</span> <span class="mf">50</span><span class="p">;</span>    <span class="c1">// sensor poll interval ms (50 Hz)</span>
+
+<span class="c1">// Complementary filter blend factor.</span>
+<span class="c1">// Higher → trusts gyro more (responsive but drifts over time).</span>
+<span class="c1">// Lower  → trusts accel more (stable but noisy during motion).</span>
+<span class="kd">const</span> <span class="nx">ALPHA</span> <span class="o">=</span> <span class="mf">0.96</span><span class="p">;</span>
+
+<span class="c1">// ── State ────────────────────────────────────────────────────</span>
+<span class="kd">let</span> <span class="nx">arduino</span><span class="p">;</span>
+<span class="kd">let</span> <span class="nx">roll</span>  <span class="o">=</span> <span class="mf">0</span><span class="p">;</span>   <span class="c1">// radians — rotation about sensor X axis (left / right tilt)</span>
+<span class="kd">let</span> <span class="nx">pitch</span> <span class="o">=</span> <span class="mf">0</span><span class="p">;</span>   <span class="c1">// radians — rotation about sensor Y axis (forward / back tilt)</span>
+<span class="kd">let</span> <span class="nx">yaw</span>   <span class="o">=</span> <span class="mf">0</span><span class="p">;</span>   <span class="c1">// radians — rotation about sensor Z axis (heading; drifts over time)</span>
+<span class="kd">let</span> <span class="nx">lastT</span> <span class="o">=</span> <span class="mf">0</span><span class="p">;</span>   <span class="c1">// timestamp of the previous reading (ms)</span>
+
+<span class="kd">let</span> <span class="nx">myModel</span><span class="p">;</span>
+
+<span class="kd">function</span> <span class="nx">preload</span><span class="p">()</span> <span class="p">{</span>
+  <span class="c1">// Load the 3D model and automatically normalize (scale) it</span>
+  <span class="c1">// Supported file formats are .obj and .stl</span>
+  <span class="nx">myModel</span> <span class="o">=</span> <span class="nx">loadModel</span><span class="p">(</span><span class="s1">&#39;lowest-poly-benchy-utkdesign.stl&#39;</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span> 
+<span class="p">}</span>
+
+<span class="c1">// ── p5 setup ─────────────────────────────────────────────────</span>
+<span class="kd">function</span> <span class="nx">setup</span><span class="p">()</span> <span class="p">{</span>
+    <span class="nx">createCanvas</span><span class="p">(</span><span class="nx">windowWidth</span><span class="p">,</span> <span class="nx">windowHeight</span><span class="p">,</span> <span class="nx">WEBGL</span><span class="p">);</span>
+    <span class="nx">pixelDensity</span><span class="p">(</span><span class="mf">1</span><span class="p">);</span>  <span class="c1">// avoid doubling work on retina displays</span>
+    <span class="nx">perspective</span><span class="p">(</span><span class="nx">PI</span> <span class="o">/</span> <span class="mf">4</span><span class="p">,</span> <span class="nx">width</span> <span class="o">/</span> <span class="nx">height</span><span class="p">,</span> <span class="mf">1</span><span class="p">,</span> <span class="mf">5000</span><span class="p">);</span>
+
+    <span class="nx">arduino</span> <span class="o">=</span> <span class="ow">new</span> <span class="nx">Arduino</span><span class="p">();</span>
+    <span class="nx">arduino</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;imu&#39;</span><span class="p">,</span> <span class="ow">new</span> <span class="nx">MPU</span><span class="p">(</span><span class="s1">&#39;6050&#39;</span><span class="p">));</span>
+
+    <span class="nx">arduino</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;ready&#39;</span><span class="p">,</span> <span class="p">()</span> <span class="p">=&gt;</span> <span class="p">{</span>
+        <span class="nx">setStatus</span><span class="p">(</span><span class="kc">true</span><span class="p">);</span>
+        <span class="nx">arduino</span><span class="p">.</span><span class="nx">imu</span><span class="p">.</span><span class="nx">attach</span><span class="p">(</span><span class="mh">0x68</span><span class="p">);</span>     <span class="c1">// change to 0x69 if AD0 is HIGH</span>
+        <span class="nx">arduino</span><span class="p">.</span><span class="nx">imu</span><span class="p">.</span><span class="nx">onRead</span><span class="p">(</span><span class="nx">onRead</span><span class="p">);</span>
+        <span class="nx">arduino</span><span class="p">.</span><span class="nx">imu</span><span class="p">.</span><span class="nx">onCalibrate</span><span class="p">(</span><span class="nx">onCalibrate</span><span class="p">);</span>
+        <span class="nx">arduino</span><span class="p">.</span><span class="nx">imu</span><span class="p">.</span><span class="nx">read</span><span class="p">(</span><span class="nx">POLL_MS</span><span class="p">);</span>
+    <span class="p">});</span>
+
+    <span class="nx">arduino</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;disconnect&#39;</span><span class="p">,</span> <span class="p">()</span> <span class="p">=&gt;</span> <span class="nx">setStatus</span><span class="p">(</span><span class="kc">false</span><span class="p">));</span>
+    <span class="nx">arduino</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;connect&#39;</span><span class="p">,</span>    <span class="p">()</span> <span class="p">=&gt;</span> <span class="nx">setStatus</span><span class="p">(</span><span class="kc">false</span><span class="p">));</span>  <span class="c1">// socket open, not yet ready</span>
+
+    <span class="nx">arduino</span><span class="p">.</span><span class="nx">connect</span><span class="p">(</span><span class="nx">ARDUINO_IP</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="c1">// ── Main draw loop ────────────────────────────────────────────</span>
+<span class="kd">function</span> <span class="nx">draw</span><span class="p">()</span> <span class="p">{</span>
+    <span class="nx">background</span><span class="p">(</span><span class="mf">16</span><span class="p">,</span> <span class="mf">18</span><span class="p">,</span> <span class="mf">26</span><span class="p">);</span>
+
+    <span class="c1">// Camera — slightly above and to the right for a natural 3D view</span>
+    <span class="nx">camera</span><span class="p">(</span><span class="mf">180</span><span class="p">,</span> <span class="o">-</span><span class="mf">220</span><span class="p">,</span> <span class="mf">560</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="mf">1</span><span class="p">,</span> <span class="mf">0</span><span class="p">);</span>
+
+    <span class="c1">// Scene lighting</span>
+    <span class="nx">ambientLight</span><span class="p">(</span><span class="mf">65</span><span class="p">);</span>
+    <span class="nx">directionalLight</span><span class="p">(</span><span class="mf">210</span><span class="p">,</span> <span class="mf">220</span><span class="p">,</span> <span class="mf">235</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.4</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.9</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.5</span><span class="p">);</span>  <span class="c1">// soft top-left key</span>
+    <span class="nx">pointLight</span><span class="p">(</span><span class="mf">255</span><span class="p">,</span> <span class="mf">235</span><span class="p">,</span> <span class="mf">160</span><span class="p">,</span> <span class="mf">220</span><span class="p">,</span> <span class="o">-</span><span class="mf">180</span><span class="p">,</span> <span class="mf">280</span><span class="p">);</span>            <span class="c1">// warm front-right fill</span>
+
+    <span class="c1">// Apply sensor orientation. Aerospace convention: yaw → pitch → roll.</span>
+    <span class="c1">// Adjust signs here if the board rotates the wrong way on screen:</span>
+    <span class="c1">//   flip rotateY → rotateY(yaw)</span>
+    <span class="c1">//   flip rotateX → rotateX(-pitch)</span>
+    <span class="c1">//   flip rotateZ → rotateZ(roll)</span>
+    <span class="nx">rotateY</span><span class="p">(</span><span class="nx">yaw</span><span class="p">);</span>
+    <span class="nx">rotateX</span><span class="p">(</span><span class="o">-</span><span class="nx">roll</span><span class="p">);</span>
+    <span class="nx">rotateZ</span><span class="p">(</span><span class="nx">pitch</span><span class="p">);</span>
+
+    <span class="nx">drawPlane</span><span class="p">();</span>
+
+    <span class="c1">// Render the loaded model</span>
+    <span class="nx">translate</span><span class="p">(</span><span class="mf">0</span><span class="p">,</span> <span class="o">-</span><span class="mf">65</span><span class="p">,</span> <span class="mf">0</span><span class="p">);</span>
+    <span class="c1">// rotate model to sit upright</span>
+    <span class="nx">rotateX</span><span class="p">(</span><span class="nx">PI</span><span class="o">/</span><span class="mf">2</span><span class="p">);</span>
+    <span class="nx">model</span><span class="p">(</span><span class="nx">myModel</span><span class="p">);</span>
+
+    <span class="nx">drawAxes</span><span class="p">(</span><span class="mf">200</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="c1">// ── 3D model ──────────────────────────────────────────────────</span>
+<span class="kd">function</span> <span class="nx">drawPlane</span><span class="p">()</span> <span class="p">{</span>
+    <span class="nx">push</span><span class="p">();</span>
+    <span class="nx">noStroke</span><span class="p">();</span>
+
+    <span class="c1">// PCB substrate — flat blue surface</span>
+    <span class="nx">fill</span><span class="p">(</span><span class="mf">50</span><span class="p">,</span> <span class="mf">100</span><span class="p">,</span> <span class="mf">200</span><span class="p">);</span>
+    <span class="nx">box</span><span class="p">(</span><span class="mf">310</span><span class="p">,</span> <span class="mf">12</span><span class="p">,</span> <span class="mf">248</span><span class="p">);</span>
+
+    <span class="c1">// Orientation marker — gold sphere at the +X edge of the board.</span>
+    <span class="c1">// Represents the axis-1 direction printed on the MPU-6050 silkscreen.</span>
+    <span class="nx">translate</span><span class="p">(</span><span class="mf">130</span><span class="p">,</span> <span class="o">-</span><span class="mf">6</span><span class="p">,</span> <span class="mf">80</span><span class="p">);</span>
+    <span class="nx">fill</span><span class="p">(</span><span class="mf">255</span><span class="p">,</span> <span class="mf">205</span><span class="p">,</span> <span class="mf">50</span><span class="p">);</span>
+    <span class="nx">sphere</span><span class="p">(</span><span class="mf">8</span><span class="p">);</span>
+
+    <span class="nx">pop</span><span class="p">();</span>
+<span class="p">}</span>
+
+<span class="c1">// Coordinate axes — rotate with the board so you can see tilt direction.</span>
+<span class="c1">// Red = X   Green = Y   Blue = Z  (sensor convention)</span>
+<span class="kd">function</span> <span class="nx">drawAxes</span><span class="p">(</span><span class="nx">len</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nx">push</span><span class="p">();</span>
+    <span class="nx">strokeWeight</span><span class="p">(</span><span class="mf">2</span><span class="p">);</span>
+    <span class="nx">noFill</span><span class="p">();</span>
+
+    <span class="c1">// X axis — along board long edge</span>
+    <span class="nx">stroke</span><span class="p">(</span><span class="mf">210</span><span class="p">,</span> <span class="mf">55</span><span class="p">,</span> <span class="mf">55</span><span class="p">);</span>
+    <span class="nx">line</span><span class="p">(</span><span class="mf">0</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="nx">len</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="mf">0</span><span class="p">);</span>
+
+    <span class="c1">// Y axis — along board short edge</span>
+    <span class="c1">// p5.js Y is down, so −Y in model space = up on screen</span>
+    <span class="nx">stroke</span><span class="p">(</span><span class="mf">55</span><span class="p">,</span> <span class="mf">195</span><span class="p">,</span> <span class="mf">75</span><span class="p">);</span>
+    <span class="nx">line</span><span class="p">(</span><span class="mf">0</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="o">-</span><span class="nx">len</span><span class="p">,</span> <span class="mf">0</span><span class="p">);</span>
+
+    <span class="c1">// Z axis — out of the board top surface</span>
+    <span class="c1">// Sensor Z points up, which is p5&#39;s −Y when the board is flat;</span>
+    <span class="c1">// we show it going away from the camera (into the scene) to avoid</span>
+    <span class="c1">// overlapping the Y axis.</span>
+    <span class="nx">stroke</span><span class="p">(</span><span class="mf">55</span><span class="p">,</span> <span class="mf">95</span><span class="p">,</span> <span class="mf">210</span><span class="p">);</span>
+    <span class="nx">line</span><span class="p">(</span><span class="mf">0</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="o">-</span><span class="nx">len</span><span class="p">);</span>
+
+    <span class="nx">pop</span><span class="p">();</span>
+<span class="p">}</span>
+
+<span class="c1">// ── Sensor callback ───────────────────────────────────────────</span>
+<span class="kd">function</span> <span class="nx">onRead</span><span class="p">({</span> <span class="nx">accel</span><span class="p">,</span> <span class="nx">gyro</span><span class="p">,</span> <span class="nx">temp</span> <span class="p">})</span> <span class="p">{</span>
+    <span class="kd">const</span> <span class="nx">now</span> <span class="o">=</span> <span class="nx">millis</span><span class="p">();</span>
+    <span class="kd">const</span> <span class="nx">dt</span>  <span class="o">=</span> <span class="nx">lastT</span> <span class="o">?</span> <span class="p">(</span><span class="nx">now</span> <span class="o">-</span> <span class="nx">lastT</span><span class="p">)</span> <span class="o">/</span> <span class="mf">1000</span> <span class="o">:</span> <span class="mf">0</span><span class="p">;</span>
+    <span class="nx">lastT</span> <span class="o">=</span> <span class="nx">now</span><span class="p">;</span>
+
+    <span class="c1">// Tilt angles from gravity — good long-term reference, noisy during motion.</span>
+    <span class="kd">const</span> <span class="nx">aRoll</span>  <span class="o">=</span> <span class="nb">Math</span><span class="p">.</span><span class="nx">atan2</span><span class="p">(</span><span class="nx">accel</span><span class="p">.</span><span class="nx">y</span><span class="p">,</span> <span class="nx">accel</span><span class="p">.</span><span class="nx">z</span><span class="p">);</span>
+    <span class="kd">const</span> <span class="nx">aPitch</span> <span class="o">=</span> <span class="nb">Math</span><span class="p">.</span><span class="nx">atan2</span><span class="p">(</span><span class="o">-</span><span class="nx">accel</span><span class="p">.</span><span class="nx">x</span><span class="p">,</span> <span class="nb">Math</span><span class="p">.</span><span class="nx">sqrt</span><span class="p">(</span><span class="nx">accel</span><span class="p">.</span><span class="nx">y</span> <span class="o">**</span> <span class="mf">2</span> <span class="o">+</span> <span class="nx">accel</span><span class="p">.</span><span class="nx">z</span> <span class="o">**</span> <span class="mf">2</span><span class="p">));</span>
+
+    <span class="c1">// Complementary filter:</span>
+    <span class="c1">//   gyro integration gives fast, accurate response to rotation</span>
+    <span class="c1">//   accel tilt slowly corrects gyro drift</span>
+    <span class="c1">//   gyro is in °/s — convert to rad/s before integrating</span>
+    <span class="kd">const</span> <span class="nx">toRad</span> <span class="o">=</span> <span class="nb">Math</span><span class="p">.</span><span class="nx">PI</span> <span class="o">/</span> <span class="mf">180</span><span class="p">;</span>
+    <span class="nx">roll</span>  <span class="o">=</span> <span class="nx">ALPHA</span> <span class="o">*</span> <span class="p">(</span><span class="nx">roll</span>  <span class="o">+</span> <span class="nx">gyro</span><span class="p">.</span><span class="nx">x</span> <span class="o">*</span> <span class="nx">toRad</span> <span class="o">*</span> <span class="nx">dt</span><span class="p">)</span> <span class="o">+</span> <span class="p">(</span><span class="mf">1</span> <span class="o">-</span> <span class="nx">ALPHA</span><span class="p">)</span> <span class="o">*</span> <span class="nx">aRoll</span><span class="p">;</span>
+    <span class="nx">pitch</span> <span class="o">=</span> <span class="nx">ALPHA</span> <span class="o">*</span> <span class="p">(</span><span class="nx">pitch</span> <span class="o">+</span> <span class="nx">gyro</span><span class="p">.</span><span class="nx">y</span> <span class="o">*</span> <span class="nx">toRad</span> <span class="o">*</span> <span class="nx">dt</span><span class="p">)</span> <span class="o">+</span> <span class="p">(</span><span class="mf">1</span> <span class="o">-</span> <span class="nx">ALPHA</span><span class="p">)</span> <span class="o">*</span> <span class="nx">aPitch</span><span class="p">;</span>
+    <span class="c1">// Yaw — pure gyro integration. The MPU-6050 has no magnetometer, so</span>
+    <span class="c1">// there&#39;s no gravity-like reference to correct heading drift. Expect a</span>
+    <span class="c1">// few degrees per minute of drift; press &#39;c&#39; to recalibrate and zero.</span>
+    <span class="nx">yaw</span>  <span class="o">+=</span> <span class="nx">gyro</span><span class="p">.</span><span class="nx">z</span> <span class="o">*</span> <span class="nx">toRad</span> <span class="o">*</span> <span class="nx">dt</span><span class="p">;</span>
+
+    <span class="c1">// Update HUD text</span>
+    <span class="kd">const</span> <span class="nx">rollDeg</span>  <span class="o">=</span> <span class="nx">degrees</span><span class="p">(</span><span class="nx">roll</span><span class="p">);</span>
+    <span class="kd">const</span> <span class="nx">pitchDeg</span> <span class="o">=</span> <span class="nx">degrees</span><span class="p">(</span><span class="nx">pitch</span><span class="p">);</span>
+    <span class="c1">// Wrap yaw to ±180° so it doesn&#39;t grow unbounded as the gyro integrates.</span>
+    <span class="kd">const</span> <span class="nx">yawDeg</span>   <span class="o">=</span> <span class="p">((</span><span class="nx">degrees</span><span class="p">(</span><span class="nx">yaw</span><span class="p">)</span> <span class="o">%</span> <span class="mf">360</span><span class="p">)</span> <span class="o">+</span> <span class="mf">540</span><span class="p">)</span> <span class="o">%</span> <span class="mf">360</span> <span class="o">-</span> <span class="mf">180</span><span class="p">;</span>
+
+    <span class="nx">id</span><span class="p">(</span><span class="s1">&#39;roll-val&#39;</span><span class="p">).</span><span class="nx">textContent</span>  <span class="o">=</span> <span class="nx">fmt</span><span class="p">(</span><span class="nx">rollDeg</span><span class="p">);</span>
+    <span class="nx">id</span><span class="p">(</span><span class="s1">&#39;pitch-val&#39;</span><span class="p">).</span><span class="nx">textContent</span> <span class="o">=</span> <span class="nx">fmt</span><span class="p">(</span><span class="nx">pitchDeg</span><span class="p">);</span>
+    <span class="nx">id</span><span class="p">(</span><span class="s1">&#39;yaw-val&#39;</span><span class="p">).</span><span class="nx">textContent</span>   <span class="o">=</span> <span class="nx">fmt</span><span class="p">(</span><span class="nx">yawDeg</span><span class="p">);</span>
+    <span class="nx">id</span><span class="p">(</span><span class="s1">&#39;accel&#39;</span><span class="p">).</span><span class="nx">textContent</span> <span class="o">=</span>
+        <span class="sb">`X </span><span class="si">${</span><span class="nx">fmtV</span><span class="p">(</span><span class="nx">accel</span><span class="p">.</span><span class="nx">x</span><span class="p">)</span><span class="si">}</span><span class="sb">  Y </span><span class="si">${</span><span class="nx">fmtV</span><span class="p">(</span><span class="nx">accel</span><span class="p">.</span><span class="nx">y</span><span class="p">)</span><span class="si">}</span><span class="sb">  Z </span><span class="si">${</span><span class="nx">fmtV</span><span class="p">(</span><span class="nx">accel</span><span class="p">.</span><span class="nx">z</span><span class="p">)</span><span class="si">}</span><span class="sb">`</span><span class="p">;</span>
+    <span class="nx">id</span><span class="p">(</span><span class="s1">&#39;gyro&#39;</span><span class="p">).</span><span class="nx">textContent</span> <span class="o">=</span>
+        <span class="sb">`X </span><span class="si">${</span><span class="nx">fmtV</span><span class="p">(</span><span class="nx">gyro</span><span class="p">.</span><span class="nx">x</span><span class="p">,</span> <span class="mf">1</span><span class="p">)</span><span class="si">}</span><span class="sb">  Y </span><span class="si">${</span><span class="nx">fmtV</span><span class="p">(</span><span class="nx">gyro</span><span class="p">.</span><span class="nx">y</span><span class="p">,</span> <span class="mf">1</span><span class="p">)</span><span class="si">}</span><span class="sb">  Z </span><span class="si">${</span><span class="nx">fmtV</span><span class="p">(</span><span class="nx">gyro</span><span class="p">.</span><span class="nx">z</span><span class="p">,</span> <span class="mf">1</span><span class="p">)</span><span class="si">}</span><span class="sb">`</span><span class="p">;</span>
+    <span class="nx">id</span><span class="p">(</span><span class="s1">&#39;temp&#39;</span><span class="p">).</span><span class="nx">textContent</span> <span class="o">=</span>
+        <span class="sb">`TEMP  </span><span class="si">${</span><span class="nx">temp</span><span class="p">.</span><span class="nx">toFixed</span><span class="p">(</span><span class="mf">1</span><span class="p">)</span><span class="si">}</span><span class="sb"> °C`</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="kd">function</span> <span class="nx">onCalibrate</span><span class="p">()</span> <span class="p">{</span>
+    <span class="c1">// Reset the filter so stale angles don&#39;t persist after calibration.</span>
+    <span class="c1">// Yaw gets zeroed too — it has no long-term reference, so &#39;c&#39; is the</span>
+    <span class="c1">// only way to bring it back to a known heading.</span>
+    <span class="nx">roll</span> <span class="o">=</span> <span class="mf">0</span><span class="p">;</span> <span class="nx">pitch</span> <span class="o">=</span> <span class="mf">0</span><span class="p">;</span> <span class="nx">yaw</span> <span class="o">=</span> <span class="mf">0</span><span class="p">;</span> <span class="nx">lastT</span> <span class="o">=</span> <span class="mf">0</span><span class="p">;</span>
+    <span class="nx">id</span><span class="p">(</span><span class="s1">&#39;cal-msg&#39;</span><span class="p">).</span><span class="nx">textContent</span> <span class="o">=</span> <span class="s1">&#39;Calibration complete&#39;</span><span class="p">;</span>
+    <span class="nx">setTimeout</span><span class="p">(()</span> <span class="p">=&gt;</span> <span class="p">{</span> <span class="nx">id</span><span class="p">(</span><span class="s1">&#39;cal-msg&#39;</span><span class="p">).</span><span class="nx">textContent</span> <span class="o">=</span> <span class="s1">&#39;&#39;</span><span class="p">;</span> <span class="p">},</span> <span class="mf">3000</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="c1">// ── UI ────────────────────────────────────────────────────────</span>
+<span class="kd">function</span> <span class="nx">doCalibrate</span><span class="p">()</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="nx">arduino</span><span class="o">?</span><span class="p">.</span><span class="nx">imu</span><span class="o">?</span><span class="p">.</span><span class="nx">isAttached</span><span class="p">)</span> <span class="k">return</span><span class="p">;</span>
+    <span class="nx">id</span><span class="p">(</span><span class="s1">&#39;cal-msg&#39;</span><span class="p">).</span><span class="nx">textContent</span> <span class="o">=</span> <span class="s1">&#39;Calibrating… keep sensor flat and still&#39;</span><span class="p">;</span>
+    <span class="nx">arduino</span><span class="p">.</span><span class="nx">imu</span><span class="p">.</span><span class="nx">calibrate</span><span class="p">(</span><span class="mf">200</span><span class="p">);</span>  <span class="c1">// 200 samples ≈ 400 ms</span>
+<span class="p">}</span>
+
+<span class="kd">function</span> <span class="nx">setStatus</span><span class="p">(</span><span class="nx">connected</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kd">const</span> <span class="nx">el</span> <span class="o">=</span> <span class="nx">id</span><span class="p">(</span><span class="s1">&#39;status&#39;</span><span class="p">);</span>
+    <span class="nx">el</span><span class="p">.</span><span class="nx">textContent</span> <span class="o">=</span> <span class="nx">connected</span> <span class="o">?</span> <span class="s1">&#39;● CONNECTED&#39;</span> <span class="o">:</span> <span class="s1">&#39;● DISCONNECTED&#39;</span><span class="p">;</span>
+    <span class="nx">el</span><span class="p">.</span><span class="nx">className</span>   <span class="o">=</span> <span class="nx">connected</span> <span class="o">?</span> <span class="s1">&#39;connected&#39;</span>   <span class="o">:</span> <span class="s1">&#39;disconnected&#39;</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="kd">function</span> <span class="nx">keyPressed</span><span class="p">()</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="nx">key</span> <span class="o">===</span> <span class="s1">&#39;c&#39;</span> <span class="o">||</span> <span class="nx">key</span> <span class="o">===</span> <span class="s1">&#39;C&#39;</span><span class="p">)</span> <span class="nx">doCalibrate</span><span class="p">();</span>
+<span class="p">}</span>
+
+<span class="kd">function</span> <span class="nx">windowResized</span><span class="p">()</span> <span class="p">{</span>
+    <span class="nx">resizeCanvas</span><span class="p">(</span><span class="nx">windowWidth</span><span class="p">,</span> <span class="nx">windowHeight</span><span class="p">);</span>
+    <span class="nx">perspective</span><span class="p">(</span><span class="nx">PI</span> <span class="o">/</span> <span class="mf">4</span><span class="p">,</span> <span class="nx">width</span> <span class="o">/</span> <span class="nx">height</span><span class="p">,</span> <span class="mf">1</span><span class="p">,</span> <span class="mf">5000</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="c1">// ── Helpers ───────────────────────────────────────────────────</span>
+<span class="kd">const</span> <span class="nx">id</span> <span class="o">=</span> <span class="nx">sel</span> <span class="p">=&gt;</span> <span class="nb">document</span><span class="p">.</span><span class="nx">getElementById</span><span class="p">(</span><span class="nx">sel</span><span class="p">);</span>
+
+<span class="c1">// Right-align a 1-decimal number in a fixed-width field (incl. sign space)</span>
+<span class="kd">function</span> <span class="nx">fmt</span><span class="p">(</span><span class="nx">n</span><span class="p">,</span> <span class="nx">width</span> <span class="o">=</span> <span class="mf">7</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="p">(</span><span class="nx">n</span> <span class="o">&gt;=</span> <span class="mf">0</span> <span class="o">?</span> <span class="s1">&#39; &#39;</span> <span class="o">:</span> <span class="s1">&#39;&#39;</span><span class="p">)</span> <span class="o">+</span> <span class="nx">n</span><span class="p">.</span><span class="nx">toFixed</span><span class="p">(</span><span class="mf">1</span><span class="p">).</span><span class="nx">padStart</span><span class="p">(</span><span class="nx">width</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="c1">// Value with explicit sign and 3 decimal places — for sensor readouts</span>
+<span class="kd">function</span> <span class="nx">fmtV</span><span class="p">(</span><span class="nx">n</span><span class="p">,</span> <span class="nx">dp</span> <span class="o">=</span> <span class="mf">3</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="p">(</span><span class="nx">n</span> <span class="o">&gt;=</span> <span class="mf">0</span> <span class="o">?</span> <span class="s1">&#39;+&#39;</span> <span class="o">:</span> <span class="s1">&#39;&#39;</span><span class="p">)</span> <span class="o">+</span> <span class="nx">n</span><span class="p">.</span><span class="nx">toFixed</span><span class="p">(</span><span class="nx">dp</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre>
+      </div>
+    </div>
+  <div class="md-body">
+<h2 id="what-this-example-does">What This Example Does</h2>
+<ul>
+<li>Polls the IMU at 20 Hz (every 50 ms by default — gentle on UNO R4 WiFi and older ESP32 boards)</li>
+<li>Computes <strong>roll</strong> and <strong>pitch</strong> via a complementary filter that combines gyroscope integration (fast response) with accelerometer tilt (gravity-anchored drift correction)</li>
+<li>Computes <strong>yaw</strong> via pure gyro integration. The MPU-6050 has no magnetometer, so there's no gravity-like reference for heading — yaw will drift a few degrees per minute and only <code>c</code>-calibration resets it</li>
+<li>Renders a 3D model in WEBGL that rotates to match the physical sensor orientation in all three axes</li>
+<li>Displays roll, pitch, yaw, accelerometer, gyroscope, and temperature readings live with color-coded axis labels (red/green/blue → X/Y/Z)</li>
+<li>Supports in-browser calibration with a button or the <code>C</code> key</li>
+</ul>
+<h2 id="hardware-requirements">Hardware Requirements</h2>
+<ul>
+<li><strong>Arduino UNO R4 WiFi</strong> or <strong>ESP32 development board</strong></li>
+<li><strong>MPU-6050</strong> (or other supported IMU — see below)</li>
+<li>Arduino and browser must be on the same WiFi network</li>
+</ul>
+<h3 id="wiring-mpu-6050--arduino">Wiring (MPU-6050 → Arduino)</h3>
+<table>
+<thead>
+<tr>
+<th>Sensor pin</th>
+<th>Arduino</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>VCC</td>
+<td>3.3 V</td>
+</tr>
+<tr>
+<td>GND</td>
+<td>GND</td>
+</tr>
+<tr>
+<td>SDA</td>
+<td>SDA pin</td>
+</tr>
+<tr>
+<td>SCL</td>
+<td>SCL pin</td>
+</tr>
+<tr>
+<td>AD0</td>
+<td>GND (sets address to 0x68)</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Note:</strong> Most Arduino boards have dedicated SDA and SCL pins. On the UNO R4 WiFi these are A4/A5; on ESP32 boards they vary — check your pinout. On ESP32 you can use any GPIO pair with the optional <code>sda</code> / <code>scl</code> params.</p>
+</blockquote>
+<h3 id="arduino-libraries">Arduino libraries</h3>
+<p>Install via Arduino IDE → Tools → Manage Libraries:</p>
+<ul>
+<li><code>WebSocketsServer</code> (by Markus Sattler)</li>
+</ul>
+<p>No separate IMU library is required — <code>PardaloteMPU.h</code> reads the sensor registers directly over I2C.</p>
+<p>Install Pardalote itself by copying <code>pardalote-arduino/library/Pardalote/</code> into your Arduino libraries folder (see the <a href="../reference/installation.html">top-level README</a>).</p>
+<h2 id="supported-sensors">Supported Sensors</h2>
+<p>The <code>MPU</code> extension supports multiple sensor families. Pass the model name to the constructor:</p>
+<table>
+<thead>
+<tr>
+<th>Model string</th>
+<th>Chip</th>
+<th>DOF</th>
+<th>Default address</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>'6050'</code></td>
+<td>InvenSense MPU-6050</td>
+<td>6</td>
+<td>0x68</td>
+</tr>
+<tr>
+<td><code>'6500'</code></td>
+<td>InvenSense MPU-6500</td>
+<td>6</td>
+<td>0x68</td>
+</tr>
+<tr>
+<td><code>'9250'</code></td>
+<td>InvenSense MPU-9250</td>
+<td>9</td>
+<td>0x68</td>
+</tr>
+<tr>
+<td><code>'9255'</code></td>
+<td>InvenSense MPU-9255</td>
+<td>9</td>
+<td>0x68</td>
+</tr>
+<tr>
+<td><code>'LSM6DS3'</code></td>
+<td>STMicro LSM6DS3</td>
+<td>6</td>
+<td>0x6A</td>
+</tr>
+<tr>
+<td><code>'LSM6DSOX'</code></td>
+<td>STMicro LSM6DSOX</td>
+<td>6</td>
+<td>0x6A</td>
+</tr>
+</tbody>
+</table>
+<p>The I2C address can be changed with the AD0 (MPU) or SA0 (LSM6) pin — attach HIGH to shift it up by 1.</p>
+<h2 id="quick-start">Quick Start</h2>
+<h3 id="1-upload-the-firmware">1. Upload the firmware</h3>
+<ol>
+<li>
+<p>In Arduino IDE: <strong>File → Examples → Pardalote → mpu</strong>. The sketch is two lines:</p>
+<pre><code><span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;Pardalote.h&gt;</span><span class="cp"></span>
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;PardaloteMPU.h&gt;</span><span class="cp"></span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">setup</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">begin</span><span class="p">();</span><span class="w"> </span><span class="p">}</span><span class="w"></span>
+<span class="kt">void</span><span class="w"> </span><span class="nf">loop</span><span class="p">()</span><span class="w">  </span><span class="p">{</span><span class="w"> </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">run</span><span class="p">();</span><span class="w">   </span><span class="p">}</span><span class="w"></span>
+</code></pre>
+</li>
+<li>
+<p>Select your board and upload</p>
+</li>
+<li>
+<p>Open the Serial Monitor at 115200 baud — on first boot Pardalote asks for your WiFi credentials:</p>
+<pre><code>=== Pardalote ===
+No WiFi networks stored.
+=== WiFi Configuration ===
+[a]dd  [d]elete  [c]lear all  [s]how  [x] exit
+&gt; a
+SSID: YourWiFiName
+Password: ********
+Saved: YourWiFiName
+&gt; x
+</code></pre>
+<p>Credentials are saved to EEPROM and survive re-uploads. Press <code>w</code> within 5 seconds of any boot to update them.</p>
+<p><strong>Prefer compile-time credentials?</strong> Create a <code>secrets.h</code> file in the sketch folder with:</p>
+<pre><code><span class="cp">#define SECRET_SSID &quot;YourWiFiName&quot;</span>
+<span class="cp">#define SECRET_PASS &quot;YourWiFiPassword&quot;</span>
+</code></pre>
+</li>
+<li>
+<p>Find your Arduino's IP address:</p>
+<ul>
+<li><strong>UNO R4 WiFi:</strong> scrolls across the LED matrix</li>
+<li><strong>ESP32:</strong> printed in the Serial Monitor</li>
+</ul>
+</li>
+</ol>
+<h3 id="2-configure-sketchjs">2. Configure sketch.js</h3>
+<pre><code><span class="kd">const</span> <span class="nx">ARDUINO_IP</span> <span class="o">=</span> <span class="s1">&#39;192.168.1.42&#39;</span><span class="p">;</span>  <span class="c1">// your Arduino&#39;s IP</span>
+</code></pre>
+<p>To use a different sensor model, change the constructor argument:</p>
+<pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;imu&#39;</span><span class="p">,</span> <span class="ow">new</span> <span class="nx">MPU</span><span class="p">(</span><span class="s1">&#39;LSM6DS3&#39;</span><span class="p">));</span>
+</code></pre>
+<p>And update the attach address if needed:</p>
+<pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">imu</span><span class="p">.</span><span class="nx">attach</span><span class="p">(</span><span class="mh">0x6A</span><span class="p">);</span>  <span class="c1">// LSM6 default; 0x6B if SA0 is HIGH</span>
+</code></pre>
+<h3 id="3-open-the-example">3. Open the example</h3>
+<p>Open <code>index.html</code> in a browser. Tilt the sensor — the 3D model should follow.</p>
+<h2 id="how-it-works">How It Works</h2>
+<pre><code><span class="nx">arduino</span> <span class="o">=</span> <span class="ow">new</span> <span class="nx">Arduino</span><span class="p">();</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;imu&#39;</span><span class="p">,</span> <span class="ow">new</span> <span class="nx">MPU</span><span class="p">(</span><span class="s1">&#39;6050&#39;</span><span class="p">));</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">connect</span><span class="p">(</span><span class="nx">ARDUINO_IP</span><span class="p">);</span>
+
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;ready&#39;</span><span class="p">,</span> <span class="p">()</span> <span class="p">=&gt;</span> <span class="p">{</span>
+    <span class="nx">arduino</span><span class="p">.</span><span class="nx">imu</span><span class="p">.</span><span class="nx">attach</span><span class="p">(</span><span class="mh">0x68</span><span class="p">);</span>        <span class="c1">// I2C address (0x69 if AD0 is HIGH)</span>
+    <span class="nx">arduino</span><span class="p">.</span><span class="nx">imu</span><span class="p">.</span><span class="nx">onRead</span><span class="p">(</span><span class="nx">onRead</span><span class="p">);</span>      <span class="c1">// fires each time a reading arrives</span>
+    <span class="nx">arduino</span><span class="p">.</span><span class="nx">imu</span><span class="p">.</span><span class="nx">onCalibrate</span><span class="p">(</span><span class="nx">onCalibrate</span><span class="p">);</span>
+    <span class="nx">arduino</span><span class="p">.</span><span class="nx">imu</span><span class="p">.</span><span class="nx">read</span><span class="p">(</span><span class="nx">POLL_MS</span><span class="p">);</span>       <span class="c1">// start polling</span>
+<span class="p">});</span>
+</code></pre>
+<p>Each reading delivers <code>{ accel, gyro, temp }</code>:</p>
+<pre><code><span class="kd">function</span> <span class="nx">onRead</span><span class="p">({</span> <span class="nx">accel</span><span class="p">,</span> <span class="nx">gyro</span><span class="p">,</span> <span class="nx">temp</span> <span class="p">})</span> <span class="p">{</span>
+    <span class="c1">// accel: { x, y, z }  in g</span>
+    <span class="c1">// gyro:  { x, y, z }  in °/s</span>
+    <span class="c1">// temp:                in °C</span>
+<span class="p">}</span>
+</code></pre>
+<h3 id="complementary-filter-roll--pitch">Complementary filter (roll &amp; pitch)</h3>
+<p>The raw accelerometer gives a stable tilt angle but is noisy during movement. The gyroscope gives smooth, fast response but drifts over time. The complementary filter blends them — gyro integration dominates short-term response; accelerometer tilt slowly pulls the estimate back toward the true gravity-down direction:</p>
+<pre><code><span class="kd">const</span> <span class="nx">ALPHA</span> <span class="o">=</span> <span class="mf">0.96</span><span class="p">;</span>  <span class="c1">// 96% gyro, 4% accel correction</span>
+
+<span class="nx">roll</span>  <span class="o">=</span> <span class="nx">ALPHA</span> <span class="o">*</span> <span class="p">(</span><span class="nx">roll</span>  <span class="o">+</span> <span class="nx">gyro</span><span class="p">.</span><span class="nx">x</span> <span class="o">*</span> <span class="nx">toRad</span> <span class="o">*</span> <span class="nx">dt</span><span class="p">)</span> <span class="o">+</span> <span class="p">(</span><span class="mf">1</span> <span class="o">-</span> <span class="nx">ALPHA</span><span class="p">)</span> <span class="o">*</span> <span class="nx">aRoll</span><span class="p">;</span>
+<span class="nx">pitch</span> <span class="o">=</span> <span class="nx">ALPHA</span> <span class="o">*</span> <span class="p">(</span><span class="nx">pitch</span> <span class="o">+</span> <span class="nx">gyro</span><span class="p">.</span><span class="nx">y</span> <span class="o">*</span> <span class="nx">toRad</span> <span class="o">*</span> <span class="nx">dt</span><span class="p">)</span> <span class="o">+</span> <span class="p">(</span><span class="mf">1</span> <span class="o">-</span> <span class="nx">ALPHA</span><span class="p">)</span> <span class="o">*</span> <span class="nx">aPitch</span><span class="p">;</span>
+</code></pre>
+<p>Increase <code>ALPHA</code> for faster response (more gyro trust, more drift). Decrease it for more stability (more accel, noisier during motion).</p>
+<h3 id="yaw-pure-gyro-integration">Yaw (pure gyro integration)</h3>
+<pre><code><span class="nx">yaw</span> <span class="o">+=</span> <span class="nx">gyro</span><span class="p">.</span><span class="nx">z</span> <span class="o">*</span> <span class="nx">toRad</span> <span class="o">*</span> <span class="nx">dt</span><span class="p">;</span>
+</code></pre>
+<p>No accelerometer correction is possible — gravity tells you which way is down, but doesn't tell you which way is north. The MPU-6050 has no magnetometer, so yaw drifts. Press <code>C</code> to recalibrate and zero it back to its reference heading.</p>
+<h3 id="calibration">Calibration</h3>
+<p>Click the <strong>CALIBRATE</strong> button or press <strong>C</strong> while the sensor is flat and still. The Arduino collects 200 samples (~400 ms) and computes offset corrections. After calibration:</p>
+<ul>
+<li>Accel: x ≈ 0 g, y ≈ 0 g, z ≈ +1 g (gravity preserved)</li>
+<li>Gyro: x ≈ 0, y ≈ 0, z ≈ 0</li>
+</ul>
+<p>Offsets are stored on the Arduino and re-sent to any browser that reconnects — you don't need to calibrate again after a page reload.</p>
+<h2 id="tuning-the-orientation">Tuning the orientation</h2>
+<p>If the 3D model rotates in the wrong direction, flip the sign in <code>draw()</code>. The current sketch uses aerospace order (yaw → pitch → roll):</p>
+<pre><code><span class="nx">rotateY</span><span class="p">(</span><span class="nx">yaw</span><span class="p">);</span>     <span class="c1">// → rotateY(-yaw)    to flip heading direction</span>
+<span class="nx">rotateX</span><span class="p">(</span><span class="o">-</span><span class="nx">roll</span><span class="p">);</span>   <span class="c1">// → rotateX(roll)    to flip left/right tilt</span>
+<span class="nx">rotateZ</span><span class="p">(</span><span class="nx">pitch</span><span class="p">);</span>   <span class="c1">// → rotateZ(-pitch)  to flip forward/back tilt</span>
+</code></pre>
+<p>For non-standard sensor mounting, you may also need to swap which gyro axis feeds which angle in the filter calculation.</p>
+<h2 id="changing-the-poll-rate">Changing the poll rate</h2>
+<pre><code><span class="kd">const</span> <span class="nx">POLL_MS</span> <span class="o">=</span> <span class="mf">50</span><span class="p">;</span>  <span class="c1">// 50 ms = 20 Hz</span>
+</code></pre>
+<p>Lower values give smoother motion but use more I²C bandwidth and WiFi. <strong>On the UNO R4 WiFi and older ESP32 boards (WROVER class) keep this at 50 ms or higher</strong> — faster polling can hang the I²C bus on those chips. Newer ESP32-S3 / C3 boards can handle 20 ms (50 Hz) reliably.</p>
+<h2 id="script-loading-order">Script loading order</h2>
+<p><code>pardalote.js</code> must load before <code>mpu.js</code>:</p>
+<pre><code><span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;../../pardalote-js/pardalote.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
+<span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;../../pardalote-js/mpu.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
+<span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;sketch.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
+</code></pre>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<p><strong>&quot;IMU not responding&quot;</strong></p>
+<ul>
+<li>Check SDA and SCL wiring; confirm the I2C address (AD0/SA0 state)</li>
+<li>Check Serial Monitor for <code>[MPU] WHO_AM_I mismatch</code> — this means the wrong model string was passed or the wiring is incorrect</li>
+<li>Verify the sketch has <code>#include &lt;PardaloteMPU.h&gt;</code></li>
+</ul>
+<p><strong>&quot;3D model drifts over time when stationary&quot;</strong></p>
+<ul>
+<li>For roll/pitch drift: normal gyro bias — run calibration. The accelerometer correction factor <code>ALPHA</code> gradually pulls the angle back; lowering it (e.g. to 0.90) makes correction faster at the cost of more noise during motion</li>
+<li>For yaw drift specifically: this is unavoidable on the MPU-6050 (no magnetometer). A few degrees per minute is normal. Press <code>C</code> to recalibrate and zero the heading</li>
+</ul>
+<p><strong>&quot;Board hangs after a few seconds&quot;</strong></p>
+<ul>
+<li>Most common on UNO R4 WiFi and older ESP32 boards (WROVER class). The I²C peripheral can stall under sustained high-rate reads. Raise <code>POLL_MS</code> to 50 or higher</li>
+</ul>
+<p><strong>&quot;Readings are noisy during fast motion&quot;</strong></p>
+<ul>
+<li>Normal — accelerometer tilt angles are unreliable when the board is accelerating</li>
+<li>Increase <code>ALPHA</code> slightly so the filter trusts the gyro more during motion</li>
+</ul>
+<p><strong>&quot;Temperature reading seems wrong&quot;</strong></p>
+<ul>
+<li>The MPU-6050 die temperature runs ~10–15 °C above ambient — this is expected</li>
+<li>Use it for relative drift compensation, not as an ambient thermometer</li>
+</ul>
+<p><strong>&quot;Arduino won't connect&quot;</strong></p>
+<ul>
+<li>Check the IP address in <code>sketch.js</code></li>
+<li>Arduino and browser must be on the same WiFi network</li>
+</ul>
+<h2 id="file-structure">File Structure</h2>
+<pre><code>mpu-example/
+├── index.html      # Canvas page (loads p5.js, pardalote.js, mpu.js)
+├── sketch.js       # IMU setup, complementary filter, 3D render
+├── style.css       # Dark HUD overlay
+└── README.md       # This file
+
+pardalote-js/
+├── pardalote.js    # Core Pardalote library
+└── mpu.js          # Generic MPU / IMU extension
+</code></pre>
+<h2 id="next-steps">Next Steps</h2>
+<ul>
+<li>Change model: <code>new MPU('9250')</code> for a 9-DOF MPU-9250</li>
+<li>Two sensors on the same bus: use different addresses (0x68 and 0x69) and <code>arduino.add('imu1', new MPU('6050'))</code>, <code>arduino.add('imu2', new MPU('6050'))</code></li>
+<li>Set accel/gyro range: <code>arduino.imu.setAccelRange(4)</code> (±4g), <code>arduino.imu.setGyroRange(1000)</code> (±1000°/s)</li>
+<li>Use on ESP32 with custom I2C pins: <code>arduino.imu.attach(0x68, 21, 22)</code></li>
+<li>Build a full AHRS by adding a magnetometer reading from a 9-DOF variant</li>
+</ul>
+
+  </div>
+</div>
+
+<footer class="site-footer speckled">
+  <div class="wrap">
+    <span>Pardalote — created by Scott Mitchell for design education and creative technology.</span>
+    <span><a href="../reference/index.html">Reference</a> · <a href="https://github.com/scottmitchell/pardalote">GitHub</a> · GPL-3.0</span>
+  </div>
+</footer>
+
+<script src="../js/site.js"></script>
+</body>
+</html>

@@ -287,13 +287,75 @@ void PardaloteClass::_sendSyncComplete(uint8_t clientNum) {
 }
 
 // -------------------------------------------------------------------
+// Sharing pin state with the browser. See the API comments in
+// Pardalote.h for the public-facing contract.
+// -------------------------------------------------------------------
+void PardaloteClass::share(uint8_t pin, uint8_t mode) {
+    // Map Arduino's mode constants to Pardalote's protocol modes.
+    // INPUT / OUTPUT / INPUT_PULLUP happen to align numerically with
+    // MODE_INPUT / MODE_OUTPUT / MODE_INPUT_PULLUP — we map explicitly
+    // so the mapping is auditable and any future divergence is caught.
+    uint8_t pardaloteMode;
+    switch (mode) {
+        case INPUT:             pardaloteMode = MODE_INPUT;          break;
+        case OUTPUT:            pardaloteMode = MODE_OUTPUT;         break;
+        case INPUT_PULLUP:      pardaloteMode = MODE_INPUT_PULLUP;   break;
+#if defined(PLATFORM_ESP32) && defined(INPUT_PULLDOWN)
+        case INPUT_PULLDOWN:    pardaloteMode = MODE_INPUT_PULLDOWN; break;
+#endif
+        case MODE_ANALOG_INPUT: pardaloteMode = MODE_ANALOG_INPUT;   break;
+        default: return;   // unrecognised — silently skip
+    }
+
+    // Cache so future client connects see the right state via announce.
+    if (pin < MAX_PIN_NUMBER) _corePinModes[pin] = pardaloteMode;
+
+    if (!anyConnected()) return;
+    FrameBuilder fb;
+    fb.begin(CMD_PIN_MODE, (uint16_t)pin);
+    fb.addInt(pardaloteMode);
+    broadcastFrame(fb);
+}
+
+void PardaloteClass::send(uint8_t pin, int value) {
+    // Cache so future client connects see the right state via announce.
+    if (pin < MAX_PIN_NUMBER) _corePinValues[pin] = (uint8_t)value;
+
+    if (!anyConnected()) return;
+    FrameBuilder fb;
+    fb.begin(CMD_DIGITAL_WRITE, (uint16_t)pin);
+    fb.addInt(value);
+    broadcastFrame(fb);
+}
+
+// -------------------------------------------------------------------
 // Public send methods — extensions call Pardalote.sendFrame /
 // Pardalote.broadcastFrame from phase 5 onward.
 // -------------------------------------------------------------------
 void PardaloteClass::sendFrame(uint8_t clientNum, FrameBuilder& fb) {
+    if (clientNum >= MAX_WS_CLIENTS) return;   // loopback client (sketch command) has no socket
     size_t len = fb.finish();
     if (len == 0) return;
     _ws.sendBIN(clientNum, fb.buf, len);
+}
+
+// -------------------------------------------------------------------
+// Local command dispatch — a sketch drives an extension through the same
+// handler the browser uses. Params are int32, packed big-endian, then run
+// against the extension with a loopback client id (>= MAX_WS_CLIENTS, so
+// any reply is dropped by sendFrame; command frames don't reply anyway).
+// -------------------------------------------------------------------
+void PardaloteClass::_command(uint16_t deviceId, uint8_t cmd, const int32_t* params, uint8_t n) {
+    if (n > MAX_PARAMS) n = MAX_PARAMS;
+    uint8_t buf[MAX_PARAMS * 4];
+    for (uint8_t i = 0; i < n; i++) {
+        int32_t p = params[i];
+        buf[i * 4]     = (p >> 24) & 0xFF;
+        buf[i * 4 + 1] = (p >> 16) & 0xFF;
+        buf[i * 4 + 2] = (p >>  8) & 0xFF;
+        buf[i * 4 + 3] =  p        & 0xFF;
+    }
+    dispatchExtension(0xFF, deviceId, cmd, 0, buf, n, nullptr, 0);
 }
 
 void PardaloteClass::broadcastFrame(FrameBuilder& fb) {

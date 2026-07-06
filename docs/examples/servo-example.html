@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Servo control — Pardalote examples</title>
+<meta name="description" content="Move a servo with your mouse or keyboard while its arm angle is drawn live on screen.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../css/site.css">
+</head>
+<body data-nav="examples">
+
+<nav class="site-nav speckled">
+  <a class="logo" href="../index.html">
+    <img src="../assets/logo.svg" width="30" height="30" alt="">
+    Pardalote
+  </a>
+  <div class="links">
+    <a data-nav="home" href="../index.html">Home</a>
+    <a data-nav="download" href="../download.html">Download</a>
+    <a data-nav="examples" href="index.html">Examples</a>
+    <a data-nav="reference" href="../reference/index.html">Reference</a>
+    <a href="https://github.com/scottmitchell/pardalote">GitHub</a>
+  </div>
+</nav>
+
+<div class="page-head speckled">
+  <div class="wrap">
+    <div class="crumb"><a href="index.html">Examples</a> / Servo control</div>
+    <h1>Servo control</h1>
+    <p>Move a servo with your mouse or keyboard while its arm angle is drawn live on screen.</p>
+  </div>
+</div>
+
+<div class="wrap md-layout">
+  <div class="md-body">
+    <div class="tags" style="margin-bottom:.5rem;"><span class="tag lvl-mid">Intermediate</span><span class="tag">Motion</span><span class="tag">p5.js</span></div>
+    <div class="ex-meta-row">
+      <a class="btn btn-dark" href="https://github.com/scottmitchell/pardalote/tree/main/examples/servo-example">View the code on GitHub</a>
+    </div>
+    <div class="screenshot-slot">Screenshot / video of this example — coming soon</div>
+<h1 id="servo-example">Servo Example</h1>
+<p>A p5.js sketch that lets you control a servo with the mouse or keyboard. Visualises the servo arm angle on screen in real time.</p>
+
+  </div>
+    <div class="ex-code-cols">
+      <div class="code-ex scroll">
+        <div class="bar">servo.ino — the Arduino side</div>
+        <pre><code><span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;Pardalote.h&gt;</span><span class="cp"></span>
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;PardaloteServo.h&gt;</span><span class="cp"></span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">setup</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">begin</span><span class="p">();</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">loop</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">run</span><span class="p">();</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</code></pre>
+      </div>
+      <div class="code-ex scroll">
+        <div class="bar">sketch.js — the browser side</div>
+        <pre><code><span class="kd">let</span> <span class="nx">ArduinoIP</span> <span class="o">=</span> <span class="s1">&#39;10.1.1.186&#39;</span><span class="p">;</span>   <span class="c1">// Change this to your Arduino&#39;s IP</span>
+
+<span class="kd">let</span> <span class="nx">arduino</span><span class="p">;</span>
+<span class="kd">let</span> <span class="nx">servoPin</span> <span class="o">=</span> <span class="mf">5</span><span class="p">;</span>
+<span class="c1">// We track the commanded angle locally for the on-screen visualization.</span>
+<span class="c1">// arduino.myServo.read() exists too — but it round-trips to the Arduino,</span>
+<span class="c1">// and on ESP32 it reads the PWM duty register which can return values</span>
+<span class="c1">// slightly off the commanded angle. For just &quot;what did I tell the servo</span>
+<span class="c1">// to do?&quot; tracking it locally is simpler and exact.</span>
+<span class="kd">let</span> <span class="nx">angle</span> <span class="o">=</span> <span class="mf">90</span><span class="p">;</span> <span class="c1">// Starting angle</span>
+<span class="kd">let</span> <span class="nx">machineState</span> <span class="o">=</span> <span class="mf">1</span><span class="p">;</span>
+<span class="kd">let</span> <span class="nx">direction</span> <span class="o">=</span> <span class="mf">1</span><span class="p">;</span> <span class="c1">// 1 for increasing, -1 for decreasing</span>
+
+<span class="kd">function</span> <span class="nx">setup</span><span class="p">()</span> <span class="p">{</span>
+    <span class="nx">createCanvas</span><span class="p">(</span><span class="mf">600</span><span class="p">,</span> <span class="mf">400</span><span class="p">);</span>
+
+    <span class="c1">// Connect to Arduino</span>
+    <span class="nx">arduino</span> <span class="o">=</span> <span class="ow">new</span> <span class="nx">Arduino</span><span class="p">();</span>
+    <span class="nx">arduino</span><span class="p">.</span><span class="nx">connect</span><span class="p">(</span><span class="nx">ArduinoIP</span><span class="p">);</span>
+
+    <span class="c1">// Attach servo to the Arduino</span>
+    <span class="nx">arduino</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;myServo&#39;</span><span class="p">,</span> <span class="ow">new</span> <span class="nx">Servo</span><span class="p">());</span>
+
+    <span class="c1">// Attach servo to pin</span>
+    <span class="nx">arduino</span><span class="p">.</span><span class="nx">myServo</span><span class="p">.</span><span class="nx">attach</span><span class="p">(</span><span class="nx">servoPin</span><span class="p">);</span>
+
+    <span class="c1">// Move to center position</span>
+    <span class="nx">arduino</span><span class="p">.</span><span class="nx">myServo</span><span class="p">.</span><span class="nx">center</span><span class="p">();</span>
+
+    <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s2">&quot;Servo attached to pin &quot;</span> <span class="o">+</span> <span class="nx">servoPin</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="kd">function</span> <span class="nx">draw</span><span class="p">()</span> <span class="p">{</span>
+    <span class="nx">background</span><span class="p">(</span><span class="mf">50</span><span class="p">);</span>
+
+    <span class="c1">// Draw servo position visualization</span>
+    <span class="nx">drawServoVisualization</span><span class="p">();</span>
+
+    <span class="c1">// Draw control instructions</span>
+    <span class="nx">fill</span><span class="p">(</span><span class="mf">255</span><span class="p">);</span>
+    <span class="nx">textSize</span><span class="p">(</span><span class="mf">16</span><span class="p">);</span>
+    <span class="nx">text</span><span class="p">(</span><span class="s2">&quot;Servo Control Example&quot;</span><span class="p">,</span> <span class="mf">20</span><span class="p">,</span> <span class="mf">30</span><span class="p">);</span>
+    <span class="nx">text</span><span class="p">(</span><span class="s2">&quot;Press &#39;M&#39; to have the mouse X controls servo angle&quot;</span><span class="p">,</span> <span class="mf">20</span><span class="p">,</span> <span class="mf">60</span><span class="p">);</span>
+    <span class="nx">text</span><span class="p">(</span><span class="s2">&quot;Press &#39;S&#39; to start auto sweep&quot;</span><span class="p">,</span> <span class="mf">20</span><span class="p">,</span> <span class="mf">90</span><span class="p">);</span>
+    <span class="nx">text</span><span class="p">(</span><span class="s2">&quot;Press &#39;L&#39; to move the servo to the left&quot;</span><span class="p">,</span> <span class="mf">20</span><span class="p">,</span> <span class="mf">120</span><span class="p">);</span>
+    <span class="nx">text</span><span class="p">(</span><span class="s2">&quot;Press &#39;R&#39; to move the servo to the right&quot;</span><span class="p">,</span> <span class="mf">20</span><span class="p">,</span> <span class="mf">150</span><span class="p">);</span>
+    <span class="nx">text</span><span class="p">(</span><span class="s2">&quot;Press &#39;C&#39; to centre the servo&quot;</span><span class="p">,</span> <span class="mf">20</span><span class="p">,</span> <span class="mf">180</span><span class="p">);</span>
+
+    <span class="k">switch</span> <span class="p">(</span><span class="nx">machineState</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">case</span> <span class="mf">1</span><span class="o">:</span> <span class="p">{</span>
+            <span class="c1">// Control servo with mouse X position</span>
+            <span class="kd">let</span> <span class="nx">mouseLoc</span> <span class="o">=</span> <span class="nx">constrain</span><span class="p">(</span><span class="nx">mouseX</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="nx">width</span><span class="p">);</span>
+            <span class="nx">angle</span> <span class="o">=</span> <span class="nx">map</span><span class="p">(</span><span class="nx">mouseLoc</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="nx">width</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="mf">180</span><span class="p">);</span>
+            <span class="nx">arduino</span><span class="p">.</span><span class="nx">myServo</span><span class="p">.</span><span class="nx">write</span><span class="p">(</span><span class="nx">angle</span><span class="p">);</span>
+            <span class="k">break</span><span class="p">;</span>
+        <span class="p">}</span>
+        <span class="k">case</span> <span class="mf">2</span><span class="o">:</span> <span class="p">{</span>
+            <span class="c1">// autoSweep runs in background; arduino.myServo.angle holds the</span>
+            <span class="c1">// current commanded angle, updated by each sweep step.</span>
+            <span class="nx">angle</span> <span class="o">=</span> <span class="nx">arduino</span><span class="p">.</span><span class="nx">myServo</span><span class="p">.</span><span class="nx">angle</span><span class="p">;</span>
+            <span class="k">break</span><span class="p">;</span>
+        <span class="p">}</span>
+        <span class="k">case</span> <span class="mf">3</span><span class="o">:</span> <span class="p">{</span>
+            <span class="nx">angle</span> <span class="o">=</span> <span class="mf">90</span><span class="p">;</span>
+            <span class="nx">arduino</span><span class="p">.</span><span class="nx">myServo</span><span class="p">.</span><span class="nx">center</span><span class="p">();</span>
+            <span class="k">break</span><span class="p">;</span>
+        <span class="p">}</span>
+        <span class="k">case</span> <span class="mf">4</span><span class="o">:</span> <span class="p">{</span>
+            <span class="nx">angle</span> <span class="o">=</span> <span class="mf">0</span><span class="p">;</span>
+            <span class="nx">arduino</span><span class="p">.</span><span class="nx">myServo</span><span class="p">.</span><span class="nx">min</span><span class="p">();</span>
+            <span class="k">break</span><span class="p">;</span>
+        <span class="p">}</span>
+        <span class="k">case</span> <span class="mf">5</span><span class="o">:</span> <span class="p">{</span>
+            <span class="nx">angle</span> <span class="o">=</span> <span class="mf">180</span><span class="p">;</span>
+            <span class="nx">arduino</span><span class="p">.</span><span class="nx">myServo</span><span class="p">.</span><span class="nx">max</span><span class="p">();</span>
+            <span class="k">break</span><span class="p">;</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="kd">function</span> <span class="nx">drawServoVisualization</span><span class="p">()</span> <span class="p">{</span>
+    <span class="nx">push</span><span class="p">();</span>
+    <span class="nx">translate</span><span class="p">(</span><span class="nx">width</span> <span class="o">/</span> <span class="mf">2</span><span class="p">,</span> <span class="mf">2</span> <span class="o">*</span> <span class="nx">height</span> <span class="o">/</span> <span class="mf">3</span><span class="p">);</span>
+    <span class="nx">push</span><span class="p">();</span>
+    <span class="nx">rotate</span><span class="p">(</span><span class="o">-</span><span class="nx">PI</span><span class="o">/</span><span class="mf">2</span><span class="p">);</span>
+
+    <span class="nx">fill</span><span class="p">(</span><span class="mf">100</span><span class="p">);</span>
+    <span class="nx">rect</span><span class="p">(</span><span class="o">-</span><span class="mf">30</span><span class="p">,</span> <span class="o">-</span><span class="mf">15</span><span class="p">,</span> <span class="mf">60</span><span class="p">,</span> <span class="mf">30</span><span class="p">);</span>
+
+    <span class="nx">stroke</span><span class="p">(</span><span class="mf">255</span><span class="p">,</span> <span class="mf">100</span><span class="p">,</span> <span class="mf">100</span><span class="p">);</span>
+    <span class="nx">strokeWeight</span><span class="p">(</span><span class="mf">4</span><span class="p">);</span>
+    <span class="kd">let</span> <span class="nx">armAngle</span> <span class="o">=</span> <span class="nx">map</span><span class="p">(</span><span class="nx">angle</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="mf">180</span><span class="p">,</span> <span class="o">-</span><span class="nx">PI</span><span class="o">/</span><span class="mf">2</span><span class="p">,</span> <span class="nx">PI</span><span class="o">/</span><span class="mf">2</span><span class="p">);</span>
+    <span class="nx">line</span><span class="p">(</span><span class="mf">0</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="nx">cos</span><span class="p">(</span><span class="nx">armAngle</span><span class="p">)</span> <span class="o">*</span> <span class="mf">80</span><span class="p">,</span> <span class="nx">sin</span><span class="p">(</span><span class="nx">armAngle</span><span class="p">)</span> <span class="o">*</span> <span class="mf">80</span><span class="p">);</span>
+
+    <span class="nx">fill</span><span class="p">(</span><span class="mf">255</span><span class="p">);</span>
+    <span class="nx">noStroke</span><span class="p">();</span>
+    <span class="nx">circle</span><span class="p">(</span><span class="mf">0</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="mf">8</span><span class="p">);</span>
+
+    <span class="nx">pop</span><span class="p">();</span>
+    <span class="nx">fill</span><span class="p">(</span><span class="mf">255</span><span class="p">);</span>
+    <span class="nx">textAlign</span><span class="p">(</span><span class="nx">CENTER</span><span class="p">);</span>
+    <span class="nx">text</span><span class="p">(</span><span class="nb">Math</span><span class="p">.</span><span class="nx">round</span><span class="p">(</span><span class="nx">angle</span><span class="p">)</span> <span class="o">+</span> <span class="s2">&quot;°&quot;</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="mf">60</span><span class="p">);</span>
+
+    <span class="nx">pop</span><span class="p">();</span>
+<span class="p">}</span>
+
+<span class="kd">function</span> <span class="nx">keyPressed</span><span class="p">()</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="nx">key</span> <span class="o">===</span> <span class="s1">&#39;m&#39;</span> <span class="o">||</span> <span class="nx">key</span> <span class="o">===</span> <span class="s1">&#39;M&#39;</span><span class="p">)</span> <span class="p">{</span>
+        <span class="nx">machineState</span> <span class="o">=</span> <span class="mf">1</span><span class="p">;</span> <span class="c1">// manual</span>
+    <span class="p">}</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="nx">key</span> <span class="o">===</span> <span class="s1">&#39;s&#39;</span> <span class="o">||</span> <span class="nx">key</span> <span class="o">===</span> <span class="s1">&#39;S&#39;</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">if</span> <span class="p">(</span><span class="nx">machineState</span> <span class="o">!==</span> <span class="mf">2</span><span class="p">)</span> <span class="p">{</span>
+            <span class="nx">machineState</span> <span class="o">=</span> <span class="mf">2</span><span class="p">;</span>
+            <span class="nx">autoSweep</span><span class="p">();</span> <span class="c1">// start sweep loop once</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="nx">key</span> <span class="o">===</span> <span class="s1">&#39;c&#39;</span> <span class="o">||</span> <span class="nx">key</span> <span class="o">===</span> <span class="s1">&#39;C&#39;</span><span class="p">)</span> <span class="p">{</span>
+        <span class="nx">machineState</span> <span class="o">=</span> <span class="mf">3</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="nx">key</span> <span class="o">===</span> <span class="s1">&#39;l&#39;</span> <span class="o">||</span> <span class="nx">key</span> <span class="o">===</span> <span class="s1">&#39;L&#39;</span><span class="p">)</span> <span class="p">{</span>
+        <span class="nx">machineState</span> <span class="o">=</span> <span class="mf">4</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="nx">key</span> <span class="o">===</span> <span class="s1">&#39;r&#39;</span> <span class="o">||</span> <span class="nx">key</span> <span class="o">===</span> <span class="s1">&#39;R&#39;</span><span class="p">)</span> <span class="p">{</span>
+        <span class="nx">machineState</span> <span class="o">=</span> <span class="mf">5</span><span class="p">;</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="k">async</span> <span class="kd">function</span> <span class="nx">autoSweep</span><span class="p">()</span> <span class="p">{</span>
+    <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s2">&quot;Starting auto sweep...&quot;</span><span class="p">);</span>
+    <span class="k">while</span> <span class="p">(</span><span class="nx">machineState</span> <span class="o">===</span> <span class="mf">2</span><span class="p">)</span> <span class="p">{</span>
+        <span class="c1">// Sweep from 0 → 180 over 2s</span>
+        <span class="k">await</span> <span class="nx">arduino</span><span class="p">.</span><span class="nx">myServo</span><span class="p">.</span><span class="nx">sweep</span><span class="p">(</span><span class="mf">0</span><span class="p">,</span> <span class="mf">180</span><span class="p">,</span> <span class="mf">2000</span><span class="p">);</span>
+        <span class="k">if</span> <span class="p">(</span><span class="nx">machineState</span> <span class="o">!==</span> <span class="mf">2</span><span class="p">)</span> <span class="k">break</span><span class="p">;</span>  <span class="c1">// stop if state changed</span>
+
+        <span class="c1">// Small pause</span>
+        <span class="k">await</span> <span class="ow">new</span> <span class="nb">Promise</span><span class="p">(</span><span class="nx">resolve</span> <span class="p">=&gt;</span> <span class="nx">setTimeout</span><span class="p">(</span><span class="nx">resolve</span><span class="p">,</span> <span class="mf">100</span><span class="p">));</span>
+        <span class="k">if</span> <span class="p">(</span><span class="nx">machineState</span> <span class="o">!==</span> <span class="mf">2</span><span class="p">)</span> <span class="k">break</span><span class="p">;</span>  <span class="c1">// stop if state changed</span>
+
+        <span class="c1">// Sweep back from 180 → 0 over 2s in 10 steps</span>
+        <span class="k">await</span> <span class="nx">arduino</span><span class="p">.</span><span class="nx">myServo</span><span class="p">.</span><span class="nx">sweep</span><span class="p">(</span><span class="mf">180</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="mf">2000</span><span class="p">,</span> <span class="mf">10</span><span class="p">);</span>
+        <span class="k">if</span> <span class="p">(</span><span class="nx">machineState</span> <span class="o">!==</span> <span class="mf">2</span><span class="p">)</span> <span class="k">break</span><span class="p">;</span>  <span class="c1">// stop if state changed</span>
+
+        <span class="c1">// Small pause</span>
+        <span class="k">await</span> <span class="ow">new</span> <span class="nb">Promise</span><span class="p">(</span><span class="nx">resolve</span> <span class="p">=&gt;</span> <span class="nx">setTimeout</span><span class="p">(</span><span class="nx">resolve</span><span class="p">,</span> <span class="mf">100</span><span class="p">));</span>
+    <span class="p">}</span>
+    <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s2">&quot;Auto sweep stopped&quot;</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre>
+      </div>
+    </div>
+  <div class="md-body">
+<h2 id="what-this-example-does">What This Example Does</h2>
+<ul>
+<li><strong>Mouse mode (default):</strong> horizontal mouse position maps directly to servo angle (0–180°)</li>
+<li><strong>Auto sweep:</strong> presses <code>S</code> to continuously sweep the servo back and forth using <code>sweep()</code></li>
+<li><strong>Preset positions:</strong> <code>C</code> = centre (90°), <code>L</code> = min (0°), <code>R</code> = max (180°)</li>
+<li><strong>Angle display:</strong> a servo arm is drawn on the canvas, driven by a local <code>angle</code> variable updated each time the sketch commands a new position</li>
+</ul>
+<h2 id="hardware-requirements">Hardware Requirements</h2>
+<ul>
+<li><strong>Arduino UNO R4 WiFi</strong> or <strong>ESP32 development board</strong></li>
+<li><strong>Servo motor</strong> (standard 5 V hobby servo)</li>
+<li>Arduino and browser must be on the same WiFi network</li>
+</ul>
+<h3 id="wiring">Wiring</h3>
+<table>
+<thead>
+<tr>
+<th>Servo wire</th>
+<th>Arduino</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Power (red)</td>
+<td>5 V</td>
+</tr>
+<tr>
+<td>Ground (brown/black)</td>
+<td>GND</td>
+</tr>
+<tr>
+<td>Signal (orange/yellow)</td>
+<td>Pin 7 (configurable in sketch.js)</td>
+</tr>
+</tbody>
+</table>
+<p>For more than one or two servos, power them from an external 5 V supply rather than the Arduino's 5 V pin.</p>
+<h3 id="arduino-libraries">Arduino libraries</h3>
+<p>Install via Arduino IDE → Tools → Manage Libraries:</p>
+<ul>
+<li><code>WebSocketsServer</code> (by Markus Sattler)</li>
+<li><code>ESP32Servo</code> (ESP32 only — not needed for UNO R4)</li>
+</ul>
+<p>Install Pardalote itself by copying <code>pardalote-arduino/library/Pardalote/</code> into your Arduino libraries folder (see the <a href="../reference/installation.html">top-level README</a>).</p>
+<h2 id="quick-start">Quick Start</h2>
+<h3 id="1-upload-the-firmware">1. Upload the firmware</h3>
+<ol>
+<li>
+<p>In Arduino IDE: <strong>File → Examples → Pardalote → servo</strong>. The sketch is two lines:</p>
+<pre><code><span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;Pardalote.h&gt;</span><span class="cp"></span>
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;PardaloteServo.h&gt;</span><span class="cp"></span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">setup</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">begin</span><span class="p">();</span><span class="w"> </span><span class="p">}</span><span class="w"></span>
+<span class="kt">void</span><span class="w"> </span><span class="nf">loop</span><span class="p">()</span><span class="w">  </span><span class="p">{</span><span class="w"> </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">run</span><span class="p">();</span><span class="w">   </span><span class="p">}</span><span class="w"></span>
+</code></pre>
+</li>
+<li>
+<p>Select your board and upload</p>
+</li>
+<li>
+<p>Open the Serial Monitor at 115200 baud — on first boot Pardalote asks for your WiFi credentials:</p>
+<pre><code>=== Pardalote ===
+No WiFi networks stored.
+=== WiFi Configuration ===
+[a]dd  [d]elete  [c]lear all  [s]how  [x] exit
+&gt; a
+SSID: YourWiFiName
+Password: ********
+Saved: YourWiFiName
+&gt; x
+</code></pre>
+<p>Credentials are saved to EEPROM and survive re-uploads. Press <code>w</code> within 5 seconds of any boot to update them.</p>
+<p><strong>Prefer compile-time credentials?</strong> Create a <code>secrets.h</code> file in the sketch folder with:</p>
+<pre><code><span class="cp">#define SECRET_SSID &quot;YourWiFiName&quot;</span>
+<span class="cp">#define SECRET_PASS &quot;YourWiFiPassword&quot;</span>
+</code></pre>
+<p>If both are configured, <code>secrets.h</code> is tried first.</p>
+</li>
+<li>
+<p>Find your Arduino's IP address:</p>
+<ul>
+<li><strong>UNO R4 WiFi:</strong> scrolls across the LED matrix</li>
+<li><strong>ESP32:</strong> printed in the Serial Monitor</li>
+</ul>
+</li>
+</ol>
+<h3 id="2-configure-sketchjs">2. Configure sketch.js</h3>
+<pre><code><span class="kd">let</span> <span class="nx">ArduinoIP</span> <span class="o">=</span> <span class="s1">&#39;192.168.1.42&#39;</span><span class="p">;</span>   <span class="c1">// your Arduino&#39;s IP</span>
+</code></pre>
+<p>The sketch attaches the servo to pin 7. Change <code>attach(7)</code> in <code>setup()</code> if you use a different pin.</p>
+<h3 id="3-open-the-example">3. Open the example</h3>
+<p>Open <code>index.html</code> in a browser. Move the mouse left and right — the servo should follow. Use the keyboard shortcuts shown on screen.</p>
+<h2 id="how-it-works">How It Works</h2>
+<pre><code><span class="nx">arduino</span> <span class="o">=</span> <span class="ow">new</span> <span class="nx">Arduino</span><span class="p">();</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">connect</span><span class="p">(</span><span class="nx">ArduinoIP</span><span class="p">);</span>
+
+<span class="c1">// Register the servo extension</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;myServo&#39;</span><span class="p">,</span> <span class="ow">new</span> <span class="nx">Servo</span><span class="p">());</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">myServo</span><span class="p">.</span><span class="nx">attach</span><span class="p">(</span><span class="mf">7</span><span class="p">);</span>    <span class="c1">// attach to pin 7</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">myServo</span><span class="p">.</span><span class="nx">center</span><span class="p">();</span>     <span class="c1">// move to 90° on startup</span>
+</code></pre>
+<p>Mouse control in <code>draw()</code>:</p>
+<pre><code><span class="nx">angle</span> <span class="o">=</span> <span class="nx">map</span><span class="p">(</span><span class="nx">mouseX</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="nx">width</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="mf">180</span><span class="p">);</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">myServo</span><span class="p">.</span><span class="nx">write</span><span class="p">(</span><span class="nx">angle</span><span class="p">);</span>
+</code></pre>
+<p>The example tracks the commanded angle in a local <code>angle</code> variable instead of round-tripping through <code>arduino.myServo.read()</code>. The <code>read()</code> method exists and works — but on ESP32 boards it reads back from the PWM duty register, which can return values slightly different from the commanded angle (or briefly glitch during a write/read race). For a visualisation that should exactly mirror what the sketch told the servo to do, tracking it locally is simpler and exact.</p>
+<p><code>arduino.myServo.angle</code> (the property) is also a cached snapshot of the last commanded angle if you'd rather use the library's tracking — for example, during a <code>sweep()</code> where the library is the one issuing the writes.</p>
+<p>Auto sweep uses <code>await</code> — it runs as a background async loop without blocking <code>draw()</code>:</p>
+<pre><code><span class="k">async</span> <span class="kd">function</span> <span class="nx">autoSweep</span><span class="p">()</span> <span class="p">{</span>
+    <span class="k">while</span> <span class="p">(</span><span class="nx">machineState</span> <span class="o">===</span> <span class="mf">2</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">await</span> <span class="nx">arduino</span><span class="p">.</span><span class="nx">myServo</span><span class="p">.</span><span class="nx">sweep</span><span class="p">(</span><span class="mf">0</span><span class="p">,</span> <span class="mf">180</span><span class="p">,</span> <span class="mf">2000</span><span class="p">);</span>   <span class="c1">// 0→180 over 2 s</span>
+        <span class="k">await</span> <span class="nx">arduino</span><span class="p">.</span><span class="nx">myServo</span><span class="p">.</span><span class="nx">sweep</span><span class="p">(</span><span class="mf">180</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="mf">2000</span><span class="p">,</span> <span class="mf">10</span><span class="p">);</span> <span class="c1">// 180→0, 10 steps</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</code></pre>
+<p>Any <code>write()</code> call cancels an in-progress sweep immediately.</p>
+<h2 id="keyboard-controls">Keyboard controls</h2>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>M</td>
+<td>Mouse controls angle</td>
+</tr>
+<tr>
+<td>S</td>
+<td>Auto sweep</td>
+</tr>
+<tr>
+<td>C</td>
+<td>Centre (90°)</td>
+</tr>
+<tr>
+<td>L</td>
+<td>Min (0°)</td>
+</tr>
+<tr>
+<td>R</td>
+<td>Max (180°)</td>
+</tr>
+</tbody>
+</table>
+<h2 id="script-loading-order">Script loading order</h2>
+<p><code>pardalote.js</code> must load before <code>servo.js</code>:</p>
+<pre><code><span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;../../pardalote-js/pardalote.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
+<span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;../../pardalote-js/servo.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
+<span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;sketch.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
+</code></pre>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<p><strong>&quot;Servo doesn't move&quot;</strong></p>
+<ul>
+<li>Check wiring: signal to pin 7, power to 5 V, ground to GND</li>
+<li>Verify the sketch has <code>#include &lt;PardaloteServo.h&gt;</code></li>
+<li>Check the browser console for connection errors</li>
+</ul>
+<p><strong>&quot;Servo jitters&quot;</strong></p>
+<ul>
+<li><code>write()</code> is called every frame in mouse mode — the library has a built-in 20 ms throttle, but if the servo still jitters check its power supply</li>
+<li>Use <code>setThreshold(2)</code> to ignore small angle changes: <code>arduino.myServo.setThreshold(2)</code></li>
+</ul>
+<p><strong>&quot;Servo moves to wrong position on startup&quot;</strong></p>
+<ul>
+<li><code>center()</code> moves to 90° — if the servo arm is mounted off-centre this is mechanical, not a code issue</li>
+</ul>
+<h2 id="file-structure">File Structure</h2>
+<pre><code>servo-example/
+├── index.html      # Canvas page (loads p5.js, pardalote.js, servo.js)
+├── sketch.js       # Servo control and visualisation
+└── README.md       # This file
+
+pardalote-js/
+├── pardalote.js    # Core Pardalote library
+└── servo.js        # Servo extension
+</code></pre>
+<h2 id="next-steps">Next Steps</h2>
+<ul>
+<li>Up to 8 servos simultaneously: <code>arduino.add('tilt', new Servo())</code></li>
+<li>Fine-grained control: <code>arduino.myServo.writeMicroseconds(1500)</code></li>
+<li>Custom pulse range: <code>arduino.myServo.attach(7, 544, 2400)</code></li>
+<li>Combine with a sensor: map <code>analogRead()</code> directly to servo angle</li>
+</ul>
+
+  </div>
+</div>
+
+<footer class="site-footer speckled">
+  <div class="wrap">
+    <span>Pardalote — created by Scott Mitchell for design education and creative technology.</span>
+    <span><a href="../reference/index.html">Reference</a> · <a href="https://github.com/scottmitchell/pardalote">GitHub</a> · GPL-3.0</span>
+  </div>
+</footer>
+
+<script src="../js/site.js"></script>
+</body>
+</html>

@@ -1,0 +1,66 @@
+html, body {
+    margin: 0;
+    padding: 0;
+    background: #1c1c1c;
+    font-family: system-ui, sans-serif;
+}
+
+main {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 18px 0 0 24px;
+}
+
+#top {
+    color: #ddd;
+    margin-bottom: 10px;
+}
+
+.heading {
+    font-size: 18px;
+    font-weight: 600;
+    color: #fff;
+    margin-bottom: 4px;
+}
+
+#status {
+    font-size: 13px;
+    color: #9a9a9a;
+    margin-bottom: 8px;
+}
+
+.row {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    color: #ddd;
+    font-size: 14px;
+}
+
+#motorSelects {
+    position: relative;
+    width: 680px;
+    height: 44px;
+    margin-top: 8px;
+}
+
+.mcell {
+    position: absolute;
+    transform: translateX(-50%);
+    text-align: center;
+}
+
+button, select {
+    font-size: 14px;
+    padding: 4px 8px;
+    background: #2b2b2b;
+    color: #eee;
+    border: 1px solid #444;
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+canvas {
+    display: block;
+}

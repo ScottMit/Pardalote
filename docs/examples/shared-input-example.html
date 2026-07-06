@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shared potentiometer — Pardalote examples</title>
+<meta name="description" content="The Arduino announces its own analog input and the browser listens — a turn of the knob shows up live on screen with no JS setup.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../css/site.css">
+</head>
+<body data-nav="examples">
+
+<nav class="site-nav speckled">
+  <a class="logo" href="../index.html">
+    <img src="../assets/logo.svg" width="30" height="30" alt="">
+    Pardalote
+  </a>
+  <div class="links">
+    <a data-nav="home" href="../index.html">Home</a>
+    <a data-nav="download" href="../download.html">Download</a>
+    <a data-nav="examples" href="index.html">Examples</a>
+    <a data-nav="reference" href="../reference/index.html">Reference</a>
+    <a href="https://github.com/scottmitchell/pardalote">GitHub</a>
+  </div>
+</nav>
+
+<div class="page-head speckled">
+  <div class="wrap">
+    <div class="crumb"><a href="index.html">Examples</a> / Shared potentiometer</div>
+    <h1>Shared potentiometer</h1>
+    <p>The Arduino announces its own analog input and the browser listens — a turn of the knob shows up live on screen with no JS setup.</p>
+  </div>
+</div>
+
+<div class="wrap md-layout">
+  <div class="md-body">
+    <div class="tags" style="margin-bottom:.5rem;"><span class="tag lvl-start">Beginner</span><span class="tag">Multi-user</span><span class="tag">Basics</span></div>
+    <div class="ex-meta-row">
+      <a class="btn btn-dark" href="https://github.com/scottmitchell/pardalote/tree/main/examples/shared-input-example">View the code on GitHub</a>
+    </div>
+    <div class="screenshot-slot">Screenshot / video of this example — coming soon</div>
+<h1 id="shared-input--potentiometer">Shared Input — Potentiometer</h1>
+<p>The Arduino tells the browser &quot;I have an analog input on A0 — start polling it.&quot; The browser does nothing more than listen. A turn of the knob shows up live on screen.</p>
+
+  </div>
+    <div class="ex-code-cols">
+      <div class="code-ex scroll">
+        <div class="bar">potentiometer.ino — the Arduino side</div>
+        <pre><code><span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;Pardalote.h&gt;</span><span class="cp"></span>
+
+<span class="k">const</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">POT</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">A0</span><span class="p">;</span><span class="w"></span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">setup</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">begin</span><span class="p">();</span><span class="w"></span>
+<span class="w">    </span><span class="n">pinMode</span><span class="p">(</span><span class="n">POT</span><span class="p">,</span><span class="w"> </span><span class="n">INPUT</span><span class="p">);</span><span class="w"></span>
+
+<span class="w">    </span><span class="c1">// Tell the browser &quot;A0 is an analog input.&quot;</span>
+<span class="w">    </span><span class="c1">// The JS side responds by auto-starting a poll at its default</span>
+<span class="w">    </span><span class="c1">// interval (200 ms) — no pinMode/analogRead in the browser code.</span>
+<span class="w">    </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">share</span><span class="p">(</span><span class="n">POT</span><span class="p">,</span><span class="w"> </span><span class="n">MODE_ANALOG_INPUT</span><span class="p">);</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">loop</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">run</span><span class="p">();</span><span class="w"></span>
+<span class="w">    </span><span class="c1">// Nothing else needed — the browser&#39;s poll requests are handled</span>
+<span class="w">    </span><span class="c1">// by Pardalote.run() above, which also fires the analogRead and</span>
+<span class="w">    </span><span class="c1">// broadcasts the result.</span>
+<span class="p">}</span><span class="w"></span>
+</code></pre>
+      </div>
+      <div class="code-ex scroll">
+        <div class="bar">sketch.js — the browser side</div>
+        <pre><code><span class="kd">const</span> <span class="nx">ARDUINO_IP</span> <span class="o">=</span> <span class="s1">&#39;192.168.1.42&#39;</span><span class="p">;</span>   <span class="c1">// Change this to your Arduino&#39;s IP</span>
+<span class="kd">const</span> <span class="nx">POT</span>        <span class="o">=</span> <span class="s1">&#39;A0&#39;</span><span class="p">;</span>
+
+<span class="kd">const</span> <span class="nx">arduino</span> <span class="o">=</span> <span class="ow">new</span> <span class="nx">Arduino</span><span class="p">();</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">connect</span><span class="p">(</span><span class="nx">ARDUINO_IP</span><span class="p">);</span>
+
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">onChange</span><span class="p">(</span><span class="nx">POT</span><span class="p">,</span> <span class="nx">value</span> <span class="p">=&gt;</span> <span class="p">{</span>
+    <span class="nb">document</span><span class="p">.</span><span class="nx">getElementById</span><span class="p">(</span><span class="s1">&#39;value&#39;</span><span class="p">).</span><span class="nx">textContent</span> <span class="o">=</span> <span class="nx">value</span><span class="p">;</span>
+    <span class="kd">const</span> <span class="nx">pct</span> <span class="o">=</span> <span class="p">(</span><span class="nx">value</span> <span class="o">/</span> <span class="nx">arduino</span><span class="p">.</span><span class="nx">analogMax</span><span class="p">)</span> <span class="o">*</span> <span class="mf">100</span><span class="p">;</span>
+    <span class="nb">document</span><span class="p">.</span><span class="nx">getElementById</span><span class="p">(</span><span class="s1">&#39;bar&#39;</span><span class="p">).</span><span class="nx">style</span><span class="p">.</span><span class="nx">width</span> <span class="o">=</span> <span class="nx">pct</span> <span class="o">+</span> <span class="s1">&#39;%&#39;</span><span class="p">;</span>
+<span class="p">});</span>
+
+<span class="c1">// Connection indicator</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;ready&#39;</span><span class="p">,</span>      <span class="p">()</span> <span class="p">=&gt;</span> <span class="nx">setStatus</span><span class="p">(</span><span class="kc">true</span><span class="p">));</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;disconnect&#39;</span><span class="p">,</span> <span class="p">()</span> <span class="p">=&gt;</span> <span class="nx">setStatus</span><span class="p">(</span><span class="kc">false</span><span class="p">));</span>
+
+<span class="kd">function</span> <span class="nx">setStatus</span><span class="p">(</span><span class="nx">connected</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kd">const</span> <span class="nx">el</span> <span class="o">=</span> <span class="nb">document</span><span class="p">.</span><span class="nx">getElementById</span><span class="p">(</span><span class="s1">&#39;status&#39;</span><span class="p">);</span>
+    <span class="nx">el</span><span class="p">.</span><span class="nx">textContent</span> <span class="o">=</span> <span class="nx">connected</span> <span class="o">?</span> <span class="s1">&#39;● CONNECTED&#39;</span> <span class="o">:</span> <span class="s1">&#39;● DISCONNECTED&#39;</span><span class="p">;</span>
+    <span class="nx">el</span><span class="p">.</span><span class="nx">className</span>   <span class="o">=</span> <span class="nx">connected</span> <span class="o">?</span> <span class="s1">&#39;connected&#39;</span>   <span class="o">:</span> <span class="s1">&#39;disconnected&#39;</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre>
+      </div>
+    </div>
+  <div class="md-body">
+<h2 id="what-this-example-demonstrates">What this example demonstrates</h2>
+<p>The companion to <a href="shared-control-example.html">shared-control-example</a>. That one showed the Arduino <em>pushing</em> values to the browser; this one shows the Arduino <em>announcing</em> a pin so the browser auto-starts polling — without any <code>pinMode</code> or <code>analogRead</code> call on the JS side.</p>
+<p>The minimal Arduino sketch:</p>
+<pre><code><span class="kt">void</span><span class="w"> </span><span class="nf">setup</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">begin</span><span class="p">();</span><span class="w"></span>
+<span class="w">    </span><span class="n">pinMode</span><span class="p">(</span><span class="n">POT</span><span class="p">,</span><span class="w"> </span><span class="n">INPUT</span><span class="p">);</span><span class="w"></span>
+<span class="w">    </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">share</span><span class="p">(</span><span class="n">POT</span><span class="p">,</span><span class="w"> </span><span class="n">MODE_ANALOG_INPUT</span><span class="p">);</span><span class="w">  </span><span class="c1">// ← tells the browser</span>
+<span class="p">}</span><span class="w"></span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">loop</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">run</span><span class="p">();</span><span class="w"></span>
+<span class="w">    </span><span class="c1">// nothing else — the browser polls, Pardalote.run() handles it</span>
+<span class="p">}</span><span class="w"></span>
+</code></pre>
+<p>The minimal browser sketch:</p>
+<pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">onChange</span><span class="p">(</span><span class="s1">&#39;A0&#39;</span><span class="p">,</span> <span class="nx">value</span> <span class="p">=&gt;</span> <span class="nx">updateDisplay</span><span class="p">(</span><span class="nx">value</span><span class="p">));</span>
+</code></pre>
+<p>No <code>arduino.pinMode</code>, no <code>arduino.analogRead</code>. The polling pipeline is set up automatically when the Arduino's <code>share(A0, MODE_ANALOG_INPUT)</code> arrives.</p>
+<h2 id="hardware">Hardware</h2>
+<ul>
+<li>Arduino UNO R4 WiFi or ESP32 development board</li>
+<li>Potentiometer (10 kΩ is fine; anything in the 1 kΩ – 100 kΩ range works)</li>
+</ul>
+<p>Wire it as a voltage divider:</p>
+<table>
+<thead>
+<tr>
+<th>Pot pin</th>
+<th>Connect to</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Outer 1</td>
+<td>3.3 V</td>
+</tr>
+<tr>
+<td>Wiper (centre)</td>
+<td>A0</td>
+</tr>
+<tr>
+<td>Outer 2</td>
+<td>GND</td>
+</tr>
+</tbody>
+</table>
+<h2 id="run-it">Run it</h2>
+<ol>
+<li>Open <code>potentiometer.ino</code> in Arduino IDE, select your board, upload.</li>
+<li>Find the Arduino's IP from the LED matrix (UNO R4) or Serial Monitor (ESP32).</li>
+<li>Edit <code>ARDUINO_IP</code> in <code>sketch.js</code> to match.</li>
+<li>Open <code>index.html</code> in a browser.</li>
+<li>Turn the pot. The number on screen and the bar should follow it in real time.</li>
+</ol>
+<h2 id="whats-happening-on-the-wire">What's happening on the wire</h2>
+<pre><code>Arduino: Pardalote.share(A0, MODE_ANALOG_INPUT)
+       → CMD_PIN_MODE A0 = ANALOG_INPUT
+Browser receives CMD_PIN_MODE:
+       → starts a default-interval (200 ms) analogRead poll
+       → CMD_ANALOG_READ A0 [interval=200]
+Arduino registers the periodic action; every 200 ms:
+       → reads A0, broadcasts CMD_ANALOG_READ A0 = &lt;value&gt;
+Browser receives CMD_ANALOG_READ:
+       → updates cache, fires arduino.onChange(&#x27;A0&#x27;, value)
+       → display updates
+</code></pre>
+<p>The JS code on the page is just the <code>onChange</code> handler. The rest of the pipeline was set up by the Arduino's one-line call to <code>share()</code>.</p>
+<h2 id="why-this-is-useful">Why this is useful</h2>
+<p>In a project where the <strong>Arduino sketch is the source of truth</strong> about which pins are wired to what (and the browser is just a viewer), <code>share()</code> lets the Arduino describe its hardware setup <em>to</em> the browser, instead of every browser sketch having to repeat the wiring knowledge.</p>
+<p>Polling rate is 200 ms here (the browser's default). If you want different rates, the browser can override after connect with <code>arduino.analogRead('A0', 50)</code> — that just updates the interval; no need to re-declare the mode.</p>
+
+  </div>
+</div>
+
+<footer class="site-footer speckled">
+  <div class="wrap">
+    <span>Pardalote — created by Scott Mitchell for design education and creative technology.</span>
+    <span><a href="../reference/index.html">Reference</a> · <a href="https://github.com/scottmitchell/pardalote">GitHub</a> · GPL-3.0</span>
+  </div>
+</footer>
+
+<script src="../js/site.js"></script>
+</body>
+</html>

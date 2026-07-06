@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Connecting — Pardalote reference</title>
+<meta name="description" content="Opening the connection from JavaScript, connection events, reconnection, and status.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../css/site.css">
+</head>
+<body data-nav="reference">
+
+<nav class="site-nav speckled">
+  <a class="logo" href="../index.html">
+    <img src="../assets/logo.svg" width="30" height="30" alt="">
+    Pardalote
+  </a>
+  <div class="links">
+    <a data-nav="home" href="../index.html">Home</a>
+    <a data-nav="download" href="../download.html">Download</a>
+    <a data-nav="examples" href="../examples/index.html">Examples</a>
+    <a data-nav="reference" href="index.html">Reference</a>
+    <a href="https://github.com/scottmitchell/pardalote">GitHub</a>
+  </div>
+</nav>
+
+<div class="wrap">
+  <div class="ref-layout">
+<aside class="ref-nav">
+  <h4>Getting started</h4>
+  <a href="index.html">Overview</a>
+  <a href="installation.html">Installation</a>
+  <a href="wifi.html">WiFi configuration</a>
+  <h4>Core — JavaScript</h4>
+  <a href="connecting.html#connect">connect() / events</a>
+  <a href="pins.html#pinmode">pinMode()</a>
+  <a href="pins.html#digitalwrite">digitalWrite() / analogWrite()</a>
+  <a href="pins.html#analogread">analogRead() / digitalRead()</a>
+  <a href="pins.html#onchange">onChange()</a>
+  <a href="pins.html#pin-aliases">Pin aliases</a>
+  <h4>Core — Arduino</h4>
+  <a href="arduino.html#pardalotebegin">Pardalote.begin() / run()</a>
+  <a href="arduino.html#pardaloteshare">share() / send()</a>
+  <a href="arduino.html#the-actuator-objects">Reading actuators</a>
+  <h4>Extensions</h4>
+  <a href="extensions.html">Overview</a>
+  <a href="servo.html">Servo</a>
+  <a href="stepper.html">Stepper</a>
+  <a href="bus-servo.html">Bus servo</a>
+  <a href="groups.html">Groups</a>
+  <a href="neopixel.html">NeoPixel</a>
+  <a href="ultrasonic.html">Ultrasonic</a>
+  <a href="mpu.html">MPU / IMU</a>
+  <a href="camera.html">Camera</a>
+  <h4>Under the hood</h4>
+  <a href="protocol.html">Protocol</a>
+  <a href="troubleshooting.html">Troubleshooting</a>
+</aside>
+    <main class="ref-main">
+      <h1>Connecting</h1>
+      <p class="lede">Opening the connection from JavaScript, connection events, reconnection, and status.</p>
+<p>All examples assume <code>const arduino = new Arduino();</code>.</p>
+<h2 id="connect">connect()</h2>
+<p>Opens a WebSocket connection to the Arduino. Call once; reconnection after drops is automatic.</p>
+<div class="sig">arduino.<span class="fn">connect</span>(ip, [port])</div>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ip</code></td>
+<td>string</td>
+<td>The Arduino's IP address, e.g. <code>'192.168.1.42'</code>. Shown on the LED matrix (UNO R4) or in the Serial Monitor (ESP32).</td>
+</tr>
+<tr>
+<td><code>port</code></td>
+<td>number</td>
+<td>Optional. WebSocket port. Default <code>81</code>.</td>
+</tr>
+</tbody>
+</table>
+<pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">connect</span><span class="p">(</span><span class="s1">&#39;192.168.1.42&#39;</span><span class="p">);</span>        <span class="c1">// WebSocket on port 81</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">connect</span><span class="p">(</span><span class="s1">&#39;192.168.1.42&#39;</span><span class="p">,</span> <span class="mf">8081</span><span class="p">);</span>  <span class="c1">// custom port</span>
+</code></pre>
+<p>Calling <code>connect()</code> again — for example, to switch to a different Arduino — starts a fresh session: pin modes, polled reads, and write listeners from the previous board are cleared so they aren't replayed onto the new hardware. Each registered extension is reset to its just-constructed state, so attached servos, initialised strips, MPU calibration and camera streams are released — call <code>attach()</code> / <code>init()</code> again inside the new <code>on('ready')</code> handler. Event listeners attached with <code>on('read', …)</code> etc. survive, as do user-tuned settings like <code>setThrottle</code>, <code>setThreshold</code> and <code>setQuality</code>.</p>
+<h2 id="disconnect">disconnect()</h2>
+<p>Closes the connection and disables auto-reconnect.</p>
+<div class="sig">arduino.<span class="fn">disconnect</span>()</div>
+<h2 id="on">on()</h2>
+<p>Registers a handler for a connection event.</p>
+<div class="sig">arduino.<span class="fn">on</span>(event, handler)</div>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>event</code></td>
+<td>string</td>
+<td>One of <code>'ready'</code>, <code>'connect'</code>, <code>'disconnect'</code>, <code>'reconnecting'</code>.</td>
+</tr>
+<tr>
+<td><code>handler</code></td>
+<td>function</td>
+<td>Called when the event fires. <code>'reconnecting'</code> receives <code>{ attempt, delay }</code>.</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>Event</th>
+<th>Fires when</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>'ready'</code></td>
+<td>The Arduino has connected <strong>and</strong> sent its current state — pins, extensions, pixel colours. Do your setup here.</td>
+</tr>
+<tr>
+<td><code>'connect'</code></td>
+<td>The WebSocket opens — before <code>ready</code>.</td>
+</tr>
+<tr>
+<td><code>'disconnect'</code></td>
+<td>The connection is lost.</td>
+</tr>
+<tr>
+<td><code>'reconnecting'</code></td>
+<td>A reconnect attempt is scheduled; the next retry is in <code>delay</code> ms.</td>
+</tr>
+</tbody>
+</table>
+<div class="code-ex"><div class="bar">Example — connection events</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;ready&#39;</span><span class="p">,</span> <span class="p">()</span> <span class="p">=&gt;</span> <span class="p">{</span>
+    <span class="nx">arduino</span><span class="p">.</span><span class="nx">pinMode</span><span class="p">(</span><span class="mf">13</span><span class="p">,</span> <span class="nx">OUTPUT</span><span class="p">);</span>   <span class="c1">// attach, init, start polls here</span>
+<span class="p">});</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;reconnecting&#39;</span><span class="p">,</span> <span class="p">({</span> <span class="nx">attempt</span><span class="p">,</span> <span class="nx">delay</span> <span class="p">})</span> <span class="p">=&gt;</span> <span class="p">{</span>
+    <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="sb">`retry </span><span class="si">${</span><span class="nx">attempt</span><span class="si">}</span><span class="sb"> in </span><span class="si">${</span><span class="nx">delay</span><span class="si">}</span><span class="sb"> ms`</span><span class="p">);</span>
+<span class="p">});</span>
+</code></pre></div>
+<p>Any client connecting to a running system immediately sees the live state — that's what makes Pardalote multi-user by default.</p>
+<h2 id="automatic-reconnection">Automatic reconnection</h2>
+<p>Reconnection is automatic, with exponential backoff, and continues for as long as the page is open — you don't need to do anything. The first ten attempts are logged in the console; after that the library falls quiet. Subscribe to <code>'reconnecting'</code> for per-attempt updates. Silent auto-reconnect to the same Arduino preserves all state.</p>
+<h2 id="getstatus">getStatus()</h2>
+<p>Returns a snapshot of the connection.</p>
+<div class="sig">arduino.<span class="fn">getStatus</span>()</div>
+<p><strong>Returns</strong> <code>{ connected, isReconnecting, reconnectAttempts, deviceIP, availableExtensions }</code>.</p>
+<h2 id="properties">Properties</h2>
+<table>
+<thead>
+<tr>
+<th>Property</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>arduino.connected</code></td>
+<td>boolean</td>
+<td><code>true</code> after <code>'ready'</code>.</td>
+</tr>
+<tr>
+<td><code>arduino.board</code></td>
+<td>string</td>
+<td>Board name from the HELLO handshake, e.g. <code>'UNO R4 WiFi'</code>.</td>
+</tr>
+<tr>
+<td><code>arduino.analogMax</code></td>
+<td>number</td>
+<td>ADC range: <code>1023</code> (UNO R4 WiFi) or <code>4095</code> (ESP32).</td>
+</tr>
+</tbody>
+</table>
+<p>See also: <a href="pins.html">Pins and reading</a> · <a href="extensions.html">Extensions overview</a></p>
+
+    </main>
+  </div>
+</div>
+
+<footer class="site-footer speckled">
+  <div class="wrap">
+    <span>Pardalote — created by Scott Mitchell for design education and creative technology.</span>
+    <span><a href="index.html">Reference</a> · <a href="https://github.com/scottmitchell/pardalote">GitHub</a> · GPL-3.0</span>
+  </div>
+</footer>
+
+<script src="../js/site.js"></script>
+</body>
+</html>

@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ultrasonic distance — Pardalote examples</title>
+<meta name="description" content="A distance sensor paints a colour bar that responds as you move your hand closer and further away.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../css/site.css">
+</head>
+<body data-nav="examples">
+
+<nav class="site-nav speckled">
+  <a class="logo" href="../index.html">
+    <img src="../assets/logo.svg" width="30" height="30" alt="">
+    Pardalote
+  </a>
+  <div class="links">
+    <a data-nav="home" href="../index.html">Home</a>
+    <a data-nav="download" href="../download.html">Download</a>
+    <a data-nav="examples" href="index.html">Examples</a>
+    <a data-nav="reference" href="../reference/index.html">Reference</a>
+    <a href="https://github.com/scottmitchell/pardalote">GitHub</a>
+  </div>
+</nav>
+
+<div class="page-head speckled">
+  <div class="wrap">
+    <div class="crumb"><a href="index.html">Examples</a> / Ultrasonic distance</div>
+    <h1>Ultrasonic distance</h1>
+    <p>A distance sensor paints a colour bar that responds as you move your hand closer and further away.</p>
+  </div>
+</div>
+
+<div class="wrap md-layout">
+  <div class="md-body">
+    <div class="tags" style="margin-bottom:.5rem;"><span class="tag lvl-mid">Intermediate</span><span class="tag">Sensors</span><span class="tag">p5.js</span></div>
+    <div class="ex-meta-row">
+      <a class="btn btn-dark" href="https://github.com/scottmitchell/pardalote/tree/main/examples/ultrasonic-sensor-example">View the code on GitHub</a>
+    </div>
+    <div class="screenshot-slot">Screenshot / video of this example — coming soon</div>
+<h1 id="ultrasonic-sensor-example">Ultrasonic Sensor Example</h1>
+<p>A p5.js sketch that reads an HC-SR04 ultrasonic distance sensor and visualises the result as a colour bar. Distance and connection status are shown on screen in real time.</p>
+
+  </div>
+    <div class="ex-code-cols">
+      <div class="code-ex scroll">
+        <div class="bar">ultrasonic.ino — the Arduino side</div>
+        <pre><code><span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;Pardalote.h&gt;</span><span class="cp"></span>
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;PardaloteUltrasonic.h&gt;</span><span class="cp"></span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">setup</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">begin</span><span class="p">();</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">loop</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">run</span><span class="p">();</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</code></pre>
+      </div>
+      <div class="code-ex scroll">
+        <div class="bar">sketch.js — the browser side</div>
+        <pre><code><span class="kd">let</span> <span class="nx">ArduinoIP</span> <span class="o">=</span> <span class="s1">&#39;10.1.1.186&#39;</span><span class="p">;</span>   <span class="c1">// Change this to your Arduino&#39;s IP</span>
+
+<span class="kd">let</span> <span class="nx">arduino</span><span class="p">;</span>
+<span class="kd">let</span> <span class="nx">trigPin</span> <span class="o">=</span> <span class="mf">7</span><span class="p">;</span>
+<span class="kd">let</span> <span class="nx">echoPin</span> <span class="o">=</span> <span class="mf">8</span><span class="p">;</span>
+<span class="kd">let</span> <span class="nx">maxDistance</span> <span class="o">=</span> <span class="mf">200</span><span class="p">;</span> <span class="c1">// Maximum distance to display (cm)</span>
+
+<span class="kd">function</span> <span class="nx">setup</span><span class="p">()</span> <span class="p">{</span>
+    <span class="nx">createCanvas</span><span class="p">(</span><span class="mf">600</span><span class="p">,</span> <span class="mf">600</span><span class="p">);</span>
+    <span class="nx">colorMode</span><span class="p">(</span><span class="nx">HSB</span><span class="p">);</span>
+
+    <span class="c1">// connect to Arduino</span>
+    <span class="nx">arduino</span> <span class="o">=</span> <span class="ow">new</span> <span class="nx">Arduino</span><span class="p">();</span>
+    <span class="nx">arduino</span><span class="p">.</span><span class="nx">connect</span><span class="p">(</span><span class="nx">ArduinoIP</span><span class="p">);</span>
+
+    <span class="c1">// attach ultrasonic sensor to the Arduino</span>
+    <span class="nx">arduino</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;ultrasonicSensor&#39;</span><span class="p">,</span> <span class="ow">new</span> <span class="nx">Ultrasonic</span><span class="p">());</span>
+
+    <span class="c1">// Attach sensor: trig pin, echo pin 8</span>
+    <span class="nx">arduino</span><span class="p">.</span><span class="nx">ultrasonicSensor</span><span class="p">.</span><span class="nx">attach</span><span class="p">(</span><span class="nx">trigPin</span><span class="p">,</span> <span class="nx">echoPin</span><span class="p">);</span>
+
+    <span class="c1">// Set timeout to 40ms to allow readings up to ~600cm</span>
+    <span class="nx">arduino</span><span class="p">.</span><span class="nx">ultrasonicSensor</span><span class="p">.</span><span class="nx">setTimeout</span><span class="p">(</span><span class="mf">40</span><span class="p">);</span>
+
+    <span class="c1">// Configure poll in ms and unit in CM or INCH</span>
+    <span class="nx">arduino</span><span class="p">.</span><span class="nx">ultrasonicSensor</span><span class="p">.</span><span class="nx">read</span><span class="p">(</span><span class="mf">200</span><span class="p">,</span> <span class="nx">CM</span><span class="p">);</span>
+
+    <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s2">&quot;Ultrasonic sensor demo started!&quot;</span><span class="p">);</span>
+    <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s2">&quot;Move an object in front of the sensor to see the visualization change&quot;</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="kd">function</span> <span class="nx">draw</span><span class="p">()</span> <span class="p">{</span>
+    <span class="nx">background</span><span class="p">(</span><span class="mf">0</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="mf">30</span><span class="p">);</span>
+
+    <span class="kd">let</span> <span class="nx">cm</span> <span class="o">=</span> <span class="nx">arduino</span><span class="p">.</span><span class="nx">ultrasonicSensor</span><span class="p">.</span><span class="nx">read</span><span class="p">();</span>
+
+    <span class="kd">let</span> <span class="nx">distance</span> <span class="o">=</span> <span class="nx">constrain</span><span class="p">(</span><span class="nx">cm</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="nx">maxDistance</span><span class="p">);</span>
+
+    <span class="c1">// Draw distance visualization</span>
+    <span class="nx">drawDistanceBar</span><span class="p">(</span><span class="nx">distance</span><span class="p">);</span>
+    <span class="nx">drawUI</span><span class="p">(</span><span class="nx">distance</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="kd">function</span> <span class="nx">drawDistanceBar</span><span class="p">(</span><span class="nx">distance</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// Distance bar on the left side</span>
+    <span class="kd">let</span> <span class="nx">barWidth</span> <span class="o">=</span> <span class="mf">60</span><span class="p">;</span>
+    <span class="kd">let</span> <span class="nx">barHeight</span> <span class="o">=</span> <span class="nx">height</span> <span class="o">-</span> <span class="mf">100</span><span class="p">;</span>
+    <span class="kd">let</span> <span class="nx">barX</span> <span class="o">=</span> <span class="mf">400</span><span class="p">;</span>
+    <span class="kd">let</span> <span class="nx">barY</span> <span class="o">=</span> <span class="mf">50</span><span class="p">;</span>
+
+    <span class="c1">// Bar background</span>
+    <span class="nx">fill</span><span class="p">(</span><span class="mf">0</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="mf">100</span><span class="p">);</span>
+    <span class="nx">rect</span><span class="p">(</span><span class="nx">barX</span><span class="p">,</span> <span class="nx">barY</span><span class="p">,</span> <span class="nx">barWidth</span><span class="p">,</span> <span class="nx">barHeight</span><span class="p">);</span>
+
+    <span class="c1">// Distance indicator</span>
+    <span class="k">if</span> <span class="p">(</span><span class="nx">distance</span> <span class="o">&gt;</span> <span class="mf">0</span> <span class="o">&amp;&amp;</span> <span class="nx">distance</span> <span class="o">&lt;=</span> <span class="nx">maxDistance</span><span class="p">)</span> <span class="p">{</span>
+        <span class="kd">let</span> <span class="nx">barFill</span> <span class="o">=</span> <span class="nx">map</span><span class="p">(</span><span class="nx">distance</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="nx">maxDistance</span><span class="p">,</span> <span class="nx">barHeight</span><span class="p">,</span> <span class="mf">0</span><span class="p">);</span>
+        <span class="kd">let</span> <span class="nx">barHue</span> <span class="o">=</span> <span class="nx">map</span><span class="p">(</span><span class="nx">distance</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="nx">maxDistance</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="mf">120</span><span class="p">);</span>
+        <span class="nx">fill</span><span class="p">(</span><span class="nx">barHue</span><span class="p">,</span> <span class="mf">255</span><span class="p">,</span> <span class="mf">255</span><span class="p">);</span>
+        <span class="nx">rect</span><span class="p">(</span><span class="nx">barX</span><span class="p">,</span> <span class="nx">barY</span> <span class="o">+</span> <span class="nx">barFill</span><span class="p">,</span> <span class="nx">barWidth</span><span class="p">,</span> <span class="nx">barHeight</span> <span class="o">-</span> <span class="nx">barFill</span><span class="p">);</span>
+    <span class="p">}</span>
+
+    <span class="c1">// Scale markers</span>
+    <span class="nx">stroke</span><span class="p">(</span><span class="mf">0</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="mf">255</span><span class="p">,</span> <span class="mf">150</span><span class="p">);</span>
+    <span class="nx">fill</span><span class="p">(</span><span class="mf">0</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="mf">255</span><span class="p">,</span> <span class="mf">150</span><span class="p">);</span>
+    <span class="nx">textAlign</span><span class="p">(</span><span class="nx">RIGHT</span><span class="p">);</span>
+    <span class="nx">textSize</span><span class="p">(</span><span class="mf">10</span><span class="p">);</span>
+    <span class="k">for</span> <span class="p">(</span><span class="kd">let</span> <span class="nx">i</span> <span class="o">=</span> <span class="mf">0</span><span class="p">;</span> <span class="nx">i</span> <span class="o">&lt;=</span> <span class="nx">maxDistance</span><span class="p">;</span> <span class="nx">i</span> <span class="o">+=</span> <span class="mf">50</span><span class="p">)</span> <span class="p">{</span>
+        <span class="kd">let</span> <span class="nx">y</span> <span class="o">=</span> <span class="nx">map</span><span class="p">(</span><span class="nx">i</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="nx">maxDistance</span><span class="p">,</span> <span class="nx">barY</span> <span class="o">+</span> <span class="nx">barHeight</span><span class="p">,</span> <span class="nx">barY</span><span class="p">);</span>
+        <span class="nx">line</span><span class="p">(</span><span class="nx">barX</span> <span class="o">+</span> <span class="nx">barWidth</span><span class="p">,</span> <span class="nx">y</span><span class="p">,</span> <span class="nx">barX</span> <span class="o">+</span> <span class="nx">barWidth</span> <span class="o">+</span> <span class="mf">5</span><span class="p">,</span> <span class="nx">y</span><span class="p">);</span>
+        <span class="nx">noStroke</span><span class="p">();</span>
+        <span class="nx">text</span><span class="p">(</span><span class="nx">i</span><span class="p">,</span> <span class="nx">barX</span> <span class="o">+</span> <span class="nx">barWidth</span> <span class="o">+</span> <span class="mf">20</span><span class="p">,</span> <span class="nx">y</span> <span class="o">+</span> <span class="mf">3</span><span class="p">);</span>
+        <span class="nx">stroke</span><span class="p">(</span><span class="mf">0</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="mf">255</span><span class="p">,</span> <span class="mf">150</span><span class="p">);</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="kd">function</span> <span class="nx">drawUI</span><span class="p">(</span><span class="nx">distance</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// Title and instructions</span>
+    <span class="nx">fill</span><span class="p">(</span><span class="mf">0</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="mf">255</span><span class="p">);</span>
+    <span class="nx">textAlign</span><span class="p">(</span><span class="nx">LEFT</span><span class="p">);</span>
+    <span class="nx">textSize</span><span class="p">(</span><span class="mf">24</span><span class="p">);</span>
+    <span class="nx">text</span><span class="p">(</span><span class="s2">&quot;Ultrasonic Sensor Demo&quot;</span><span class="p">,</span> <span class="mf">20</span><span class="p">,</span> <span class="mf">50</span><span class="p">);</span>
+
+    <span class="c1">// Connection status</span>
+    <span class="nx">fill</span><span class="p">(</span><span class="nx">arduino</span><span class="p">.</span><span class="nx">connected</span> <span class="o">?</span> <span class="nx">color</span><span class="p">(</span><span class="mf">120</span><span class="p">,</span> <span class="mf">255</span><span class="p">,</span> <span class="mf">255</span><span class="p">)</span> <span class="o">:</span> <span class="nx">color</span><span class="p">(</span><span class="mf">0</span><span class="p">,</span> <span class="mf">255</span><span class="p">,</span> <span class="mf">255</span><span class="p">));</span>
+    <span class="nx">textSize</span><span class="p">(</span><span class="mf">16</span><span class="p">);</span>
+    <span class="nx">text</span><span class="p">(</span><span class="s2">&quot;Arduino: &quot;</span> <span class="o">+</span> <span class="p">(</span><span class="nx">arduino</span><span class="p">.</span><span class="nx">connected</span> <span class="o">?</span> <span class="s2">&quot;Connected&quot;</span> <span class="o">:</span> <span class="s2">&quot;Disconnected&quot;</span><span class="p">),</span> <span class="mf">20</span><span class="p">,</span> <span class="mf">80</span><span class="p">);</span>
+
+    <span class="c1">// Sensor info</span>
+    <span class="k">if</span> <span class="p">(</span><span class="nx">distance</span> <span class="o">&gt;</span> <span class="mf">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="nx">textAlign</span><span class="p">(</span><span class="nx">LEFT</span><span class="p">);</span>
+        <span class="nx">textSize</span><span class="p">(</span><span class="mf">16</span><span class="p">);</span>
+        <span class="nx">fill</span><span class="p">(</span><span class="mf">0</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="mf">255</span><span class="p">);</span>
+        <span class="nx">text</span><span class="p">(</span><span class="s2">&quot;Distance: &quot;</span> <span class="o">+</span> <span class="nx">distance</span><span class="p">.</span><span class="nx">toFixed</span><span class="p">(</span><span class="mf">1</span><span class="p">)</span> <span class="o">+</span> <span class="s2">&quot; cm&quot;</span><span class="p">,</span> <span class="mf">20</span><span class="p">,</span> <span class="mf">110</span><span class="p">);</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+        <span class="nx">fill</span><span class="p">(</span><span class="mf">0</span><span class="p">,</span> <span class="mf">255</span><span class="p">,</span> <span class="mf">255</span><span class="p">);</span>
+        <span class="nx">textAlign</span><span class="p">(</span><span class="nx">LEFT</span><span class="p">);</span>
+        <span class="nx">textSize</span><span class="p">(</span><span class="mf">16</span><span class="p">);</span>
+        <span class="nx">text</span><span class="p">(</span><span class="s2">&quot;No object detected or out of range&quot;</span><span class="p">,</span> <span class="mf">20</span><span class="p">,</span> <span class="mf">110</span><span class="p">);</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</code></pre>
+      </div>
+    </div>
+  <div class="md-body">
+<h2 id="what-this-example-does">What This Example Does</h2>
+<ul>
+<li>Polls the ultrasonic sensor every 200 ms</li>
+<li>Draws a vertical bar whose height represents distance (0–200 cm)</li>
+<li>Bar colour shifts from red (close) to green (far) using HSB colour mode</li>
+<li>Shows distance in cm and Arduino connection status</li>
+</ul>
+<h2 id="hardware-requirements">Hardware Requirements</h2>
+<ul>
+<li><strong>Arduino UNO R4 WiFi</strong> or <strong>ESP32 development board</strong></li>
+<li><strong>HC-SR04</strong> ultrasonic sensor (or compatible: JSN-SR04T, HY-SRF05, etc.)</li>
+<li>Arduino and browser must be on the same WiFi network</li>
+</ul>
+<h3 id="wiring-4-wire-hc-sr04">Wiring (4-wire, HC-SR04)</h3>
+<table>
+<thead>
+<tr>
+<th>Sensor pin</th>
+<th>Arduino</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>VCC</td>
+<td>5 V</td>
+</tr>
+<tr>
+<td>GND</td>
+<td>GND</td>
+</tr>
+<tr>
+<td>TRIG</td>
+<td>Pin 7</td>
+</tr>
+<tr>
+<td>ECHO</td>
+<td>Pin 8</td>
+</tr>
+</tbody>
+</table>
+<p>The example uses pins 7 (trig) and 8 (echo). Change <code>attach(7, 8)</code> in <code>sketch.js</code> if you use different pins.</p>
+<p><strong>3-wire sensor</strong> (trig and echo on the same pin): <code>arduino.ultrasonicSensor.attach(7)</code>.</p>
+<h3 id="arduino-libraries">Arduino libraries</h3>
+<p>Install via Arduino IDE → Tools → Manage Libraries:</p>
+<ul>
+<li><code>WebSocketsServer</code> (by Markus Sattler)</li>
+</ul>
+<p>Install Pardalote itself by copying <code>pardalote-arduino/library/Pardalote/</code> into your Arduino libraries folder (see the <a href="../reference/installation.html">top-level README</a>).</p>
+<h2 id="quick-start">Quick Start</h2>
+<h3 id="1-upload-the-firmware">1. Upload the firmware</h3>
+<ol>
+<li>
+<p>In Arduino IDE: <strong>File → Examples → Pardalote → ultrasonic</strong>. The sketch is two lines:</p>
+<pre><code><span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;Pardalote.h&gt;</span><span class="cp"></span>
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;PardaloteUltrasonic.h&gt;</span><span class="cp"></span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">setup</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">begin</span><span class="p">();</span><span class="w"> </span><span class="p">}</span><span class="w"></span>
+<span class="kt">void</span><span class="w"> </span><span class="nf">loop</span><span class="p">()</span><span class="w">  </span><span class="p">{</span><span class="w"> </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">run</span><span class="p">();</span><span class="w">   </span><span class="p">}</span><span class="w"></span>
+</code></pre>
+</li>
+<li>
+<p>Select your board and upload</p>
+</li>
+<li>
+<p>Open the Serial Monitor at 115200 baud — on first boot Pardalote asks for your WiFi credentials:</p>
+<pre><code>=== Pardalote ===
+No WiFi networks stored.
+=== WiFi Configuration ===
+[a]dd  [d]elete  [c]lear all  [s]how  [x] exit
+&gt; a
+SSID: YourWiFiName
+Password: ********
+Saved: YourWiFiName
+&gt; x
+</code></pre>
+<p>Credentials are saved to EEPROM and survive re-uploads. Press <code>w</code> within 5 seconds of any boot to update them.</p>
+<p><strong>Prefer compile-time credentials?</strong> Create a <code>secrets.h</code> file in the sketch folder with:</p>
+<pre><code><span class="cp">#define SECRET_SSID &quot;YourWiFiName&quot;</span>
+<span class="cp">#define SECRET_PASS &quot;YourWiFiPassword&quot;</span>
+</code></pre>
+<p>If both are configured, <code>secrets.h</code> is tried first.</p>
+</li>
+<li>
+<p>Find your Arduino's IP address:</p>
+<ul>
+<li><strong>UNO R4 WiFi:</strong> scrolls across the LED matrix</li>
+<li><strong>ESP32:</strong> printed in the Serial Monitor</li>
+</ul>
+</li>
+</ol>
+<h3 id="2-configure-sketchjs">2. Configure sketch.js</h3>
+<pre><code><span class="kd">let</span> <span class="nx">ArduinoIP</span> <span class="o">=</span> <span class="s1">&#39;192.168.1.42&#39;</span><span class="p">;</span>   <span class="c1">// your Arduino&#39;s IP</span>
+</code></pre>
+<h3 id="3-open-the-example">3. Open the example</h3>
+<p>Open <code>index.html</code> in a browser. Move an object in front of the sensor — the bar should respond.</p>
+<h2 id="how-it-works">How It Works</h2>
+<pre><code><span class="nx">arduino</span> <span class="o">=</span> <span class="ow">new</span> <span class="nx">Arduino</span><span class="p">();</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">connect</span><span class="p">(</span><span class="nx">ArduinoIP</span><span class="p">);</span>
+
+<span class="c1">// Register the ultrasonic extension</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;ultrasonicSensor&#39;</span><span class="p">,</span> <span class="ow">new</span> <span class="nx">Ultrasonic</span><span class="p">());</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">ultrasonicSensor</span><span class="p">.</span><span class="nx">attach</span><span class="p">(</span><span class="mf">7</span><span class="p">,</span> <span class="mf">8</span><span class="p">);</span>     <span class="c1">// trig pin 7, echo pin 8</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">ultrasonicSensor</span><span class="p">.</span><span class="nx">setTimeout</span><span class="p">(</span><span class="mf">40</span><span class="p">);</span>   <span class="c1">// 40 ms echo timeout ≈ 686 cm max range</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">ultrasonicSensor</span><span class="p">.</span><span class="nx">read</span><span class="p">(</span><span class="mf">200</span><span class="p">,</span> <span class="nx">CM</span><span class="p">);</span>    <span class="c1">// poll every 200 ms, return cm</span>
+</code></pre>
+<p>In <code>draw()</code>, <code>read()</code> returns the latest cached value — no extra network traffic:</p>
+<pre><code><span class="kd">let</span> <span class="nx">cm</span> <span class="o">=</span> <span class="nx">arduino</span><span class="p">.</span><span class="nx">ultrasonicSensor</span><span class="p">.</span><span class="nx">read</span><span class="p">();</span>
+</code></pre>
+<p>A return value of <code>-1</code> means the echo timed out (nothing in range, or object too far away).</p>
+<h3 id="echo-timeout-and-range">Echo timeout and range</h3>
+<p>The echo timeout determines maximum detectable range:</p>
+<table>
+<thead>
+<tr>
+<th>Timeout</th>
+<th>Approximate max range</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>30 ms (default)</td>
+<td>~500 cm</td>
+</tr>
+<tr>
+<td>40 ms</td>
+<td>~686 cm</td>
+</tr>
+</tbody>
+</table>
+<p>Increase with <code>setTimeout()</code> for longer range; decrease to speed up failed reads.</p>
+<h2 id="script-loading-order">Script loading order</h2>
+<p><code>pardalote.js</code> must load before <code>ultrasonic.js</code>:</p>
+<pre><code><span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;../../pardalote-js/pardalote.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
+<span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;../../pardalote-js/ultrasonic.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
+<span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;sketch.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
+</code></pre>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<p><strong>&quot;Always reads -1&quot;</strong></p>
+<ul>
+<li>Echo timeout too short — try <code>arduino.ultrasonicSensor.setTimeout(50)</code></li>
+<li>Point the sensor at a flat, hard surface (fabric and foam absorb ultrasound)</li>
+<li>Check wiring: TRIG and ECHO to the correct pins</li>
+</ul>
+<p><strong>&quot;Readings jump around&quot;</strong></p>
+<ul>
+<li>Normal for ultrasound — add smoothing in <code>draw()</code> with a rolling average</li>
+<li>Make sure the sensor has a clear line of sight with no nearby reflective surfaces</li>
+</ul>
+<p><strong>&quot;Sensor doesn't respond at all&quot;</strong></p>
+<ul>
+<li>Verify the sketch has <code>#include &lt;PardaloteUltrasonic.h&gt;</code></li>
+<li>Check VCC → 5 V and GND → GND</li>
+</ul>
+<p><strong>&quot;Arduino won't connect&quot;</strong></p>
+<ul>
+<li>Check the IP address in <code>sketch.js</code></li>
+<li>Arduino and browser must be on the same WiFi network</li>
+</ul>
+<h2 id="file-structure">File Structure</h2>
+<pre><code>ultrasonic-sensor-example/
+├── index.html      # Canvas page (loads p5.js, pardalote.js, ultrasonic.js)
+├── sketch.js       # Sensor setup and distance visualisation
+└── README.md       # This file
+
+pardalote-js/
+├── pardalote.js    # Core Pardalote library
+└── ultrasonic.js   # Ultrasonic extension
+</code></pre>
+<h2 id="next-steps">Next Steps</h2>
+<ul>
+<li>Read in inches: <code>arduino.ultrasonicSensor.read(200, INCH)</code></li>
+<li>Use as a trigger: fire an event when distance crosses a threshold with <code>onChange()</code></li>
+<li>Up to 4 sensors simultaneously: <code>arduino.add('front', new Ultrasonic())</code>, <code>arduino.add('side', new Ultrasonic())</code></li>
+<li>Combine with servos or NeoPixels to build reactive physical installations</li>
+</ul>
+
+  </div>
+</div>
+
+<footer class="site-footer speckled">
+  <div class="wrap">
+    <span>Pardalote — created by Scott Mitchell for design education and creative technology.</span>
+    <span><a href="../reference/index.html">Reference</a> · <a href="https://github.com/scottmitchell/pardalote">GitHub</a> · GPL-3.0</span>
+  </div>
+</footer>
+
+<script src="../js/site.js"></script>
+</body>
+</html>

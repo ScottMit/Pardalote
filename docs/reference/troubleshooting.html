@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Troubleshooting — Pardalote reference</title>
+<meta name="description" content="Common issues and their usual fixes, roughly in the order people hit them.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../css/site.css">
+</head>
+<body data-nav="reference">
+
+<nav class="site-nav speckled">
+  <a class="logo" href="../index.html">
+    <img src="../assets/logo.svg" width="30" height="30" alt="">
+    Pardalote
+  </a>
+  <div class="links">
+    <a data-nav="home" href="../index.html">Home</a>
+    <a data-nav="download" href="../download.html">Download</a>
+    <a data-nav="examples" href="../examples/index.html">Examples</a>
+    <a data-nav="reference" href="index.html">Reference</a>
+    <a href="https://github.com/scottmitchell/pardalote">GitHub</a>
+  </div>
+</nav>
+
+<div class="wrap">
+  <div class="ref-layout">
+<aside class="ref-nav">
+  <h4>Getting started</h4>
+  <a href="index.html">Overview</a>
+  <a href="installation.html">Installation</a>
+  <a href="wifi.html">WiFi configuration</a>
+  <h4>Core — JavaScript</h4>
+  <a href="connecting.html#connect">connect() / events</a>
+  <a href="pins.html#pinmode">pinMode()</a>
+  <a href="pins.html#digitalwrite">digitalWrite() / analogWrite()</a>
+  <a href="pins.html#analogread">analogRead() / digitalRead()</a>
+  <a href="pins.html#onchange">onChange()</a>
+  <a href="pins.html#pin-aliases">Pin aliases</a>
+  <h4>Core — Arduino</h4>
+  <a href="arduino.html#pardalotebegin">Pardalote.begin() / run()</a>
+  <a href="arduino.html#pardaloteshare">share() / send()</a>
+  <a href="arduino.html#the-actuator-objects">Reading actuators</a>
+  <h4>Extensions</h4>
+  <a href="extensions.html">Overview</a>
+  <a href="servo.html">Servo</a>
+  <a href="stepper.html">Stepper</a>
+  <a href="bus-servo.html">Bus servo</a>
+  <a href="groups.html">Groups</a>
+  <a href="neopixel.html">NeoPixel</a>
+  <a href="ultrasonic.html">Ultrasonic</a>
+  <a href="mpu.html">MPU / IMU</a>
+  <a href="camera.html">Camera</a>
+  <h4>Under the hood</h4>
+  <a href="protocol.html">Protocol</a>
+  <a href="troubleshooting.html">Troubleshooting</a>
+</aside>
+    <main class="ref-main">
+      <h1>Troubleshooting</h1>
+      <p class="lede">Common issues and their usual fixes, roughly in the order people hit them.</p>
+<h2 id="cant-connect">&quot;Can't connect&quot;</h2>
+<ul>
+<li>Check the IP address in <code>sketch.js</code> matches what the Arduino printed</li>
+<li>Arduino and browser must be on the same WiFi network</li>
+<li>Try refreshing — the Arduino may still be starting up</li>
+</ul>
+<h2 id="connection-drops-every-few-seconds-uno-r4">&quot;Connection drops every few seconds&quot; (UNO R4)</h2>
+<ul>
+<li>This is a known UNO R4 WiFi behaviour</li>
+<li>Pardalote handles reconnection automatically — your sketch keeps working</li>
+</ul>
+<h2 id="neopixels-dont-light-up">&quot;NeoPixels don't light up&quot;</h2>
+<ul>
+<li>Verify the pixel type: <code>NEO_GRB</code> works for most WS2812B strips, <code>NEO_RGB</code> for some others</li>
+<li>Call <code>setBrightness()</code> — default is 255 but strips vary</li>
+<li>Always call <code>show()</code> after setting pixel colours</li>
+</ul>
+<h2 id="imu-not-responding">&quot;IMU not responding&quot;</h2>
+<ul>
+<li>Check SDA and SCL wiring and confirm the I2C address (AD0/SA0 pin state)</li>
+<li>Check Serial Monitor for <code>[MPU] WHO_AM_I mismatch</code> — the model string or wiring is wrong</li>
+<li>Verify your sketch has <code>#include &lt;PardaloteMPU.h&gt;</code></li>
+</ul>
+<h2 id="imu-readings-drift-when-stationary">&quot;IMU readings drift when stationary&quot;</h2>
+<ul>
+<li>Run calibration with the sensor flat and still: <code>arduino.imu.calibrate(200)</code></li>
+<li>The complementary filter's <code>ALPHA</code> parameter gradually pulls angles back; lower it for faster drift correction</li>
+</ul>
+<h2 id="board-hangs-after-a-few-seconds-with-the-imu-example-esp32-wrover-and-other-older-esp32-boards">&quot;Board hangs after a few seconds with the IMU example&quot; (ESP32-WROVER and other older ESP32 boards)</h2>
+<ul>
+<li>The original ESP32 chip's I²C peripheral can stall under sustained high-rate reads, hanging the main loop. Reduce the JS poll interval to 50 ms or higher: <code>arduino.imu.read(50)</code></li>
+<li>Newer ESP32 boards (ESP32-S3, C3, etc.) and the UNO R4 don't have this limitation and can poll the IMU at 20 ms (50 Hz) reliably</li>
+</ul>
+<h2 id="servo-jitters">&quot;Servo jitters&quot;</h2>
+<ul>
+<li>Use <code>setThrottle()</code> to limit write frequency</li>
+<li>Make sure the servo has adequate power (not just USB)</li>
+</ul>
+<h2 id="stepper-doesnt-move--moves-the-wrong-way">&quot;Stepper doesn't move / moves the wrong way&quot;</h2>
+<ul>
+<li>Confirm the AccelStepper library is installed and the sketch has <code>#include &lt;PardaloteStepper.h&gt;</code></li>
+<li>Give the motor its own supply — the coils can't run off the board's 5 V</li>
+<li>Nothing happens on <code>moveTo()</code>? Set a non-zero <code>setMaxSpeed()</code> and <code>setAcceleration()</code> first</li>
+<li>Runs backwards: swap the direction with <code>attach(STEP, DIR, EN, { invertDir: true })</code></li>
+<li>Motor buzzes but won't turn: lower <code>setMaxSpeed()</code> — software step generation shares the CPU with WiFi and tops out at a few kHz</li>
+<li>Won't move past a point: check you haven't hit a <code>setLimits()</code> boundary</li>
+</ul>
+<h2 id="stepper-motor-is-hot--wont-turn-by-hand-when-idle">&quot;Stepper motor is hot / won't turn by hand when idle&quot;</h2>
+<ul>
+<li>That's the enable pin holding torque. Call <code>disable()</code> to release the coils; <code>enable()</code> to hold again</li>
+</ul>
+<h2 id="bus-servo-doesnt-respond--no-response-in-serial-monitor">&quot;Bus servo doesn't respond / [NO RESPONSE] in Serial Monitor&quot;</h2>
+<ul>
+<li>Confirm the <code>SCServo</code> library is installed and the sketch has <code>#include &lt;PardaloteBusServo.h&gt;</code></li>
+<li>Check the servo ID matches what you passed to <code>attach()</code> — run <code>scan()</code> to list responding IDs</li>
+<li>Baud mismatch: bus servos default to 1,000,000; set it with <code>configureBus({ baud })</code> if yours differs</li>
+<li>Wrong UART or swapped RX/TX — UNO R4 uses <code>Serial1</code> (D0/D1); on ESP32 set the pins with <code>configureBus({ rxPin, txPin })</code></li>
+<li>Give the servos their own 6–7.4 V supply with a common ground to the board</li>
+<li>Using the wrong series: ST/SMS servos are <code>'ST'</code> (0–4095), SC/SCS are <code>'SC'</code> (0–1023)</li>
+</ul>
+<h2 id="two-bus-servos-both-moved-when-i-set-an-id">&quot;Two bus servos both moved when I set an ID&quot;</h2>
+<ul>
+<li><code>setId()</code> addresses the current ID — with several servos sharing it, they all take the new ID. Renumber with a single servo on the bus at a time</li>
+</ul>
+<h2 id="ultrasonic-returns--1">&quot;Ultrasonic returns -1&quot;</h2>
+<ul>
+<li>Increase timeout: <code>arduino.sonar.setTimeout(50)</code></li>
+<li>Point at a flat, hard surface (fabric and foam absorb ultrasound)</li>
+<li>Maximum range depends on timeout: 30 ms ≈ 500 cm</li>
+</ul>
+
+    </main>
+  </div>
+</div>
+
+<footer class="site-footer speckled">
+  <div class="wrap">
+    <span>Pardalote — created by Scott Mitchell for design education and creative technology.</span>
+    <span><a href="index.html">Reference</a> · <a href="https://github.com/scottmitchell/pardalote">GitHub</a> · GPL-3.0</span>
+  </div>
+</footer>
+
+<script src="../js/site.js"></script>
+</body>
+</html>

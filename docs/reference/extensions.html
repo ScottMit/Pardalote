@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Extensions overview — Pardalote reference</title>
+<meta name="description" content="Extensions add support for hardware devices — servos, steppers, LED strips, sensors and cameras. Register them in JS, include them in the sketch.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../css/site.css">
+</head>
+<body data-nav="reference">
+
+<nav class="site-nav speckled">
+  <a class="logo" href="../index.html">
+    <img src="../assets/logo.svg" width="30" height="30" alt="">
+    Pardalote
+  </a>
+  <div class="links">
+    <a data-nav="home" href="../index.html">Home</a>
+    <a data-nav="download" href="../download.html">Download</a>
+    <a data-nav="examples" href="../examples/index.html">Examples</a>
+    <a data-nav="reference" href="index.html">Reference</a>
+    <a href="https://github.com/scottmitchell/pardalote">GitHub</a>
+  </div>
+</nav>
+
+<div class="wrap">
+  <div class="ref-layout">
+<aside class="ref-nav">
+  <h4>Getting started</h4>
+  <a href="index.html">Overview</a>
+  <a href="installation.html">Installation</a>
+  <a href="wifi.html">WiFi configuration</a>
+  <h4>Core — JavaScript</h4>
+  <a href="connecting.html#connect">connect() / events</a>
+  <a href="pins.html#pinmode">pinMode()</a>
+  <a href="pins.html#digitalwrite">digitalWrite() / analogWrite()</a>
+  <a href="pins.html#analogread">analogRead() / digitalRead()</a>
+  <a href="pins.html#onchange">onChange()</a>
+  <a href="pins.html#pin-aliases">Pin aliases</a>
+  <h4>Core — Arduino</h4>
+  <a href="arduino.html#pardalotebegin">Pardalote.begin() / run()</a>
+  <a href="arduino.html#pardaloteshare">share() / send()</a>
+  <a href="arduino.html#the-actuator-objects">Reading actuators</a>
+  <h4>Extensions</h4>
+  <a href="extensions.html">Overview</a>
+  <a href="servo.html">Servo</a>
+  <a href="stepper.html">Stepper</a>
+  <a href="bus-servo.html">Bus servo</a>
+  <a href="groups.html">Groups</a>
+  <a href="neopixel.html">NeoPixel</a>
+  <a href="ultrasonic.html">Ultrasonic</a>
+  <a href="mpu.html">MPU / IMU</a>
+  <a href="camera.html">Camera</a>
+  <h4>Under the hood</h4>
+  <a href="protocol.html">Protocol</a>
+  <a href="troubleshooting.html">Troubleshooting</a>
+</aside>
+    <main class="ref-main">
+      <h1>Extensions overview</h1>
+      <p class="lede">Extensions add support for hardware devices — servos, steppers, LED strips, sensors and cameras. Register them in JS, include them in the sketch.</p>
+<h2 id="using-extensions-in-javascript">Using extensions in JavaScript</h2>
+<p>Register extensions before connecting, and use them by name:</p>
+<div class="code-ex"><div class="bar">sketch.js — register and use extensions</div><pre><code><span class="kd">const</span> <span class="nx">arduino</span> <span class="o">=</span> <span class="ow">new</span> <span class="nx">Arduino</span><span class="p">();</span>
+
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;myServo&#39;</span><span class="p">,</span> <span class="ow">new</span> <span class="nx">Servo</span><span class="p">());</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;strip&#39;</span><span class="p">,</span>   <span class="ow">new</span> <span class="nx">NeoPixel</span><span class="p">());</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;sonar&#39;</span><span class="p">,</span>   <span class="ow">new</span> <span class="nx">Ultrasonic</span><span class="p">());</span>
+
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">connect</span><span class="p">(</span><span class="s1">&#39;192.168.1.42&#39;</span><span class="p">);</span>
+
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;ready&#39;</span><span class="p">,</span> <span class="p">()</span> <span class="p">=&gt;</span> <span class="p">{</span>
+    <span class="nx">arduino</span><span class="p">.</span><span class="nx">myServo</span><span class="p">.</span><span class="nx">attach</span><span class="p">(</span><span class="mf">9</span><span class="p">);</span>
+    <span class="nx">arduino</span><span class="p">.</span><span class="nx">strip</span><span class="p">.</span><span class="nx">init</span><span class="p">(</span><span class="mf">6</span><span class="p">,</span> <span class="mf">30</span><span class="p">);</span>
+    <span class="nx">arduino</span><span class="p">.</span><span class="nx">sonar</span><span class="p">.</span><span class="nx">attach</span><span class="p">(</span><span class="mf">7</span><span class="p">,</span> <span class="mf">8</span><span class="p">);</span>
+<span class="p">});</span>
+</code></pre></div>
+<p>Each extension automatically gets a logical ID based on its type. Multiple instances of the same type are supported.</p>
+<h2 id="script-loading-order">Script loading order</h2>
+<p><code>pardalote.js</code> must load before any extension files. Extension files must load before your sketch:</p>
+<div class="code-ex"><div class="bar">index.html — script loading order</div><pre><code><span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;pardalote.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
+<span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;pardalote-pins-esp32-wrover-dev.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>  <span class="cm">&lt;!-- optional --&gt;</span>
+<span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;servo.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>       <span class="cm">&lt;!-- optional extensions --&gt;</span>
+<span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;stepper.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
+<span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;busServo.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
+<span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;neoPixel.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
+<span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;ultrasonic.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
+<span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;mpu.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
+<span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;camera.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
+<span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;sketch.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
+</code></pre></div>
+<h2 id="enabling-extensions-in-the-firmware">Enabling extensions in the firmware</h2>
+<p>Extensions are opt-in on the Arduino side too. Add the headers you need to your sketch:</p>
+<div class="code-ex"><div class="bar">sketch.ino — opt-in extensions</div><pre><code><span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;Pardalote.h&gt;</span><span class="cp"></span>
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;PardaloteServo.h&gt;</span><span class="cp"></span>
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;PardaloteNeoPixel.h&gt;</span><span class="cp"></span>
+<span class="c1">// #include &lt;PardaloteStepper.h&gt;</span>
+<span class="c1">// #include &lt;PardaloteBusServo.h&gt;</span>
+<span class="c1">// #include &lt;PardaloteUltrasonic.h&gt;</span>
+<span class="c1">// #include &lt;PardaloteMPU.h&gt;</span>
+<span class="c1">// #define CAMERA_MODEL_XIAO_ESP32S3</span>
+<span class="c1">// #include &lt;PardaloteCamera.h&gt;</span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">setup</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">begin</span><span class="p">();</span><span class="w"> </span><span class="p">}</span><span class="w"></span>
+<span class="kt">void</span><span class="w"> </span><span class="nf">loop</span><span class="p">()</span><span class="w">  </span><span class="p">{</span><span class="w"> </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">run</span><span class="p">();</span><span class="w">   </span><span class="p">}</span><span class="w"></span>
+</code></pre></div>
+<p>Each extension self-registers when included — no other changes required. Only the extensions you <code>#include</code> get compiled into the binary.</p>
+<h2 id="the-extensions">The extensions</h2>
+<table>
+<thead>
+<tr>
+<th>Extension</th>
+<th>Supports</th>
+<th>Limit</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="servo.html">Servo</a></td>
+<td>PWM hobby servos</td>
+<td>8</td>
+</tr>
+<tr>
+<td><a href="stepper.html">Stepper</a></td>
+<td>STEP/DIR and 4-wire drivers via AccelStepper</td>
+<td>6</td>
+</tr>
+<tr>
+<td><a href="bus-servo.html">Bus servo</a></td>
+<td>Feetech ST/SMS and SC/SCS serial servos</td>
+<td>16</td>
+</tr>
+<tr>
+<td><a href="neopixel.html">NeoPixel</a></td>
+<td>WS2812B-style LED strips</td>
+<td>4 strips</td>
+</tr>
+<tr>
+<td><a href="ultrasonic.html">Ultrasonic</a></td>
+<td>HC-SR04 and similar distance sensors</td>
+<td>4</td>
+</tr>
+<tr>
+<td><a href="mpu.html">MPU / IMU</a></td>
+<td>InvenSense MPU and STMicro LSM6 families</td>
+<td>2</td>
+</tr>
+<tr>
+<td><a href="camera.html">Camera</a></td>
+<td>ESP32 camera modules (MJPEG over HTTP)</td>
+<td>1 stream</td>
+</tr>
+</tbody>
+</table>
+<p><a href="groups.html">Groups</a> let you drive several actuators together — one message, coordinated arrival.</p>
+<h2 id="rolling-your-own">Rolling your own</h2>
+<p>An extension is a JS file paired with an Arduino header: the JS side sends commands over the shared protocol, the Arduino side registers handlers for them. The built-in extensions are the best templates — pick the one closest to your hardware and start from its source. See <a href="protocol.html">Protocol</a> for the frame format.</p>
+
+    </main>
+  </div>
+</div>
+
+<footer class="site-footer speckled">
+  <div class="wrap">
+    <span>Pardalote — created by Scott Mitchell for design education and creative technology.</span>
+    <span><a href="index.html">Reference</a> · <a href="https://github.com/scottmitchell/pardalote">GitHub</a> · GPL-3.0</span>
+  </div>
+</footer>
+
+<script src="../js/site.js"></script>
+</body>
+</html>

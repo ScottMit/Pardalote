@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Servo — Pardalote reference</title>
+<meta name="description" content="Drive up to 8 PWM hobby servos from the browser — with smooth sweeps, timed moves, and angle read-back.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../css/site.css">
+</head>
+<body data-nav="reference">
+
+<nav class="site-nav speckled">
+  <a class="logo" href="../index.html">
+    <img src="../assets/logo.svg" width="30" height="30" alt="">
+    Pardalote
+  </a>
+  <div class="links">
+    <a data-nav="home" href="../index.html">Home</a>
+    <a data-nav="download" href="../download.html">Download</a>
+    <a data-nav="examples" href="../examples/index.html">Examples</a>
+    <a data-nav="reference" href="index.html">Reference</a>
+    <a href="https://github.com/scottmitchell/pardalote">GitHub</a>
+  </div>
+</nav>
+
+<div class="wrap">
+  <div class="ref-layout">
+<aside class="ref-nav">
+  <h4>Getting started</h4>
+  <a href="index.html">Overview</a>
+  <a href="installation.html">Installation</a>
+  <a href="wifi.html">WiFi configuration</a>
+  <h4>Core — JavaScript</h4>
+  <a href="connecting.html#connect">connect() / events</a>
+  <a href="pins.html#pinmode">pinMode()</a>
+  <a href="pins.html#digitalwrite">digitalWrite() / analogWrite()</a>
+  <a href="pins.html#analogread">analogRead() / digitalRead()</a>
+  <a href="pins.html#onchange">onChange()</a>
+  <a href="pins.html#pin-aliases">Pin aliases</a>
+  <h4>Core — Arduino</h4>
+  <a href="arduino.html#pardalotebegin">Pardalote.begin() / run()</a>
+  <a href="arduino.html#pardaloteshare">share() / send()</a>
+  <a href="arduino.html#the-actuator-objects">Reading actuators</a>
+  <h4>Extensions</h4>
+  <a href="extensions.html">Overview</a>
+  <a href="servo.html">Servo</a>
+  <a href="stepper.html">Stepper</a>
+  <a href="bus-servo.html">Bus servo</a>
+  <a href="groups.html">Groups</a>
+  <a href="neopixel.html">NeoPixel</a>
+  <a href="ultrasonic.html">Ultrasonic</a>
+  <a href="mpu.html">MPU / IMU</a>
+  <a href="camera.html">Camera</a>
+  <h4>Under the hood</h4>
+  <a href="protocol.html">Protocol</a>
+  <a href="troubleshooting.html">Troubleshooting</a>
+</aside>
+    <main class="ref-main">
+      <h1>Servo</h1>
+      <p class="lede">Drive up to 8 PWM hobby servos from the browser — with smooth sweeps, timed moves, and angle read-back.</p>
+<p>Requires <code>&lt;PardaloteServo.h&gt;</code> in the sketch (plus the <code>ESP32Servo</code> library on ESP32). Register instances before connecting; examples assume:</p>
+<pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;pan&#39;</span><span class="p">,</span> <span class="ow">new</span> <span class="nx">Servo</span><span class="p">());</span>
+</code></pre>
+<h2 id="attach">attach()</h2>
+<p>Attaches the servo to a pin. Call inside <code>on('ready')</code>.</p>
+<div class="sig">arduino.pan.<span class="fn">attach</span>(pin, [minPulse], [maxPulse])</div>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>pin</code></td>
+<td>number | string</td>
+<td>PWM-capable pin the servo signal wire is on.</td>
+</tr>
+<tr>
+<td><code>minPulse</code></td>
+<td>number</td>
+<td>Optional. Pulse width at 0°, in µs (default <code>544</code>).</td>
+</tr>
+<tr>
+<td><code>maxPulse</code></td>
+<td>number</td>
+<td>Optional. Pulse width at 180°, in µs (default <code>2400</code>).</td>
+</tr>
+</tbody>
+</table>
+<div class="code-ex"><div class="bar">Example — attach a servo</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">pan</span><span class="p">.</span><span class="nx">attach</span><span class="p">(</span><span class="mf">9</span><span class="p">);</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">pan</span><span class="p">.</span><span class="nx">attach</span><span class="p">(</span><span class="mf">9</span><span class="p">,</span> <span class="mf">544</span><span class="p">,</span> <span class="mf">2400</span><span class="p">);</span>   <span class="c1">// custom pulse range</span>
+</code></pre></div>
+<h2 id="detach">detach()</h2>
+<p>Releases the pin.</p>
+<div class="sig">arduino.pan.<span class="fn">detach</span>()</div>
+<h2 id="write">write()</h2>
+<p>Moves the servo to an angle. Cancels any in-progress sweep or timed move.</p>
+<div class="sig">arduino.pan.<span class="fn">write</span>(angle)</div>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>angle</code></td>
+<td>number</td>
+<td>Target angle, <code>0</code>–<code>180</code> degrees.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="writemicroseconds">writeMicroseconds()</h2>
+<p>Fine-grained control via raw pulse width.</p>
+<div class="sig">arduino.pan.<span class="fn">writeMicroseconds</span>(us)</div>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>us</code></td>
+<td>number</td>
+<td>Pulse width in microseconds, typically <code>544</code>–<code>2400</code>.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="center--min--max">center() / min() / max()</h2>
+<p>Shorthand moves.</p>
+<div class="sig">arduino.pan.<span class="fn">center</span>() · arduino.pan.<span class="fn">min</span>() · arduino.pan.<span class="fn">max</span>()</div>
+<p>Move to 90°, 0°, and 180° respectively.</p>
+<h2 id="read">read()</h2>
+<p>Reads the servo's angle. Same poll-and-cache pattern as <code>analogRead()</code>: the first call starts a poll, later calls return the cached value.</p>
+<div class="sig">arduino.pan.<span class="fn">read</span>([interval])</div>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>interval</code></td>
+<td>number</td>
+<td>Optional. Poll interval in ms. Pass <code>END</code> to stop.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns</strong> the cached angle in degrees.</p>
+<p>What the Arduino reports depends on the platform:</p>
+<ul>
+<li><strong>UNO R4 WiFi:</strong> the last commanded angle (the Arduino Servo library's <code>read()</code> is just a getter).</li>
+<li><strong>ESP32:</strong> the angle decoded from the LEDC PWM duty register. Usually matches the commanded angle, but the hardware round-trip can return values slightly off, and a <code>write()</code> during a <code>read()</code> can briefly return a transitional value.</li>
+</ul>
+<p>If you just want &quot;what did I tell the servo to do?&quot; — use the <code>angle</code> property (locally cached, updated on every <code>write()</code>).</p>
+<h2 id="sweep">sweep()</h2>
+<p>Sweeps between two angles over a duration, streaming intermediate writes. Returns a promise. Any <code>write()</code> cancels it.</p>
+<div class="sig">await arduino.pan.<span class="fn">sweep</span>(from, to, duration, [steps])</div>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>from</code></td>
+<td>number</td>
+<td>Start angle.</td>
+</tr>
+<tr>
+<td><code>to</code></td>
+<td>number</td>
+<td>End angle.</td>
+</tr>
+<tr>
+<td><code>duration</code></td>
+<td>number</td>
+<td>Sweep time in ms.</td>
+</tr>
+<tr>
+<td><code>steps</code></td>
+<td>number</td>
+<td>Optional. Number of intermediate writes (default <code>50</code>). More = smoother.</td>
+</tr>
+</tbody>
+</table>
+<div class="code-ex"><div class="bar">Example — smooth sweep</div><pre><code><span class="k">await</span> <span class="nx">arduino</span><span class="p">.</span><span class="nx">pan</span><span class="p">.</span><span class="nx">sweep</span><span class="p">(</span><span class="mf">0</span><span class="p">,</span> <span class="mf">180</span><span class="p">,</span> <span class="mf">2000</span><span class="p">);</span>
+</code></pre></div>
+<h2 id="writetimed">writeTimed()</h2>
+<p>Moves to an angle over a set time — the Arduino interpolates on-board (smooth, no WiFi streaming) and fires <code>done</code> on arrival. The modern replacement for <code>sweep()</code>, and what lets PWM servos <strong>arrive together</strong> inside a <a href="groups.html">group</a>.</p>
+<div class="sig">arduino.pan.<span class="fn">writeTimed</span>(angle, duration)</div>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>angle</code></td>
+<td>number</td>
+<td>Target angle, <code>0</code>–<code>180</code>.</td>
+</tr>
+<tr>
+<td><code>duration</code></td>
+<td>number</td>
+<td>Move time in ms.</td>
+</tr>
+</tbody>
+</table>
+<div class="code-ex"><div class="bar">Example — timed move with a done event</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">pan</span><span class="p">.</span><span class="nx">writeTimed</span><span class="p">(</span><span class="mf">120</span><span class="p">,</span> <span class="mf">1500</span><span class="p">);</span>   <span class="c1">// move to 120° over 1.5 s</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">pan</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;done&#39;</span><span class="p">,</span> <span class="p">({</span> <span class="nx">angle</span> <span class="p">})</span> <span class="p">=&gt;</span> <span class="p">{</span> <span class="cm">/* arrived */</span> <span class="p">});</span>
+</code></pre></div>
+<p>An immediate <code>write()</code> cancels an in-progress timed move.</p>
+<h2 id="stop">stop()</h2>
+<p>Cancels a timed move and holds the current angle.</p>
+<div class="sig">arduino.pan.<span class="fn">stop</span>()</div>
+<h2 id="events">Events</h2>
+<div class="sig">arduino.pan.<span class="fn">on</span>(event, handler)</div>
+<table>
+<thead>
+<tr>
+<th>Event</th>
+<th>Payload</th>
+<th>Fires when</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>'read'</code></td>
+<td><code>{ angle }</code></td>
+<td>A poll result arrives.</td>
+</tr>
+<tr>
+<td><code>'write'</code></td>
+<td><code>{ angle }</code></td>
+<td>A write is issued.</td>
+</tr>
+<tr>
+<td><code>'attached'</code></td>
+<td><code>{ attached }</code></td>
+<td>Attach state changes.</td>
+</tr>
+<tr>
+<td><code>'done'</code></td>
+<td><code>{ angle }</code></td>
+<td>A timed move reaches its target.</td>
+</tr>
+</tbody>
+</table>
+<p>Shorthand: <code>onRead(fn)</code>, <code>onWrite(fn)</code>, <code>onAttached(fn)</code>, <code>onDone(fn)</code>.</p>
+<h2 id="setthrottle--setthreshold">setThrottle() / setThreshold()</h2>
+<p>Rate-limits outgoing writes — useful when driving the servo from mouse movement or a draw loop.</p>
+<div class="sig">arduino.pan.<span class="fn">setThrottle</span>(ms) · arduino.pan.<span class="fn">setThreshold</span>(degrees)</div>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ms</code></td>
+<td>number</td>
+<td>Minimum ms between writes (default <code>20</code>).</td>
+</tr>
+<tr>
+<td><code>degrees</code></td>
+<td>number</td>
+<td>Minimum change in degrees to send (default <code>1</code>).</td>
+</tr>
+</tbody>
+</table>
+<h2 id="properties-and-state">Properties and state</h2>
+<table>
+<thead>
+<tr>
+<th>Property</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>arduino.pan.angle</code></td>
+<td>Locally cached snapshot, updated on every <code>write()</code>.</td>
+</tr>
+</tbody>
+</table>
+<div class="sig">arduino.pan.<span class="fn">getState</span>()</div>
+<p><strong>Returns</strong> a snapshot of all servo state.</p>
+<p>See also: <a href="groups.html">Groups</a> · <a href="bus-servo.html">Bus servo</a> · <a href="../examples/servo-example.html">Servo example</a></p>
+
+    </main>
+  </div>
+</div>
+
+<footer class="site-footer speckled">
+  <div class="wrap">
+    <span>Pardalote — created by Scott Mitchell for design education and creative technology.</span>
+    <span><a href="index.html">Reference</a> · <a href="https://github.com/scottmitchell/pardalote">GitHub</a> · GPL-3.0</span>
+  </div>
+</footer>
+
+<script src="../js/site.js"></script>
+</body>
+</html>

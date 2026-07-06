@@ -5,7 +5,7 @@
 // GPL-3.0 License
 // ==============================================================
 
-let ArduinoIP = '10.1.1.186';
+let ArduinoIP = '10.1.1.186';   // Change this to your Arduino's IP
 
 let arduino;
 

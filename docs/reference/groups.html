@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Groups — Pardalote reference</title>
+<meta name="description" content="Drive several actuators as one — a single message moves every member, and coordinated moves arrive together.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../css/site.css">
+</head>
+<body data-nav="reference">
+
+<nav class="site-nav speckled">
+  <a class="logo" href="../index.html">
+    <img src="../assets/logo.svg" width="30" height="30" alt="">
+    Pardalote
+  </a>
+  <div class="links">
+    <a data-nav="home" href="../index.html">Home</a>
+    <a data-nav="download" href="../download.html">Download</a>
+    <a data-nav="examples" href="../examples/index.html">Examples</a>
+    <a data-nav="reference" href="index.html">Reference</a>
+    <a href="https://github.com/scottmitchell/pardalote">GitHub</a>
+  </div>
+</nav>
+
+<div class="wrap">
+  <div class="ref-layout">
+<aside class="ref-nav">
+  <h4>Getting started</h4>
+  <a href="index.html">Overview</a>
+  <a href="installation.html">Installation</a>
+  <a href="wifi.html">WiFi configuration</a>
+  <h4>Core — JavaScript</h4>
+  <a href="connecting.html#connect">connect() / events</a>
+  <a href="pins.html#pinmode">pinMode()</a>
+  <a href="pins.html#digitalwrite">digitalWrite() / analogWrite()</a>
+  <a href="pins.html#analogread">analogRead() / digitalRead()</a>
+  <a href="pins.html#onchange">onChange()</a>
+  <a href="pins.html#pin-aliases">Pin aliases</a>
+  <h4>Core — Arduino</h4>
+  <a href="arduino.html#pardalotebegin">Pardalote.begin() / run()</a>
+  <a href="arduino.html#pardaloteshare">share() / send()</a>
+  <a href="arduino.html#the-actuator-objects">Reading actuators</a>
+  <h4>Extensions</h4>
+  <a href="extensions.html">Overview</a>
+  <a href="servo.html">Servo</a>
+  <a href="stepper.html">Stepper</a>
+  <a href="bus-servo.html">Bus servo</a>
+  <a href="groups.html">Groups</a>
+  <a href="neopixel.html">NeoPixel</a>
+  <a href="ultrasonic.html">Ultrasonic</a>
+  <a href="mpu.html">MPU / IMU</a>
+  <a href="camera.html">Camera</a>
+  <h4>Under the hood</h4>
+  <a href="protocol.html">Protocol</a>
+  <a href="troubleshooting.html">Troubleshooting</a>
+</aside>
+    <main class="ref-main">
+      <h1>Groups</h1>
+      <p class="lede">Drive several actuators as one — a single message moves every member, and coordinated moves arrive together.</p>
+<p>A <strong>group</strong> is a named collection of actuators you drive together. <code>set()</code> writes every member in a <strong>single WebSocket message</strong>, and <code>moveTo()</code> coordinates a move so all members <strong>arrive together</strong>. Groups currently take <strong>Servo</strong>, <strong>BusServo</strong>, and <strong>Stepper</strong> members (pins and NeoPixels are planned).</p>
+<h2 id="arduinogroup">arduino.group()</h2>
+<p>Creates a group from named members. Call inside <code>on('ready')</code>, after attaching each member.</p>
+<div class="sig">arduino.<span class="fn">group</span>(name, members)</div>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>name</code></td>
+<td>string</td>
+<td>The group's name. The group also becomes available as <code>arduino[name]</code>.</td>
+</tr>
+<tr>
+<td><code>members</code></td>
+<td>object</td>
+<td>Map of member names to extension instances.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns</strong> the group object.</p>
+<div class="code-ex"><div class="bar">Example — build an arm group</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;shoulder&#39;</span><span class="p">,</span> <span class="ow">new</span> <span class="nx">BusServo</span><span class="p">());</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;elbow&#39;</span><span class="p">,</span>    <span class="ow">new</span> <span class="nx">BusServo</span><span class="p">());</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;base&#39;</span><span class="p">,</span>     <span class="ow">new</span> <span class="nx">Stepper</span><span class="p">());</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;wrist&#39;</span><span class="p">,</span>    <span class="ow">new</span> <span class="nx">Servo</span><span class="p">());</span>
+
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;ready&#39;</span><span class="p">,</span> <span class="p">()</span> <span class="p">=&gt;</span> <span class="p">{</span>
+    <span class="c1">// ... attach each member ...</span>
+    <span class="kd">const</span> <span class="nx">arm</span> <span class="o">=</span> <span class="nx">arduino</span><span class="p">.</span><span class="nx">group</span><span class="p">(</span><span class="s1">&#39;arm&#39;</span><span class="p">,</span> <span class="p">{</span>
+        <span class="nx">shoulder</span><span class="o">:</span> <span class="nx">arduino</span><span class="p">.</span><span class="nx">shoulder</span><span class="p">,</span>
+        <span class="nx">elbow</span><span class="o">:</span>    <span class="nx">arduino</span><span class="p">.</span><span class="nx">elbow</span><span class="p">,</span>
+        <span class="nx">base</span><span class="o">:</span>     <span class="nx">arduino</span><span class="p">.</span><span class="nx">base</span><span class="p">,</span>
+        <span class="nx">wrist</span><span class="o">:</span>    <span class="nx">arduino</span><span class="p">.</span><span class="nx">wrist</span><span class="p">,</span>
+    <span class="p">});</span>
+<span class="p">});</span>
+</code></pre></div>
+<h2 id="set">set()</h2>
+<p>Writes all named members at once. Every member's frame is packed into <strong>one</strong> WebSocket message, so the board applies them back-to-back within a single receive — they move together. Bus servos of the same series are additionally coalesced into a single hardware <strong>SyncWrite</strong> packet (a truly simultaneous latch).</p>
+<div class="sig">arm.<span class="fn">set</span>(targets)</div>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>targets</code></td>
+<td>object</td>
+<td>Member names mapped to target values, in each member's native unit (counts, steps, degrees).</td>
+</tr>
+</tbody>
+</table>
+<div class="code-ex"><div class="bar">Example — write everyone at once</div><pre><code><span class="nx">arm</span><span class="p">.</span><span class="nx">set</span><span class="p">({</span> <span class="nx">shoulder</span><span class="o">:</span> <span class="mf">2048</span><span class="p">,</span> <span class="nx">elbow</span><span class="o">:</span> <span class="mf">3000</span><span class="p">,</span> <span class="nx">base</span><span class="o">:</span> <span class="mf">1600</span><span class="p">,</span> <span class="nx">wrist</span><span class="o">:</span> <span class="mf">90</span> <span class="p">});</span>
+</code></pre></div>
+<h2 id="moveto">moveTo()</h2>
+<p>Moves every member to its target so they all finish after about <code>duration</code> ms. Each actuator type uses its own native mechanism:</p>
+<table>
+<thead>
+<tr>
+<th>Member</th>
+<th>How it arrives together</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Bus servo</td>
+<td>one SyncWrite with per-servo speeds matched to distance</td>
+</tr>
+<tr>
+<td>PWM servo</td>
+<td>on-board interpolation over the shared duration</td>
+</tr>
+<tr>
+<td>Stepper</td>
+<td>constant-speed move, the board sizing speed from its own position</td>
+</tr>
+</tbody>
+</table>
+<p>All of it still goes out in <strong>one</strong> batched message — including mixed groups.</p>
+<div class="sig">arm.<span class="fn">moveTo</span>(targets, { duration })</div>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>targets</code></td>
+<td>object</td>
+<td>Member names mapped to target values.</td>
+</tr>
+<tr>
+<td><code>duration</code></td>
+<td>number</td>
+<td>Approximate arrival time in ms.</td>
+</tr>
+</tbody>
+</table>
+<div class="code-ex"><div class="bar">Example — arrive together</div><pre><code><span class="nx">arm</span><span class="p">.</span><span class="nx">moveTo</span><span class="p">({</span> <span class="nx">shoulder</span><span class="o">:</span> <span class="mf">3000</span><span class="p">,</span> <span class="nx">elbow</span><span class="o">:</span> <span class="mf">1200</span><span class="p">,</span> <span class="nx">base</span><span class="o">:</span> <span class="mf">0</span><span class="p">,</span> <span class="nx">wrist</span><span class="o">:</span> <span class="mf">120</span> <span class="p">},</span> <span class="p">{</span> <span class="nx">duration</span><span class="o">:</span> <span class="mf">1500</span> <span class="p">});</span>
+</code></pre></div>
+<p><code>duration</code> is approximate — it's the <em>arrival synchronisation</em> that's exact. For an accurate first move from an unknown pose, either poll <code>read()</code> first or start from a known pose (<code>center()</code> / <code>set()</code>), since <code>moveTo</code> measures distance from each member's last commanded position.</p>
+<h2 id="movetoasync">moveToAsync()</h2>
+<p>Promise variant — resolves after <code>duration</code> (time-based, for sequencing).</p>
+<div class="sig">await arm.<span class="fn">moveToAsync</span>(targets, { duration })</div>
+<div class="code-ex"><div class="bar">Example — sequence poses</div><pre><code><span class="k">await</span> <span class="nx">arm</span><span class="p">.</span><span class="nx">moveToAsync</span><span class="p">({</span> <span class="nx">shoulder</span><span class="o">:</span> <span class="mf">2048</span><span class="p">,</span> <span class="nx">elbow</span><span class="o">:</span> <span class="mf">2048</span> <span class="p">},</span> <span class="p">{</span> <span class="nx">duration</span><span class="o">:</span> <span class="mf">1000</span> <span class="p">});</span>
+<span class="k">await</span> <span class="nx">arm</span><span class="p">.</span><span class="nx">moveToAsync</span><span class="p">({</span> <span class="nx">shoulder</span><span class="o">:</span> <span class="mf">1000</span><span class="p">,</span> <span class="nx">elbow</span><span class="o">:</span> <span class="mf">3000</span> <span class="p">},</span> <span class="p">{</span> <span class="nx">duration</span><span class="o">:</span> <span class="mf">800</span> <span class="p">});</span>
+</code></pre></div>
+<h2 id="read--values">read() / values()</h2>
+<p>Polling and snapshots across every member.</p>
+<div class="sig">arm.<span class="fn">read</span>([interval]) · arm.<span class="fn">values</span>()</div>
+<table>
+<thead>
+<tr>
+<th>Call</th>
+<th>Effect</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>arm.read(100)</code></td>
+<td>Start polling every member at 100 ms.</td>
+</tr>
+<tr>
+<td><code>arm.read()</code></td>
+<td>Snapshot of cached values → <code>{ shoulder, elbow, base, wrist }</code>.</td>
+</tr>
+<tr>
+<td><code>arm.read(END)</code></td>
+<td>Stop polling every member.</td>
+</tr>
+<tr>
+<td><code>arm.values()</code></td>
+<td>Same snapshot, no polling change.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="stop--getstate">stop() / getState()</h2>
+<div class="sig">arm.<span class="fn">stop</span>() · arm.<span class="fn">getState</span>()</div>
+<p><code>stop()</code> stops polling every member. <code>getState()</code> returns <code>{ name, members: { shoulder: {...}, base: {...}, ... } }</code>.</p>
+<p>See also: <a href="servo.html">Servo</a> · <a href="stepper.html">Stepper</a> · <a href="bus-servo.html">Bus servo</a> · <a href="../examples/coordinated-motion-example.html">Coordinated motion example</a></p>
+
+    </main>
+  </div>
+</div>
+
+<footer class="site-footer speckled">
+  <div class="wrap">
+    <span>Pardalote — created by Scott Mitchell for design education and creative technology.</span>
+    <span><a href="index.html">Reference</a> · <a href="https://github.com/scottmitchell/pardalote">GitHub</a> · GPL-3.0</span>
+  </div>
+</footer>
+
+<script src="../js/site.js"></script>
+</body>
+</html>

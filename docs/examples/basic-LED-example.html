@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Basic LED — Pardalote examples</title>
+<meta name="description" content="Two buttons on a web page turn the board&#x27;s LED on and off. The simplest possible start — no frameworks at all.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../css/site.css">
+</head>
+<body data-nav="examples">
+
+<nav class="site-nav speckled">
+  <a class="logo" href="../index.html">
+    <img src="../assets/logo.svg" width="30" height="30" alt="">
+    Pardalote
+  </a>
+  <div class="links">
+    <a data-nav="home" href="../index.html">Home</a>
+    <a data-nav="download" href="../download.html">Download</a>
+    <a data-nav="examples" href="index.html">Examples</a>
+    <a data-nav="reference" href="../reference/index.html">Reference</a>
+    <a href="https://github.com/scottmitchell/pardalote">GitHub</a>
+  </div>
+</nav>
+
+<div class="page-head speckled">
+  <div class="wrap">
+    <div class="crumb"><a href="index.html">Examples</a> / Basic LED</div>
+    <h1>Basic LED</h1>
+    <p>Two buttons on a web page turn the board&#x27;s LED on and off. The simplest possible start — no frameworks at all.</p>
+  </div>
+</div>
+
+<div class="wrap md-layout">
+  <div class="md-body">
+    <div class="tags" style="margin-bottom:.5rem;"><span class="tag lvl-start">Beginner</span><span class="tag">Basics</span></div>
+    <div class="ex-meta-row">
+      <a class="btn btn-dark" href="https://github.com/scottmitchell/pardalote/tree/main/examples/basic-LED-example">View the code on GitHub</a>
+    </div>
+    <div class="screenshot-slot">Screenshot / video of this example — coming soon</div>
+<h1 id="basic-led-example">Basic LED Example</h1>
+<p>The simplest possible Pardalote sketch. A web page with two buttons that turn the Arduino's built-in LED on and off over WiFi — no p5.js, no framework.</p>
+
+  </div>
+    <div class="ex-code-cols">
+      <div class="code-ex scroll">
+        <div class="bar">basic-LED.ino — the Arduino side</div>
+        <pre><code><span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;Pardalote.h&gt;</span><span class="cp"></span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">setup</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">begin</span><span class="p">();</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">loop</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">run</span><span class="p">();</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</code></pre>
+      </div>
+      <div class="code-ex scroll">
+        <div class="bar">sketch.js — the browser side</div>
+        <pre><code><span class="kd">let</span> <span class="nx">ArduinoIP</span> <span class="o">=</span> <span class="s1">&#39;10.1.1.186&#39;</span><span class="p">;</span>   <span class="c1">// Change this to your Arduino&#39;s IP</span>
+
+<span class="kd">let</span> <span class="nx">arduino</span><span class="p">;</span>
+<span class="kd">let</span> <span class="nx">LEDpin</span> <span class="o">=</span> <span class="mf">13</span><span class="p">;</span>
+
+<span class="c1">// Initialize when page loads</span>
+<span class="nb">window</span><span class="p">.</span><span class="nx">addEventListener</span><span class="p">(</span><span class="s1">&#39;load&#39;</span><span class="p">,</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
+    <span class="c1">// Connect to Arduino</span>
+    <span class="nx">arduino</span> <span class="o">=</span> <span class="ow">new</span> <span class="nx">Arduino</span><span class="p">();</span>
+    <span class="nx">arduino</span><span class="p">.</span><span class="nx">connect</span><span class="p">(</span><span class="nx">ArduinoIP</span><span class="p">);</span>
+
+    <span class="c1">// Set up pins once connected — pinMode must be called after the</span>
+    <span class="c1">// connection is established, not before, as the frame would otherwise</span>
+    <span class="c1">// be sent before the WebSocket is open and silently dropped.</span>
+    <span class="nx">arduino</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;ready&#39;</span><span class="p">,</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
+        <span class="nx">arduino</span><span class="p">.</span><span class="nx">pinMode</span><span class="p">(</span><span class="nx">LEDpin</span><span class="p">,</span> <span class="nx">OUTPUT</span><span class="p">);</span>  <span class="c1">// Built-in LED</span>
+    <span class="p">});</span>
+
+    <span class="c1">// Set up button event listeners</span>
+    <span class="nb">document</span><span class="p">.</span><span class="nx">getElementById</span><span class="p">(</span><span class="s1">&#39;led-on&#39;</span><span class="p">).</span><span class="nx">addEventListener</span><span class="p">(</span><span class="s1">&#39;click&#39;</span><span class="p">,</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
+        <span class="nx">arduino</span><span class="p">.</span><span class="nx">digitalWrite</span><span class="p">(</span><span class="nx">LEDpin</span><span class="p">,</span> <span class="nx">HIGH</span><span class="p">);</span>
+    <span class="p">});</span>
+
+    <span class="nb">document</span><span class="p">.</span><span class="nx">getElementById</span><span class="p">(</span><span class="s1">&#39;led-off&#39;</span><span class="p">).</span><span class="nx">addEventListener</span><span class="p">(</span><span class="s1">&#39;click&#39;</span><span class="p">,</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
+        <span class="nx">arduino</span><span class="p">.</span><span class="nx">digitalWrite</span><span class="p">(</span><span class="nx">LEDpin</span><span class="p">,</span> <span class="nx">LOW</span><span class="p">);</span>
+    <span class="p">});</span>
+<span class="p">});</span>
+</code></pre>
+      </div>
+    </div>
+  <div class="md-body">
+<h2 id="what-this-example-does">What This Example Does</h2>
+<ul>
+<li><strong>Turn LED ON</strong> — sends <code>digitalWrite(13, HIGH)</code> to the Arduino</li>
+<li><strong>Turn LED OFF</strong> — sends <code>digitalWrite(13, LOW)</code> to the Arduino</li>
+</ul>
+<h2 id="hardware-requirements">Hardware Requirements</h2>
+<ul>
+<li><strong>Arduino UNO R4 WiFi</strong> or <strong>ESP32 development board</strong></li>
+<li>Arduino and browser must be on the same WiFi network</li>
+<li><strong>UNO R4 WiFi:</strong> the built-in LED on pin 13 is all you need</li>
+<li><strong>ESP32:</strong> connect an LED + 220 Ω resistor between pin 13 and GND (long leg to pin 13)</li>
+</ul>
+<h2 id="quick-start">Quick Start</h2>
+<h3 id="1-upload-the-firmware">1. Upload the firmware</h3>
+<ol>
+<li>
+<p>In Arduino IDE: <strong>File → Examples → Pardalote → basic-LED</strong></p>
+</li>
+<li>
+<p>Select your board and upload</p>
+</li>
+<li>
+<p>Open the Serial Monitor at 115200 baud — on first boot Pardalote asks for your WiFi credentials:</p>
+<pre><code>=== Pardalote ===
+No WiFi networks stored.
+=== WiFi Configuration ===
+[a]dd  [d]elete  [c]lear all  [s]how  [x] exit
+&gt; a
+SSID: YourWiFiName
+Password: ********
+Saved: YourWiFiName
+&gt; x
+</code></pre>
+<p>Credentials are saved to EEPROM and survive re-uploads. Press <code>w</code> within 5 seconds of any boot to update them.</p>
+<p><strong>Prefer compile-time credentials?</strong> Uncomment the two lines in <code>secrets.h</code>:</p>
+<pre><code><span class="cp">#define SECRET_SSID &quot;YourWiFiName&quot;</span>
+<span class="cp">#define SECRET_PASS &quot;YourWiFiPassword&quot;</span>
+</code></pre>
+<p>If both are configured, <code>secrets.h</code> is tried first.</p>
+</li>
+<li>
+<p>Find your Arduino's IP address:</p>
+<ul>
+<li><strong>UNO R4 WiFi:</strong> scrolls across the LED matrix</li>
+<li><strong>ESP32:</strong> printed in the Serial Monitor</li>
+</ul>
+</li>
+</ol>
+<h3 id="2-set-the-ip-address">2. Set the IP address</h3>
+<p>Open <code>sketch.js</code> and update this line:</p>
+<pre><code><span class="kd">let</span> <span class="nx">ArduinoIP</span> <span class="o">=</span> <span class="s1">&#39;192.168.1.42&#39;</span><span class="p">;</span>
+</code></pre>
+<h3 id="3-open-the-example">3. Open the example</h3>
+<p>Open <code>index.html</code> in a browser. Click <strong>Turn LED ON</strong> and <strong>Turn LED OFF</strong>.</p>
+<h2 id="how-it-works">How It Works</h2>
+<pre><code><span class="kd">const</span> <span class="nx">arduino</span> <span class="o">=</span> <span class="ow">new</span> <span class="nx">Arduino</span><span class="p">();</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">connect</span><span class="p">(</span><span class="nx">ArduinoIP</span><span class="p">);</span>
+
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;ready&#39;</span><span class="p">,</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
+    <span class="nx">arduino</span><span class="p">.</span><span class="nx">pinMode</span><span class="p">(</span><span class="mf">13</span><span class="p">,</span> <span class="nx">OUTPUT</span><span class="p">);</span>  <span class="c1">// set up pin after connection is ready</span>
+<span class="p">});</span>
+
+<span class="c1">// Button handlers</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">digitalWrite</span><span class="p">(</span><span class="mf">13</span><span class="p">,</span> <span class="nx">HIGH</span><span class="p">);</span>  <span class="c1">// ON</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">digitalWrite</span><span class="p">(</span><span class="mf">13</span><span class="p">,</span> <span class="nx">LOW</span><span class="p">);</span>   <span class="c1">// OFF</span>
+</code></pre>
+<p><code>pinMode</code> is called inside the <code>ready</code> handler — this ensures the WebSocket is open before the frame is sent. Calls made before <code>ready</code> would be silently dropped.</p>
+<p>Reconnection is automatic. If the Arduino resets or the connection drops, Pardalote reconnects and restores the pin configuration.</p>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<p><strong>&quot;Buttons don't work&quot;</strong></p>
+<ul>
+<li>Check the IP address in <code>sketch.js</code> matches the Arduino's IP</li>
+<li>Arduino and browser must be on the same WiFi network</li>
+<li>Open the browser console (F12) for connection messages</li>
+</ul>
+<p><strong>&quot;IP shows as 0.0.0.0&quot; (UNO R4)</strong></p>
+<ul>
+<li>WiFi connection failed — check credentials via Serial Monitor (press <code>w</code> on boot)</li>
+</ul>
+<p><strong>&quot;LED doesn't light up&quot; (ESP32)</strong></p>
+<ul>
+<li>Check wiring: long leg of LED to pin 13, short leg through 220 Ω resistor to GND</li>
+</ul>
+<h2 id="file-structure">File Structure</h2>
+<pre><code>basic-LED-example/
+├── index.html      # Two-button web interface
+├── sketch.js       # Arduino connection and button handlers
+└── README.md       # This file
+
+pardalote-js/
+└── pardalote.js    # Core Pardalote library (loaded from here)
+</code></pre>
+<h2 id="next-steps">Next Steps</h2>
+<ul>
+<li>Read a sensor: try the <code>basic-p5js-example</code></li>
+<li>Control a servo: try the <code>servo-example</code></li>
+<li>Control LED strips: try the <code>neopixel-example</code></li>
+</ul>
+
+  </div>
+</div>
+
+<footer class="site-footer speckled">
+  <div class="wrap">
+    <span>Pardalote — created by Scott Mitchell for design education and creative technology.</span>
+    <span><a href="../reference/index.html">Reference</a> · <a href="https://github.com/scottmitchell/pardalote">GitHub</a> · GPL-3.0</span>
+  </div>
+</footer>
+
+<script src="../js/site.js"></script>
+</body>
+</html>

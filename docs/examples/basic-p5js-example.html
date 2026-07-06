@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sensor + p5.js — Pardalote examples</title>
+<meta name="description" content="Turn a knob, and a circle on screen grows and shrinks with it. Your first taste of live data flowing into a p5.js sketch.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../css/site.css">
+</head>
+<body data-nav="examples">
+
+<nav class="site-nav speckled">
+  <a class="logo" href="../index.html">
+    <img src="../assets/logo.svg" width="30" height="30" alt="">
+    Pardalote
+  </a>
+  <div class="links">
+    <a data-nav="home" href="../index.html">Home</a>
+    <a data-nav="download" href="../download.html">Download</a>
+    <a data-nav="examples" href="index.html">Examples</a>
+    <a data-nav="reference" href="../reference/index.html">Reference</a>
+    <a href="https://github.com/scottmitchell/pardalote">GitHub</a>
+  </div>
+</nav>
+
+<div class="page-head speckled">
+  <div class="wrap">
+    <div class="crumb"><a href="index.html">Examples</a> / Sensor + p5.js</div>
+    <h1>Sensor + p5.js</h1>
+    <p>Turn a knob, and a circle on screen grows and shrinks with it. Your first taste of live data flowing into a p5.js sketch.</p>
+  </div>
+</div>
+
+<div class="wrap md-layout">
+  <div class="md-body">
+    <div class="tags" style="margin-bottom:.5rem;"><span class="tag lvl-start">Beginner</span><span class="tag">Basics</span><span class="tag">p5.js</span></div>
+    <div class="ex-meta-row">
+      <a class="btn btn-dark" href="https://github.com/scottmitchell/pardalote/tree/main/examples/basic-p5js-example">View the code on GitHub</a>
+    </div>
+    <div class="screenshot-slot">Screenshot / video of this example — coming soon</div>
+<h1 id="basic-p5js-example">Basic p5.js Example</h1>
+<p>A minimal Pardalote sketch using p5.js. Reads an analog sensor (potentiometer) and uses the value to draw a circle whose size follows the sensor in real time.</p>
+
+  </div>
+    <div class="ex-code-cols">
+      <div class="code-ex scroll">
+        <div class="bar">basic-LED.ino — the Arduino side</div>
+        <pre><code><span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;Pardalote.h&gt;</span><span class="cp"></span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">setup</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">begin</span><span class="p">();</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">loop</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">run</span><span class="p">();</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</code></pre>
+      </div>
+      <div class="code-ex scroll">
+        <div class="bar">sketch.js — the browser side</div>
+        <pre><code><span class="kd">let</span> <span class="nx">ArduinoIP</span> <span class="o">=</span> <span class="s1">&#39;10.1.1.186&#39;</span><span class="p">;</span>   <span class="c1">// Change this to your Arduino&#39;s IP</span>
+
+<span class="kd">let</span> <span class="nx">arduino</span><span class="p">;</span>
+
+<span class="c1">// Arduino pins - Change this to match the pin you are using</span>
+<span class="kd">const</span> <span class="nx">POTPIN</span> <span class="o">=</span> <span class="mf">14</span><span class="p">;</span>
+
+<span class="kd">function</span> <span class="nx">setup</span><span class="p">()</span> <span class="p">{</span>
+    <span class="nx">createCanvas</span><span class="p">(</span><span class="mf">600</span><span class="p">,</span> <span class="mf">600</span><span class="p">);</span>
+
+    <span class="c1">// connect to Arduino</span>
+    <span class="nx">arduino</span> <span class="o">=</span> <span class="ow">new</span> <span class="nx">Arduino</span><span class="p">();</span>
+    <span class="nx">arduino</span><span class="p">.</span><span class="nx">connect</span><span class="p">(</span><span class="nx">ArduinoIP</span><span class="p">);</span>
+
+    <span class="c1">// configure the Arduino pin and set the read interval (ms)</span>
+    <span class="nx">arduino</span><span class="p">.</span><span class="nx">pinMode</span><span class="p">(</span><span class="nx">POTPIN</span><span class="p">,</span> <span class="nx">ANALOG_INPUT</span><span class="p">,</span> <span class="mf">50</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="kd">function</span> <span class="nx">draw</span><span class="p">()</span> <span class="p">{</span>
+    <span class="nx">background</span><span class="p">(</span><span class="mf">50</span><span class="p">);</span>
+
+    <span class="c1">// get reading from the Arduino</span>
+    <span class="kd">let</span> <span class="nx">dial</span> <span class="o">=</span> <span class="nx">arduino</span><span class="p">.</span><span class="nx">analogRead</span><span class="p">(</span><span class="nx">POTPIN</span><span class="p">);</span>
+    <span class="kd">let</span> <span class="nx">circleRadius</span> <span class="o">=</span> <span class="nx">map</span><span class="p">(</span><span class="nx">dial</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="mf">1023</span><span class="p">,</span> <span class="mf">2</span><span class="p">,</span> <span class="mf">100</span><span class="p">);</span>
+    <span class="c1">// for UNO the ADC range is 0-1023</span>
+    <span class="c1">// for ESP32 the ADC range is 0-4095</span>
+    <span class="c1">// you can also use arduino.analogMax to automatically get the board&#39;s ADC range.</span>
+
+    <span class="c1">// draw circle — green when connected, red when not</span>
+    <span class="nx">noStroke</span><span class="p">();</span>
+    <span class="k">if</span><span class="p">(</span><span class="nx">arduino</span><span class="p">.</span><span class="nx">connected</span><span class="p">)</span> <span class="nx">fill</span><span class="p">(</span><span class="mf">60</span><span class="p">,</span> <span class="mf">200</span><span class="p">,</span> <span class="mf">80</span><span class="p">);</span>
+    <span class="k">else</span> <span class="nx">fill</span><span class="p">(</span><span class="mf">200</span><span class="p">,</span> <span class="mf">50</span><span class="p">,</span> <span class="mf">60</span><span class="p">);</span>
+    <span class="nx">circle</span><span class="p">(</span><span class="nx">width</span> <span class="o">/</span> <span class="mf">2</span><span class="p">,</span> <span class="nx">height</span> <span class="o">/</span> <span class="mf">2</span><span class="p">,</span> <span class="nx">circleRadius</span> <span class="o">*</span> <span class="mf">2</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre>
+      </div>
+    </div>
+  <div class="md-body">
+<h2 id="what-this-example-does">What This Example Does</h2>
+<ul>
+<li>Reads a potentiometer connected to an analog pin</li>
+<li>Draws a circle on a p5.js canvas — larger when the sensor reads high, smaller when it reads low</li>
+<li>Circle is green when the Arduino is connected, red when disconnected</li>
+</ul>
+<h2 id="hardware-requirements">Hardware Requirements</h2>
+<ul>
+<li><strong>Arduino UNO R4 WiFi</strong> or <strong>ESP32 development board</strong></li>
+<li><strong>Potentiometer</strong> (10 kΩ recommended)</li>
+<li><strong>Breadboard and jumper wires</strong></li>
+<li>Arduino and browser must be on the same WiFi network</li>
+</ul>
+<h3 id="wiring">Wiring</h3>
+<table>
+<thead>
+<tr>
+<th>Potentiometer pin</th>
+<th>Arduino</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Center (wiper)</td>
+<td>Pin 33 (ESP32) or A0 (UNO R4)</td>
+</tr>
+<tr>
+<td>One outer pin</td>
+<td>3.3 V (ESP32) or 5 V (UNO R4)</td>
+</tr>
+<tr>
+<td>Other outer pin</td>
+<td>GND</td>
+</tr>
+</tbody>
+</table>
+<p>The example sketch uses <code>POTPIN = 33</code>. Change this constant at the top of <code>sketch.js</code> to match your wiring.</p>
+<h2 id="quick-start">Quick Start</h2>
+<h3 id="1-upload-the-firmware">1. Upload the firmware</h3>
+<ol>
+<li>
+<p>In Arduino IDE: <strong>File → Examples → Pardalote → basic-LED</strong></p>
+</li>
+<li>
+<p>Select your board and upload</p>
+</li>
+<li>
+<p>Open the Serial Monitor at 115200 baud — on first boot Pardalote asks for your WiFi credentials:</p>
+<pre><code>=== Pardalote ===
+No WiFi networks stored.
+=== WiFi Configuration ===
+[a]dd  [d]elete  [c]lear all  [s]how  [x] exit
+&gt; a
+SSID: YourWiFiName
+Password: ********
+Saved: YourWiFiName
+&gt; x
+</code></pre>
+<p>Credentials are saved to EEPROM and survive re-uploads. Press <code>w</code> within 5 seconds of any boot to update them.</p>
+<p><strong>Prefer compile-time credentials?</strong> Uncomment the two lines in <code>secrets.h</code>:</p>
+<pre><code><span class="cp">#define SECRET_SSID &quot;YourWiFiName&quot;</span>
+<span class="cp">#define SECRET_PASS &quot;YourWiFiPassword&quot;</span>
+</code></pre>
+<p>If both are configured, <code>secrets.h</code> is tried first.</p>
+</li>
+<li>
+<p>Find your Arduino's IP address:</p>
+<ul>
+<li><strong>UNO R4 WiFi:</strong> scrolls across the LED matrix</li>
+<li><strong>ESP32:</strong> printed in the Serial Monitor</li>
+</ul>
+</li>
+</ol>
+<h3 id="2-configure-sketchjs">2. Configure sketch.js</h3>
+<p>Open <code>sketch.js</code> and update the IP address and pin:</p>
+<pre><code><span class="kd">let</span> <span class="nx">ArduinoIP</span> <span class="o">=</span> <span class="s1">&#39;192.168.1.42&#39;</span><span class="p">;</span>  <span class="c1">// your Arduino&#39;s IP</span>
+
+<span class="kd">const</span> <span class="nx">POTPIN</span> <span class="o">=</span> <span class="mf">33</span><span class="p">;</span>  <span class="c1">// change to A0 for UNO R4</span>
+</code></pre>
+<h3 id="3-open-the-example">3. Open the example</h3>
+<p>Open <code>index.html</code> in a browser. Turn the potentiometer — the circle should grow and shrink.</p>
+<h2 id="how-it-works">How It Works</h2>
+<pre><code><span class="nx">arduino</span> <span class="o">=</span> <span class="ow">new</span> <span class="nx">Arduino</span><span class="p">();</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">connect</span><span class="p">(</span><span class="nx">ArduinoIP</span><span class="p">);</span>
+
+<span class="c1">// Configure pin with a 50 ms poll interval</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">pinMode</span><span class="p">(</span><span class="nx">POTPIN</span><span class="p">,</span> <span class="nx">ANALOG_INPUT</span><span class="p">,</span> <span class="mf">50</span><span class="p">);</span>
+</code></pre>
+<p>In <code>draw()</code>, <code>analogRead()</code> returns the latest cached value — no extra network traffic:</p>
+<pre><code><span class="kd">let</span> <span class="nx">dial</span> <span class="o">=</span> <span class="nx">arduino</span><span class="p">.</span><span class="nx">analogRead</span><span class="p">(</span><span class="nx">POTPIN</span><span class="p">);</span>
+<span class="kd">let</span> <span class="nx">circleRadius</span> <span class="o">=</span> <span class="nx">map</span><span class="p">(</span><span class="nx">dial</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="nx">arduino</span><span class="p">.</span><span class="nx">analogMax</span><span class="p">,</span> <span class="mf">2</span><span class="p">,</span> <span class="mf">100</span><span class="p">);</span>
+</code></pre>
+<p><code>arduino.analogMax</code> is set automatically from the board type:</p>
+<table>
+<thead>
+<tr>
+<th>Board</th>
+<th><code>analogMax</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>UNO R4 WiFi</td>
+<td>1023</td>
+</tr>
+<tr>
+<td>ESP32</td>
+<td>4095</td>
+</tr>
+</tbody>
+</table>
+<p>Use <code>arduino.analogMax</code> rather than a hard-coded value to make your sketch portable between boards.</p>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<p><strong>&quot;Circle doesn't change size&quot;</strong></p>
+<ul>
+<li>Check the potentiometer wiring (center to analog pin, outers to power and GND)</li>
+<li>Verify <code>POTPIN</code> matches the pin you wired</li>
+<li>Open the browser console (F12) for connection messages</li>
+</ul>
+<p><strong>&quot;Circle is always red&quot;</strong></p>
+<ul>
+<li>Arduino is not connected — check the IP address and WiFi</li>
+</ul>
+<p><strong>&quot;Circle jumps around erratically&quot;</strong></p>
+<ul>
+<li>Power issue: make sure the potentiometer outer pins are connected to a stable rail</li>
+</ul>
+<h2 id="file-structure">File Structure</h2>
+<pre><code>basic-p5js-example/
+├── index.html      # Canvas page (loads p5.js and pardalote.js)
+├── sketch.js       # p5.js setup() and draw()
+└── README.md       # This file
+
+pardalote-js/
+└── pardalote.js    # Core Pardalote library (loaded from here)
+</code></pre>
+<h2 id="next-steps">Next Steps</h2>
+<ul>
+<li>Add digital output: try the <code>basic-LED-example</code></li>
+<li>Read distance: try the <code>ultrasonic-sensor-example</code></li>
+<li>Control a servo from a sensor value: try the <code>servo-example</code></li>
+</ul>
+
+  </div>
+</div>
+
+<footer class="site-footer speckled">
+  <div class="wrap">
+    <span>Pardalote — created by Scott Mitchell for design education and creative technology.</span>
+    <span><a href="../reference/index.html">Reference</a> · <a href="https://github.com/scottmitchell/pardalote">GitHub</a> · GPL-3.0</span>
+  </div>
+</footer>
+
+<script src="../js/site.js"></script>
+</body>
+</html>
