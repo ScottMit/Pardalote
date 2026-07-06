@@ -41,7 +41,7 @@ _md.add_render_rule("fence", _fence)
 REPO = Path(__file__).parent.parent
 SRC = REPO / "examples"
 OUT = REPO / "docs" / "examples"
-GH = "https://github.com/scottmitchell/pardalote"
+GH = "https://github.com/ScottMit/Pardalote"
 OUT.mkdir(parents=True, exist_ok=True)
 
 # slug -> (title, blurb, emoji, gradient, [tags], level)

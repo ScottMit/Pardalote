@@ -40,7 +40,7 @@ _md.add_render_rule("fence", _fence)
 
 SRC = Path(__file__).parent / "reference"
 OUT = Path(__file__).parent.parent / "docs" / "reference"
-GH = "https://github.com/scottmitchell/pardalote"
+GH = "https://github.com/ScottMit/Pardalote"
 OUT.mkdir(parents=True, exist_ok=True)
 
 SIDEBAR = """<aside class="ref-nav">
