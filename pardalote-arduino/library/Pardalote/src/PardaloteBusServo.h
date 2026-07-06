@@ -82,17 +82,21 @@ private:
     // Arrival tracking — the bus can't push a "done", so after a position write
     // the board polls the servo's Moving flag in loop() and emits CMD_BUSSERVO_DONE
     // when it settles. Makes bus servos look like steppers/servos to the browser.
-    inline static bool     _awaitDone[MAX_BUS_SERVOS]    = {};
-    inline static uint32_t _awaitStartMs[MAX_BUS_SERVOS] = {};
+    inline static bool     _awaitDone[MAX_BUS_SERVOS]      = {};
+    inline static uint32_t _awaitStartMs[MAX_BUS_SERVOS]   = {};
     inline static uint32_t _lastMovePollMs[MAX_BUS_SERVOS] = {};
-    static const uint32_t MOVE_POLL_MS    = 33;    // ~30 Hz, like LeRobot
-    static const uint32_t MOVE_STARTUP_MS = 40;    // let it start moving before first poll
-    static const uint32_t MOVE_TIMEOUT_MS = 4000;  // give up (emit done) if never settles
+    inline static uint32_t _lastRespMs[MAX_BUS_SERVOS]     = {};
+    static const uint32_t MOVE_POLL_MS    = 33;     // ~30 Hz, like LeRobot
+    static const uint32_t MOVE_STARTUP_MS = 40;     // let it start moving before first poll
+    static const uint32_t MOVE_NO_RESP_MS = 1000;   // give up if the servo stops answering
+    static const uint32_t MOVE_MAX_MS     = 30000;  // absolute ceiling on one move
 
     static void beginAwaitDone(int id) {
         if (!validId(id) || !_attached[id]) return;
+        uint32_t now        = millis();
         _awaitDone[id]      = true;
-        _awaitStartMs[id]   = millis();
+        _awaitStartMs[id]   = now;
+        _lastRespMs[id]     = now;
         _lastMovePollMs[id] = 0;
     }
 
@@ -522,10 +526,13 @@ public:
             if (now - _lastMovePollMs[id] < MOVE_POLL_MS)    continue;   // ~30 Hz
             _lastMovePollMs[id] = now;
 
-            int  mv       = readMoving(_servoId[id]);                    // 1=moving, 0=settled, -1=no answer
-            bool arrived  = (mv == 0);
-            bool timedOut = (now - _awaitStartMs[id] > MOVE_TIMEOUT_MS);
-            if (!arrived && !timedOut) continue;
+            int mv = readMoving(_servoId[id]);            // 1=moving, 0=settled, -1=no answer
+            if (mv == 0 || mv == 1) _lastRespMs[id] = now;   // a valid answer keeps a long move alive
+
+            bool arrived = (mv == 0);
+            bool lost    = (now - _lastRespMs[id]   > MOVE_NO_RESP_MS);   // servo stopped answering
+            bool tooLong = (now - _awaitStartMs[id] > MOVE_MAX_MS);       // absolute ceiling
+            if (!arrived && !lost && !tooLong) continue;
 
             _awaitDone[id] = false;
             int pos = readPos(_servoId[id]);

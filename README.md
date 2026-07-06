@@ -856,12 +856,15 @@ All of it still goes out in **one** batched message — including mixed groups.
 ```javascript
 arm.moveTo({ shoulder: 3000, elbow: 1200, base: 0, wrist: 120 }, { duration: 1500 });
 
-// Promise variant resolves after `duration` (time-based, for sequencing)
+// Promise variant resolves when every moved member actually ARRIVES —
+// each actuator's real 'done', not a timer. Ideal for sequencing.
 await arm.moveToAsync({ shoulder: 2048, elbow: 2048 }, { duration: 1000 });
 await arm.moveToAsync({ shoulder: 1000, elbow: 3000 }, { duration: 800 });
 ```
 
-`duration` is approximate — it's the *arrival synchronisation* that's exact. For an accurate first move from an unknown pose, either poll `read()` first or start from a known pose (`center()` / `set()`), since `moveTo` measures distance from each member's last commanded position.
+`moveToAsync` waits for real completion: the board reports `done` when a stepper's step count reaches target, a servo's timed interpolation finishes, and a bus servo's `Moving` flag settles (the board polls it). So the next line runs only once the whole group has settled. A safety `timeout` (default `max(duration × 2, 10000)` ms) resolves it anyway if a member never reports — pass `{ timeout }` to override.
+
+`duration` itself is approximate — it's the *arrival synchronisation* that's exact. For an accurate first move from an unknown pose, either poll `read()` first or start from a known pose (`center()` / `set()`), since `moveTo` measures distance from each member's last commanded position.
 
 #### State snapshot
 

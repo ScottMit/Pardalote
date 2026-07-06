@@ -916,9 +916,23 @@ class Group {
 
     // Like moveTo(), but returns a Promise that resolves after `duration` ms —
     // time-based (not feedback-confirmed), for sequencing coordinated moves.
+    // Like moveTo(), but the Promise resolves when every moved member reports
+    // it actually ARRIVED (each actuator's 'done'), not on a timer. A safety
+    // timeout resolves anyway if a member never reports (dead servo / lost link).
     moveToAsync(targets, opts = {}) {
+        if (!targets || typeof targets !== 'object') return Promise.resolve();
+        // Arm the completion promises BEFORE the move, so the 'done' isn't missed.
+        const waits = Object.keys(targets)
+            .map(key => this.members[key])
+            .filter(m => m && typeof m._whenDone === 'function')
+            .map(m => m._whenDone());
         this.moveTo(targets, opts);
-        return new Promise(res => setTimeout(res, opts.duration ?? 1000));
+        if (!waits.length) return Promise.resolve();
+        const timeout = opts.timeout ?? Math.max((opts.duration ?? 1000) * 2, 10000);
+        return Promise.race([
+            Promise.all(waits),
+            new Promise(res => setTimeout(res, timeout)),
+        ]);
     }
 
     // read()         — snapshot of each member's current value (from cache).

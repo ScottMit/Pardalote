@@ -63,6 +63,9 @@ class Servo extends Extension {
         // Sweep cancellation
         this._sweepAbort = false;
 
+        // Pending _whenDone() resolvers, drained on the 'done' event
+        this._doneResolvers = [];
+
         // Set to true when the Arduino announces this servo's attach state
         // on connect. _reRegister() uses this to skip re-sending CMD_SERVO_ATTACH
         // when the Arduino is already in sync — only replay when it has reset.
@@ -76,6 +79,7 @@ class Servo extends Extension {
     _reset() {
         if (this._pendingWrite) { clearTimeout(this._pendingWrite); this._pendingWrite = null; }
         this._stopRead();
+        this._resolveDone();     // don't leave awaiters hanging on a board switch
         this._sweepAbort         = true;
         this.pin                 = -1;
         this.isAttached          = false;
@@ -441,8 +445,17 @@ class Servo extends Extension {
                 this.angle  = frame.params[1];
                 this.micros = this._angleToMicros(this.angle);
                 this._emit('done', { angle: this.angle });
+                this._resolveDone();
                 break;
         }
+    }
+
+    // Resolves when the servo's timed move completes (CMD_SERVO_DONE).
+    _whenDone() { return new Promise(resolve => this._doneResolvers.push(resolve)); }
+    _resolveDone() {
+        const resolvers = this._doneResolvers;
+        this._doneResolvers = [];
+        resolvers.forEach(r => r(this.angle));
     }
 
     // -------------------------------------------------------------------
