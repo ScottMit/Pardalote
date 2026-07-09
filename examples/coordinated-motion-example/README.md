@@ -7,7 +7,7 @@ chosen independently from the popup under its dial, so the pair can be **mixed**
 arriving together on every leg. Each dial visualises the motion — a **180° gauge**
 for PWM servos, a **360° dial** for bus servos and steppers.
 
-This is the p5.js demonstration of `group.moveTo()` / `moveToAsync()`: one call
+This is the p5.js demonstration of `group.writeTimed()` / `whenDone()`: one call
 moves both motors, and each motor type reaches its target its own way (bus
 servos via matched-speed SyncWrite, PWM servos via on-board interpolation,
 steppers via a board-timed constant-speed move) — all in one WebSocket message.
@@ -53,6 +53,6 @@ void loop()  { Pardalote.run();   }
   reconnecting…` until it does). The `feedback` readout shows each motor's real
   position once polling returns values (bus servo / stepper).
 - The sweep starts each leg from the last commanded position, so the motors are
-  snapped to the low pose once on connect (`group.set`) to establish a known
+  snapped to the low pose once on connect (`group.write`) to establish a known
   start — see the note on first moves in the [Groups docs](../../README.md#groups).
 - Edit the `low` / `high` values in `TYPES` to change each type's sweep range.

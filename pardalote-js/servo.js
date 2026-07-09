@@ -16,6 +16,10 @@
 //       arduino.servo.attach(D9);
 //       arduino.servo.write(90);
 //   });
+//
+// Servos created BY THE SKETCH (PardaloteServo.attach("pan", 9)) appear
+// automatically as arduino.pan — a full Servo instance like any other.
+// It exists by the time 'ready' fires; no arduino.add() needed.
 // ==============================================================
 
 const DEVICE_SERVO = 201;
@@ -30,6 +34,8 @@ const CMD_SERVO_WRITE_TIMED        = 0x1A;
 const CMD_SERVO_SYNC_TIMED         = 0x1B;
 const CMD_SERVO_STOP               = 0x1C;
 const CMD_SERVO_DONE               = 0x1D;
+const CMD_SERVO_SET_LIMITS         = 0x54;  // [id, min, max, enabled] — board-clamped soft angle limits
+                                            // (numbered after the stepper switch block; 0x14–0x1D was full)
 
 class Servo extends Extension {
     static deviceId = DEVICE_SERVO;
@@ -44,6 +50,16 @@ class Servo extends Extension {
         this.micros     = 1500;
         this.minPulse   = 544;
         this.maxPulse   = 2400;
+
+        // Soft angle limits (safety) — enforced on the board; mirrored here
+        // so cached state matches what the board actually applied.
+        this.limitMin     = 0;
+        this.limitMax     = 180;
+        this.limitEnabled = false;
+
+        // Home angle — where home() goes. Default: centre. JS-side only
+        // (a PWM servo's angle is command-equals-state; nothing to re-zero).
+        this.homeAngle = 90;
 
         // Write throttling
         this.writeThrottle  = 20;   // min ms between sends
@@ -66,6 +82,13 @@ class Servo extends Extension {
         // Pending _whenDone() resolvers, drained on the 'done' event
         this._doneResolvers = [];
 
+        // Promise for the most recent move, consumed by whenDone(). Armed by
+        // moves that will produce a 'done' (writeTimed, group timed moves);
+        // cleared (null) by moves that won't (plain write). _moveDuration is
+        // the last timed move's ms, used for whenDone's default timeout.
+        this._movePromise  = null;
+        this._moveDuration = 0;
+
         // Set to true when the Arduino announces this servo's attach state
         // on connect. _reRegister() uses this to skip re-sending CMD_SERVO_ATTACH
         // when the Arduino is already in sync — only replay when it has reset.
@@ -80,6 +103,8 @@ class Servo extends Extension {
         if (this._pendingWrite) { clearTimeout(this._pendingWrite); this._pendingWrite = null; }
         this._stopRead();
         this._resolveDone();     // don't leave awaiters hanging on a board switch
+        this._movePromise        = null;
+        this._moveDuration       = 0;
         this._sweepAbort         = true;
         this.pin                 = -1;
         this.isAttached          = false;
@@ -89,7 +114,19 @@ class Servo extends Extension {
         this.maxPulse            = 2400;
         this._lastSentAngle      = null;
         this._lastWriteTime      = 0;
+        this.limitMin            = 0;
+        this.limitMax            = 180;
+        this.limitEnabled        = false;
+        this.homeAngle           = 90;
         this._announcedByArduino = false;
+    }
+
+    // Clamp an angle to 0–180 and, if set, the soft limits — mirrors the
+    // board's clampAngle() so cached state never disagrees with hardware.
+    _clampAngle(angle) {
+        angle = Math.max(0, Math.min(180, Math.round(angle)));
+        if (this.limitEnabled) angle = Math.max(this.limitMin, Math.min(this.limitMax, angle));
+        return angle;
     }
 
     // -------------------------------------------------------------------
@@ -105,6 +142,10 @@ class Servo extends Extension {
     _reRegister() {
         if (this.isAttached && !this._announcedByArduino) {
             this._sendAttach();
+            if (this.limitEnabled) {
+                this.arduino.send(encodeFrame(CMD_SERVO_SET_LIMITS, DEVICE_SERVO,
+                    [this.logicalId, this.limitMin, this.limitMax, 1]));
+            }
             this.arduino.send(encodeFrame(CMD_SERVO_WRITE, DEVICE_SERVO,
                 [this.logicalId, this.angle]));  // raw send — no event, no throttle update
         }
@@ -155,13 +196,15 @@ class Servo extends Extension {
     // Any call to write() cancels an in-progress sweep.
     // -------------------------------------------------------------------
     write(angle) {
-        this._sweepAbort = true;
+        this._sweepAbort   = true;
+        this._movePromise  = null;   // instant move — nothing to await
+        this._moveDuration = 0;
         if (!this.isAttached) {
             console.warn(`Servo ${this.logicalId}: not attached`);
             return this;
         }
 
-        angle = Math.max(0, Math.min(180, Math.round(angle)));
+        angle = this._clampAngle(angle);
 
         const now = Date.now();
         const wait = this.writeThrottle - (now - this._lastWriteTime);
@@ -179,7 +222,7 @@ class Servo extends Extension {
     }
 
     _sendAngle(angle) {
-        angle = Math.max(0, Math.min(180, Math.round(angle)));
+        angle = this._clampAngle(angle);
         if (this._lastSentAngle !== null &&
             Math.abs(angle - this._lastSentAngle) < this.writeThreshold) {
             return;
@@ -200,10 +243,19 @@ class Servo extends Extension {
     // Fine-grained control via pulse width (544–2400µs).
     // -------------------------------------------------------------------
     writeMicroseconds(us) {
-        this._sweepAbort = true;
+        this._sweepAbort   = true;
+        this._movePromise  = null;   // instant move — nothing to await
+        this._moveDuration = 0;
         if (!this.isAttached) return this;
 
         us = Math.max(this.minPulse, Math.min(this.maxPulse, Math.round(us)));
+        if (this.limitEnabled) {
+            // Translate the angle limits into the pulse domain (mirrors the board).
+            const span = this.maxPulse - this.minPulse;
+            const usMin = this.minPulse + this.limitMin / 180 * span;
+            const usMax = this.minPulse + this.limitMax / 180 * span;
+            us = Math.round(Math.max(usMin, Math.min(usMax, us)));
+        }
 
         this.arduino.send(encodeFrame(
             CMD_SERVO_WRITE_MICROSECONDS, DEVICE_SERVO,
@@ -223,7 +275,8 @@ class Servo extends Extension {
     writeTimed(angle, duration = 1000) {
         this._sweepAbort = true;
         if (!this.isAttached) { console.warn(`Servo ${this.logicalId}: not attached`); return this; }
-        angle = Math.max(0, Math.min(180, Math.round(angle)));
+        angle = this._clampAngle(angle);
+        this._armDone(duration);
         this.arduino.send(encodeFrame(CMD_SERVO_WRITE_TIMED, DEVICE_SERVO,
             [this.logicalId, angle, Math.max(0, Math.round(duration))]));
         this.angle          = angle;
@@ -233,10 +286,58 @@ class Servo extends Extension {
         return this;
     }
 
+    // -------------------------------------------------------------------
+    // Soft angle limits (safety) — same shape as stepper.setLimits().
+    // Enforced ON THE BOARD (browser and sketch writes alike) and mirrored
+    // here, so an LLM or a buggy sketch can't push a joint past the range.
+    // -------------------------------------------------------------------
+    setLimits(min, max) {
+        min = Math.max(0, Math.min(180, Math.round(min)));
+        max = Math.max(0, Math.min(180, Math.round(max)));
+        this.limitMin     = Math.min(min, max);
+        this.limitMax     = Math.max(min, max);
+        this.limitEnabled = true;
+        if (this.isAttached) {
+            this.arduino.send(encodeFrame(CMD_SERVO_SET_LIMITS, DEVICE_SERVO,
+                [this.logicalId, this.limitMin, this.limitMax, 1]));
+        }
+        return this;
+    }
+
+    clearLimits() {
+        this.limitEnabled = false;
+        if (this.isAttached) {
+            this.arduino.send(encodeFrame(CMD_SERVO_SET_LIMITS, DEVICE_SERVO,
+                [this.logicalId, this.limitMin, this.limitMax, 0]));
+        }
+        return this;
+    }
+
+    // -------------------------------------------------------------------
+    // Home — setHome() declares the home angle (no-arg: "here is home");
+    // home() goes there, home(duration) goes there smoothly. Same pair as
+    // the stepper and bus servo.
+    //   arduino.pan.setHome(45);
+    //   await arduino.pan.home(1000).whenDone();
+    // -------------------------------------------------------------------
+    setHome(angle) {
+        this.homeAngle = Math.max(0, Math.min(180,
+            Math.round(angle === undefined ? this.angle : angle)));
+        return this;
+    }
+
+    home(duration) {
+        return (duration > 0) ? this.writeTimed(this.homeAngle, duration)
+                              : this.write(this.homeAngle);
+    }
+
     // stop() — cancel an in-progress timed move, hold the current angle.
+    // The board just halts interpolation (no 'done' frame), so settle any
+    // whenDone() awaiter locally.
     stop() {
         this._sweepAbort = true;
         if (this.isAttached) this.arduino.send(encodeFrame(CMD_SERVO_STOP, DEVICE_SERVO, [this.logicalId]));
+        this._resolveDone();
         return this;
     }
 
@@ -350,9 +451,11 @@ class Servo extends Extension {
     // into one WebSocket message. Updates local state directly.
     // -------------------------------------------------------------------
     _memberWrite(angle) {
-        if (!this.isAttached) { console.warn(`Servo ${this.logicalId}: not attached (group set)`); return []; }
+        if (!this.isAttached) { console.warn(`Servo ${this.logicalId}: not attached (group write)`); return []; }
         this._sweepAbort    = true;
-        angle               = Math.max(0, Math.min(180, Math.round(angle)));
+        this._movePromise   = null;   // instant move — nothing to await
+        this._moveDuration  = 0;
+        angle               = this._clampAngle(angle);
         this.angle          = angle;
         this.micros         = this._angleToMicros(angle);
         this._lastSentAngle = angle;
@@ -363,7 +466,7 @@ class Servo extends Extension {
     get memberValue() { return this.angle; }
 
     // -------------------------------------------------------------------
-    // Group timed-move hook (used by group.moveTo()). PWM servos have no
+    // Group timed-move hook (used by group.writeTimed()). PWM servos have no
     // speed input, so arrive-together is done by on-board interpolation:
     // all servos in the bucket share one CMD_SERVO_SYNC_TIMED with the same
     // duration and interpolate from their own current angle → they finish
@@ -374,13 +477,14 @@ class Servo extends Extension {
     _memberMoveEncode(entries, durationMs) {
         const bytes = new Uint8Array(entries.length * 2);
         entries.forEach(([m, target], i) => {
-            const angle = Math.max(0, Math.min(180, Math.round(target)));
+            const angle = m._clampAngle(target);
             bytes[i * 2]     = m.logicalId & 0xFF;
             bytes[i * 2 + 1] = angle & 0xFF;
             m.angle          = angle;         // update commanded state
             m.micros         = m._angleToMicros(angle);
             m._lastSentAngle = angle;
             m._sweepAbort    = true;
+            m._armDone(durationMs);
             m._emit('write', { angle });
         });
         return [encodeFrame(CMD_SERVO_SYNC_TIMED, DEVICE_SERVO,
@@ -399,6 +503,8 @@ class Servo extends Extension {
             micros:     this.micros,
             minPulse:   this.minPulse,
             maxPulse:   this.maxPulse,
+            limits:     this.limitEnabled ? { min: this.limitMin, max: this.limitMax } : null,
+            home:       this.homeAngle,
             throttle:   this.writeThrottle,
             threshold:  this.writeThreshold,
         };
@@ -430,6 +536,13 @@ class Servo extends Extension {
                 this.micros = this._angleToMicros(this.angle);
                 break;
 
+            case CMD_SERVO_SET_LIMITS:
+                // Sync soft-limit state from Arduino announce — silent.
+                this.limitMin     = frame.params[1];
+                this.limitMax     = frame.params[2];
+                this.limitEnabled = frame.params[3] === 1;
+                break;
+
             case CMD_SERVO_READ:
                 this.angle  = frame.params[1];
                 this.micros = this._angleToMicros(this.angle);
@@ -458,6 +571,31 @@ class Servo extends Extension {
         resolvers.forEach(r => r(this.angle));
     }
 
+    // Arm the whenDone() promise for a move that will emit 'done'.
+    _armDone(durationMs = 0) {
+        this._moveDuration = Math.max(0, durationMs);
+        this._movePromise  = this._whenDone();
+    }
+
+    // whenDone({ timeout }?) — Promise for the most recent move. Resolves
+    // `true` on the servo's 'done' (or immediately if no move is pending /
+    // it already finished), `false` on the safety timeout. timeout: ms
+    // (default max(duration × 2, 10000); 0 = wait forever). Also accepts a
+    // bare number: whenDone(5000).
+    //
+    //   await servo.writeTimed(90, 1000).whenDone();
+    whenDone(opts = {}) {
+        const t = (typeof opts === 'number') ? opts : opts.timeout;
+        const timeout = t ?? Math.max(this._moveDuration * 2, 10000);
+        if (!this._movePromise) return Promise.resolve(true);
+        const done = this._movePromise.then(() => true);
+        if (!timeout) return done;
+        return Promise.race([
+            done,
+            new Promise(res => setTimeout(() => res(false), timeout)),
+        ]);
+    }
+
     // -------------------------------------------------------------------
     // Internal helpers
     // -------------------------------------------------------------------
@@ -469,3 +607,7 @@ class Servo extends Extension {
         return ((us - this.minPulse) / (this.maxPulse - this.minPulse)) * 180;
     }
 }
+
+// Let the core materialise a Servo when the SKETCH creates one
+// (PardaloteServo.attach("pan", 9) → CMD_SHARE → arduino.pan).
+registerExtensionType(Servo);

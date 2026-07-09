@@ -238,7 +238,7 @@ stream individual steps over WiFi.</li>
 <li><strong>Soft limits</strong> (<code>setLimits(-6400, 6400)</code>) are enforced on the Arduino — the
 board clamps every target, so the browser (or an LLM driving it) can't send
 the motor past the set range.</li>
-<li><strong><code>done</code></strong> fires when a position move completes. <code>await arduino.x.moveToAsync(n)</code>
+<li><strong><code>done</code></strong> fires when a position move completes. <code>await arduino.x.moveTo(n).whenDone()</code>
 resolves at the same moment — handy for sequencing moves.</li>
 </ul>
 

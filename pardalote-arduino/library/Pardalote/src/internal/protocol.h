@@ -176,6 +176,24 @@ public:
         return true;
     }
 
+    // Append raw bytes into the payload section (after all addInt/addFloat).
+    // Used by the message channel to pack [keyLen][key][value] into the payload.
+    bool addBytes(const uint8_t* data, uint16_t len) {
+        if (!valid) return false;
+        if ((size_t)FRAME_HEADER_SIZE + nparams * 4 + payloadLen + len > sizeof(buf)) {
+            Serial.print(F("[FrameBuilder] addBytes: buffer overflow ("));
+            Serial.print(len); Serial.println(F(" bytes)"));
+            valid = false; return false;
+        }
+        uint8_t* p = buf + FRAME_HEADER_SIZE + nparams * 4 + payloadLen;
+        memcpy(p, data, len);
+        payloadLen += len;
+        return true;
+    }
+
+    // Append a single byte into the payload section.
+    bool addByte(uint8_t b) { return addBytes(&b, 1); }
+
     // Call finish() to write the header fields and get the total frame size.
     // Returns 0 if any addInt/addFloat/addString reported overflow — callers
     // should treat 0 as "do not send."

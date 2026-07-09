@@ -20,11 +20,21 @@
 // hand-roll the protocol.
 //
 // -------------------------------------------------------------------
-// UNLIKE THE PWM SERVO EXTENSION: every bus servo shares ONE UART and is
-// addressed by a hardware servo ID (1–253). A Pardalote instance therefore
-// binds a logical id to a servo ID; the bus itself is a single shared
-// resource configured once (CMD_BUSSERVO_BUS_CONFIG, or lazily on first
-// attach at 1 Mbps on Serial1).
+// THE BUS IS THE UNIT OF OWNERSHIP. Every bus servo shares ONE UART, so
+// inside/outside can't be decided per servo the way it is per pin for PWM
+// servos — it's decided per BUS. A serial bus is either a Pardalote bus or
+// it isn't, never shared: every servo on a Pardalote bus is Pardalote
+// hardware. A servo you want to keep private lives on a SEPARATE UART driven
+// with the raw SCServo library; Pardalote never configures, scans, or drives
+// that bus. The Pardalote bus is a single shared resource configured once
+// (CMD_BUSSERVO_BUS_CONFIG, or lazily on first attach at 1 Mbps on Serial1).
+//
+// Addressing: a servo's hardware id (1–253) is its ADDRESS ON THE BUS — used
+// to attach it and in scan/SyncWrite. Once attached it's controlled by its
+// LOGICAL id (a dense instance slot), exactly like the PWM servo and stepper
+// extensions, so groups and the browser treat all three uniformly. The
+// logical→hardware map is internal; hardware ids are sparse (1, 5, 200…) and
+// can't double as dense array slots, which is why the two coexist.
 // -------------------------------------------------------------------
 //
 // NOTE: this targets the standard Feetech/Waveshare SCServo API. Method
@@ -79,6 +89,14 @@ private:
     inline static int16_t _minPos[MAX_BUS_SERVOS]   = {};
     inline static int16_t _maxPos[MAX_BUS_SERVOS]   = {};
 
+    // Sketch-created bus servos (PardaloteBusServo.attach("name", servoId)).
+    // The name is what the browser binds (arduino.<name>); announce() replays a
+    // CMD_SHARE frame for these so every connecting browser materialises the
+    // object. Browser-created bindings have _sketchOwned = false. Mirrors the
+    // servo/stepper sketch-attach path.
+    inline static bool    _sketchOwned[MAX_BUS_SERVOS] = {};
+    inline static char    _names[MAX_BUS_SERVOS][MAX_SHARE_NAME + 1] = {};
+
     // Arrival tracking — the bus can't push a "done", so after a position write
     // the board polls the servo's Moving flag in loop() and emits CMD_BUSSERVO_DONE
     // when it settles. Makes bus servos look like steppers/servos to the browser.
@@ -90,15 +108,6 @@ private:
     static const uint32_t MOVE_STARTUP_MS = 40;     // let it start moving before first poll
     static const uint32_t MOVE_NO_RESP_MS = 1000;   // give up if the servo stops answering
     static const uint32_t MOVE_MAX_MS     = 30000;  // absolute ceiling on one move
-
-    static void beginAwaitDone(int id) {
-        if (!validId(id) || !_attached[id]) return;
-        uint32_t now        = millis();
-        _awaitDone[id]      = true;
-        _awaitStartMs[id]   = now;
-        _lastRespMs[id]     = now;
-        _lastMovePollMs[id] = 0;
-    }
 
     static bool validId(int id) { return id >= 0 && id < MAX_BUS_SERVOS; }
     static bool isSC(int id)    { return _series[id] == BUSSERVO_SERIES_SC; }
@@ -165,11 +174,25 @@ private:
         _mode[id] = mode;
     }
 
+    // Arm the done-poller for a move on this logical id: loop() then polls the
+    // servo's Moving flag (~30 Hz) and broadcasts CMD_BUSSERVO_DONE when it
+    // settles. Private — every write path routes through the handler (the
+    // WRITE / SYNC_WRITE cases), which arms it; nothing outside BusServoExt
+    // writes to the bus directly.
+    static void beginAwaitDone(int id) {
+        if (!validId(id) || !_attached[id]) return;
+        uint32_t now        = millis();
+        _awaitDone[id]      = true;
+        _awaitStartMs[id]   = now;
+        _lastRespMs[id]     = now;
+        _lastMovePollMs[id] = 0;
+    }
+
 public:
     // -------------------------------------------------------------------
-    // Sketch-facing bus read accessors (used by the PardaloteBusServo
-    // object). Addressed by HARDWARE servo ID — the number scan() returns.
-    // These do live, blocking bus transactions.
+    // Bus-level primitives, addressed by HARDWARE servo ID (the number
+    // scan() returns) — used by discovery (scan/ping), the frame handler,
+    // and the logical-id accessors below. Live, blocking bus transactions.
     // -------------------------------------------------------------------
     // Series of a known-attached servo, else default ST.
     static int busSeriesForId(uint8_t servoId) {
@@ -232,28 +255,135 @@ public:
         return sc ? _sc.ReadMove(servoId) : _st.ReadMove(servoId);
     }
 
-    // Sketch-facing writes — direct bus commands by HARDWARE servo ID.
-    static void writePosById(uint8_t servoId, int position, int speed, int acc) {
-        ensureBus();
-        if (busSeriesForId(servoId) == BUSSERVO_SERIES_SC) _sc.WritePos(servoId, position, 0, speed);
-        else                                               _st.WritePosEx(servoId, position, speed, acc);
+    // Logical-id read accessors used by the PardaloteBusServo sketch object.
+    // A bus servo is addressed by its LOGICAL id (the value attach() returns),
+    // exactly like the browser and groups; these map that to the servo's bus
+    // (hardware) id and do a live, blocking bus transaction. Only servos that
+    // have been attached (are Pardalote instances on the bus) are addressable —
+    // there is no drive-by-raw-hardware-id path (that would reach a servo the
+    // system doesn't model; on a Pardalote bus every servo is a Pardalote one,
+    // so the answer is always "attach it first").
+    static int positionById(int id) {
+        return (validId(id) && _attached[id]) ? readPos(_servoId[id]) : -1;
     }
-    static void setTorqueId(uint8_t servoId, bool on) {
-        ensureBus();
-        if (busSeriesForId(servoId) == BUSSERVO_SERIES_SC) _sc.EnableTorque(servoId, on ? 1 : 0);
-        else                                               _st.EnableTorque(servoId, on ? 1 : 0);
+    static PardaloteBusServoReading feedbackById(int id) {
+        if (validId(id) && _attached[id]) return readFeedback(_servoId[id]);
+        return { -1, 0, 0, 0, 0, 0, false };
+    }
+    static int movingById(int id) {
+        return (validId(id) && _attached[id]) ? readMoving(_servoId[id]) : -1;
     }
 
-    // Echo a sketch-issued write to the browser instance bound to this hardware
-    // ID, so it sets its cached target exactly as if the browser had written it.
-    static void echoTarget(uint8_t servoId, int position) {
-        int lid = logicalForServoId(servoId);
-        if (lid < 0) return;   // no browser instance is bound to this servo
+    // Echo a sketch-issued write to the browser so it sets its cached target
+    // exactly as if the browser had written it. Addressed by LOGICAL id (the
+    // browser routes by it); echoes the clamped value the board actually applied.
+    static void echoTarget(int id, int position) {
+        if (!validId(id) || !_attached[id]) return;
+        if (_limitSet[id]) position = constrain(position, _minPos[id], _maxPos[id]);
         FrameBuilder fb;
         fb.begin(CMD_BUSSERVO_WRITE, DEVICE_BUSSERVO);
-        fb.addInt(lid);
+        fb.addInt(id);
         fb.addInt(position);
         Pardalote.broadcastFrame(fb);
+    }
+
+    // Echo a sketch-issued torque change so the browser's cached torque state
+    // stays in sync (teach-by-demonstration reads it). Addressed by logical id.
+    static void echoTorque(int id, bool on) {
+        if (!validId(id) || !_attached[id]) return;
+        FrameBuilder fb;
+        fb.begin(CMD_BUSSERVO_TORQUE, DEVICE_BUSSERVO);
+        fb.addInt(id);
+        fb.addInt(on ? 1 : 0);
+        Pardalote.broadcastFrame(fb);
+    }
+
+    // -------------------------------------------------------------------
+    // Sketch-created bus servos — PardaloteBusServo.attach("name", servoId).
+    //
+    // Creation and browser visibility are one act (see the servo extension for
+    // the full rationale): a logical instance is bound to the hardware servo
+    // ID through the same handler a browser attach uses, and a CMD_SHARE frame
+    // (+ attach/mode/torque state) is broadcast so connected browsers
+    // materialise arduino.<name> immediately. announce() replays the same
+    // sequence for browsers that connect later.
+    //
+    // Logical ids are allocated from the TOP of the range downward —
+    // browser-assigned ids grow from 0 upward, so the two sides can't collide
+    // until every slot is in use. Idempotent on the name: attaching again with
+    // a name that is already sketch-owned reuses its id.
+    //
+    // Returns the LOGICAL id — the handle write()/read()/torque() take on the
+    // PardaloteBusServo object (and the same id the browser and groups use) —
+    // or -1 if no slot is free. The `servoId` argument is the servo's address
+    // on the bus; it's stored as the binding and reappears only in scan/
+    // SyncWrite, never as the control handle.
+    static int sketchAttach(const char* name, int servoId, int series) {
+        if (name == nullptr || name[0] == '\0') return -1;
+
+        int id = -1;
+        for (int i = 0; i < MAX_BUS_SERVOS; i++) {
+            if (_sketchOwned[i] && strcmp(_names[i], name) == 0) { id = i; break; }
+        }
+        if (id < 0) {
+            for (int i = MAX_BUS_SERVOS - 1; i >= 0; i--) {
+                if (!_attached[i] && !_sketchOwned[i]) { id = i; break; }
+            }
+        }
+        if (id < 0) {
+            Serial.print(F("BusServo: no free slot for '"));
+            Serial.print(name); Serial.println('\'');
+            return -1;
+        }
+
+        strncpy(_names[id], name, MAX_SHARE_NAME);
+        _names[id][MAX_SHARE_NAME] = '\0';
+        _sketchOwned[id] = true;
+
+        // Attach through the same code path a browser attach takes.
+        Pardalote.command(DEVICE_BUSSERVO, CMD_BUSSERVO_ATTACH, id, servoId, series);
+
+        // Tell any connected browsers now (no-op when none are connected;
+        // announce() covers future connects): name → attach → mode → torque,
+        // the same order announce() replays.
+        broadcastShare(id);
+        sendAttachState(id, false, 0);
+
+        return id;
+    }
+
+    static void broadcastShare(int id) {
+        FrameBuilder fb;
+        fb.begin(CMD_SHARE, DEVICE_BUSSERVO);
+        fb.addInt(id);
+        fb.addString(_names[id]);
+        Pardalote.broadcastFrame(fb);
+    }
+
+    // Emit this instance's attach frame (servo ID + series) followed by its
+    // mode and torque state. Shared by sketchAttach (broadcast to everyone)
+    // and announce (unicast to one joining client) so the two stay in
+    // lockstep. When `unicast` is false, `clientNum` is ignored.
+    static void sendAttachState(int id, bool unicast, uint8_t clientNum) {
+        FrameBuilder fa;
+        fa.begin(CMD_BUSSERVO_ATTACH, DEVICE_BUSSERVO);
+        fa.addInt(id); fa.addInt(_servoId[id]); fa.addInt(_series[id]);
+        FrameBuilder fm;
+        fm.begin(CMD_BUSSERVO_SET_MODE, DEVICE_BUSSERVO);
+        fm.addInt(id); fm.addInt(_mode[id]);
+        FrameBuilder ft;
+        ft.begin(CMD_BUSSERVO_TORQUE, DEVICE_BUSSERVO);
+        ft.addInt(id); ft.addInt(_torque[id] ? 1 : 0);
+
+        if (unicast) {
+            Pardalote.sendFrame(clientNum, fa);
+            Pardalote.sendFrame(clientNum, fm);
+            Pardalote.sendFrame(clientNum, ft);
+        } else {
+            Pardalote.broadcastFrame(fa);
+            Pardalote.broadcastFrame(fm);
+            Pardalote.broadcastFrame(ft);
+        }
     }
 
     // -------------------------------------------------------------------
@@ -298,6 +428,11 @@ public:
                 positions[n] = (int16_t)(((uint16_t)r[1] << 8) | r[2]);
                 speeds[n]    = (uint16_t)(((uint16_t)r[3] << 8) | r[4]);
                 accs[n]      = r[5];
+                // Apply the bound instance's soft limits (RAM clamp).
+                int lid = logicalForServoId(ids[n]);
+                if (lid >= 0 && _limitSet[lid]) {
+                    positions[n] = constrain(positions[n], _minPos[lid], _maxPos[lid]);
+                }
                 n++;
             }
             if (n == 0) return;
@@ -344,6 +479,7 @@ public:
                     setTorque(id, false);
                     _attached[id]  = false;
                     _awaitDone[id] = false;
+                    _limitSet[id]  = false;
                     Serial.print(F("BusServo ")); Serial.print(id); Serial.println(F(" detached"));
                 }
                 break;
@@ -384,26 +520,16 @@ public:
                 break;
 
             case CMD_BUSSERVO_SET_LIMITS: {
+                // Software limits — clamped in board RAM on every write path
+                // (browser, sketch, SyncWrite). Deliberately does NOT touch
+                // the servo's EEPROM limit registers: no EEPROM wear, no
+                // reliance on the unverified unLockEprom/writeWord path.
                 if (!_attached[id] || nparams < 3) return;
-                _minPos[id]   = (int16_t)paramInt(params, 1);
-                _maxPos[id]   = (int16_t)paramInt(params, 2);
-                _limitSet[id] = true;
-                // Also write the servo's own limit registers (EEPROM) so the
-                // servo enforces them even without the browser in the loop.
-                uint8_t sid = _servoId[id];
-                bool wasOn = _torque[id];
-                if (isSC(id)) {
-                    _sc.unLockEprom(sid);
-                    _sc.writeWord(sid, BUSSERVO_ADDR_MIN_LIMIT, _minPos[id]);
-                    _sc.writeWord(sid, BUSSERVO_ADDR_MAX_LIMIT, _maxPos[id]);
-                    _sc.LockEprom(sid);
-                } else {
-                    _st.unLockEprom(sid);
-                    _st.writeWord(sid, BUSSERVO_ADDR_MIN_LIMIT, _minPos[id]);
-                    _st.writeWord(sid, BUSSERVO_ADDR_MAX_LIMIT, _maxPos[id]);
-                    _st.LockEprom(sid);
-                }
-                setTorque(id, wasOn);
+                int16_t lo = (int16_t)paramInt(params, 1);
+                int16_t hi = (int16_t)paramInt(params, 2);
+                _minPos[id]   = min(lo, hi);
+                _maxPos[id]   = max(lo, hi);
+                _limitSet[id] = (nparams < 4) || paramInt(params, 3) != 0;
                 break;
             }
 
@@ -567,25 +693,24 @@ public:
         for (int i = 0; i < MAX_BUS_SERVOS; i++) {
             if (!_attached[i]) continue;
 
-            FrameBuilder fa;
-            fa.begin(CMD_BUSSERVO_ATTACH, DEVICE_BUSSERVO);
-            fa.addInt(i); fa.addInt(_servoId[i]); fa.addInt(_series[i]);
-            Pardalote.sendFrame(clientNum, fa);
+            // Sketch-created bus servo: send its SHARE frame FIRST so the
+            // browser materialises arduino.<name> before the attach/state
+            // frames below arrive to sync it.
+            if (_sketchOwned[i]) {
+                FrameBuilder fsh;
+                fsh.begin(CMD_SHARE, DEVICE_BUSSERVO);
+                fsh.addInt(i);
+                fsh.addString(_names[i]);
+                Pardalote.sendFrame(clientNum, fsh);
+            }
 
-            FrameBuilder fm;
-            fm.begin(CMD_BUSSERVO_SET_MODE, DEVICE_BUSSERVO);
-            fm.addInt(i); fm.addInt(_mode[i]);
-            Pardalote.sendFrame(clientNum, fm);
-
-            FrameBuilder ft;
-            ft.begin(CMD_BUSSERVO_TORQUE, DEVICE_BUSSERVO);
-            ft.addInt(i); ft.addInt(_torque[i] ? 1 : 0);
-            Pardalote.sendFrame(clientNum, ft);
+            // Replay attach (servo ID + series), mode, and torque.
+            sendAttachState(i, true, clientNum);
 
             if (_limitSet[i]) {
                 FrameBuilder fl;
                 fl.begin(CMD_BUSSERVO_SET_LIMITS, DEVICE_BUSSERVO);
-                fl.addInt(i); fl.addInt(_minPos[i]); fl.addInt(_maxPos[i]);
+                fl.addInt(i); fl.addInt(_minPos[i]); fl.addInt(_maxPos[i]); fl.addInt(1);
                 Pardalote.sendFrame(clientNum, fl);
             }
         }
@@ -593,37 +718,69 @@ public:
 };
 
 // -------------------------------------------------------------------
-// PardaloteBusServo — sketch-facing bus object. Discover servos and read
-// them by HARDWARE ID (the number scan() returns):
+// PardaloteBusServo — sketch-facing bus object.
+//
+// THE BUS IS THE HARDWARE YOU ATTACH. A serial bus is either a Pardalote
+// bus or it isn't — never shared. Every servo on a Pardalote bus is
+// Pardalote hardware; a servo you want to keep private lives on a
+// SEPARATE UART that you drive with the raw SCServo library, and Pardalote
+// never touches it. (This mirrors PWM servos: a private one uses the plain
+// Servo lib on its own pin — the difference is only that the boundary is
+// per-bus here, because bus servos share one wire, versus per-pin there.)
+//
+// Discovery vs control:
 //   uint8_t ids[16];
-//   int n = PardaloteBusServo.scan(ids, 16);          // who's on the bus?
-//   int pos = PardaloteBusServo.read(ids[0]);         // position, −1 if no answer
-//   PardaloteBusServoReading r = PardaloteBusServo.feedback(ids[0]);  // all in one read
+//   int n = PardaloteBusServo.scan(ids, 16);   // DISCOVERY: hardware ids on
+//                                              // the bus (all Pardalote's)
+//   int j = PardaloteBusServo.attach("wrist", ids[0]);  // adopt → LOGICAL id
+//   PardaloteBusServo.write(j, 2048);          // CONTROL: by logical id
+//   int pos = PardaloteBusServo.read(j);       // feedback, −1 if no answer
 // A scan is blocking (a ping timeout per silent ID) — call it in setup()
 // or on demand, not in a tight loop.
 // -------------------------------------------------------------------
 class PardaloteBusServoAccess {
 public:
+    // attach(name, servoId, series?) — adopt a servo on the Pardalote bus (by
+    // its bus/hardware id) into a named Pardalote instance, visible to every
+    // browser as arduino.<name>. series is BUSSERVO_SERIES_ST (default, STS/
+    // SMS) or BUSSERVO_SERIES_SC. Returns the LOGICAL id — the handle write()/
+    // read()/torque() take below, and the same id the browser and groups use —
+    // or -1 if no slot is free. Names longer than MAX_SHARE_NAME (15) are
+    // truncated. Idempotent per name. The bus is brought up automatically
+    // (Serial1 @ 1 Mbps unless changed via configureBus on the browser side).
+    int attach(const char* name, int servoId,
+               int series = BUSSERVO_SERIES_ST) const {
+        return BusServoExt::sketchAttach(name, servoId, series);
+    }
+
+    // scan(out, max, first?, last?) — DISCOVERY: ping the bus, report the
+    // hardware ids that respond. On a Pardalote bus every responder is
+    // Pardalote hardware; attach() the ones you want to drive.
     int scan(uint8_t* out, int max, int first = 1, int last = 30) const {
         return BusServoExt::scanBus(out, max, first, last);
     }
-    int read(int id)     const { return BusServoExt::readPos((uint8_t)id); }     // position (counts)
-    int position(int id) const { return BusServoExt::readPos((uint8_t)id); }     // alias
-    PardaloteBusServoReading feedback(int id) const { return BusServoExt::readFeedback((uint8_t)id); }
+
+    // Reads — by LOGICAL id (what attach() returned). Live bus transactions.
+    int read(int id)     const { return BusServoExt::positionById(id); }         // position (counts)
+    int position(int id) const { return BusServoExt::positionById(id); }         // alias
+    PardaloteBusServoReading feedback(int id) const { return BusServoExt::feedbackById(id); }
 
     // Arrival check — one bus read of the servo's own Moving flag. Opt-in
     // (the servo can't notify you; you ask). Both false if it didn't answer.
-    bool isMoving(int id) const { return BusServoExt::readMoving((uint8_t)id) == 1; }
-    bool arrived(int id)  const { return BusServoExt::readMoving((uint8_t)id) == 0; }
+    bool isMoving(int id) const { return BusServoExt::movingById(id) == 1; }
+    bool arrived(int id)  const { return BusServoExt::movingById(id) == 0; }
 
-    // Writes — direct bus commands by hardware servo ID. write() also echoes
-    // the target to the browser so its record matches (like a browser write).
+    // Writes — by LOGICAL id, routed through the same handler the browser uses
+    // (soft limits enforced; the done-poller is armed; the target is auto-
+    // echoed to the browser so its record matches, like a browser write).
     void write(int id, int position, int speed = 2400, int acc = 50) const {
-        BusServoExt::writePosById((uint8_t)id, position, speed, acc);
-        BusServoExt::echoTarget((uint8_t)id, position);
-        BusServoExt::beginAwaitDone(BusServoExt::logicalForServoId((uint8_t)id));
+        Pardalote.command(DEVICE_BUSSERVO, CMD_BUSSERVO_WRITE, id, position, speed, acc);
+        BusServoExt::echoTarget(id, position);
     }
-    void torque(int id, bool on) const { BusServoExt::setTorqueId((uint8_t)id, on); }
+    void torque(int id, bool on) const {
+        Pardalote.command(DEVICE_BUSSERVO, CMD_BUSSERVO_TORQUE, id, on ? 1 : 0);
+        BusServoExt::echoTorque(id, on);
+    }
 };
 inline PardaloteBusServoAccess PardaloteBusServo;
 

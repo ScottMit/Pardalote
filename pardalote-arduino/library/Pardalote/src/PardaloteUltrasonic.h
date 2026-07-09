@@ -35,6 +35,14 @@ private:
     inline static uint16_t _timeoutMs[MAX_ULTRASONIC] = { 30,30,30,30 };
     inline static bool     _attached[MAX_ULTRASONIC]  = {};
 
+    // Sketch-created sensors (PardaloteUltrasonic.attach("name", trig, echo)).
+    // The name is what the browser binds (arduino.<name>); announce() replays a
+    // CMD_SHARE frame for these so every connecting browser materialises the
+    // object. Browser-created sensors have _sketchOwned = false. Mirrors the
+    // actuator extensions' sketch-attach path.
+    inline static bool     _sketchOwned[MAX_ULTRASONIC] = {};
+    inline static char     _names[MAX_ULTRASONIC][MAX_SHARE_NAME + 1] = {};
+
     static bool validId(int id) { return id >= 0 && id < MAX_ULTRASONIC; }
 
     // Returns distance in tenths of the requested unit, or -1 on timeout.
@@ -68,6 +76,75 @@ private:
     }
 
 public:
+    // -------------------------------------------------------------------
+    // Sketch-facing accessors (used by the PardaloteUltrasonic object).
+    // -------------------------------------------------------------------
+    static bool attachedId(int id) { return validId(id) && _attached[id]; }
+    static int  listAttached(int* out, int max) {
+        int n = 0;
+        for (int i = 0; i < MAX_ULTRASONIC && n < max; i++) if (_attached[i]) out[n++] = i;
+        return n;
+    }
+    // Blocking measurement for the sketch — returns tenths of `unit` (like the
+    // wire), or -1 on timeout. The Access object divides to decimal units.
+    static int32_t measureId(int id, uint8_t unit) {
+        return (validId(id) && _attached[id]) ? measure(id, unit) : -1;
+    }
+
+    // -------------------------------------------------------------------
+    // Sketch-created sensors — PardaloteUltrasonic.attach("name", trig, echo).
+    //
+    // Creation and browser visibility are one act (see the servo extension for
+    // the rationale): the sensor is attached through the same handler a browser
+    // attach uses, and a CMD_SHARE frame (+ attach state) is broadcast so
+    // connected browsers materialise arduino.<name>. announce() replays it for
+    // later connects. Logical ids allocated TOP-DOWN (browser add() grows from
+    // 0 up). Idempotent per name. echo = -1 → 3-wire. Returns the logical id,
+    // or -1 if no slot is free.
+    // -------------------------------------------------------------------
+    static int sketchAttach(const char* name, int trig, int echo) {
+        if (name == nullptr || name[0] == '\0') return -1;
+
+        int id = -1;
+        for (int i = 0; i < MAX_ULTRASONIC; i++)
+            if (_sketchOwned[i] && strcmp(_names[i], name) == 0) { id = i; break; }
+        if (id < 0)
+            for (int i = MAX_ULTRASONIC - 1; i >= 0; i--)
+                if (!_attached[i] && !_sketchOwned[i]) { id = i; break; }
+        if (id < 0) {
+            Serial.print(F("Ultrasonic: no free slot for '"));
+            Serial.print(name); Serial.println('\'');
+            return -1;
+        }
+
+        strncpy(_names[id], name, MAX_SHARE_NAME);
+        _names[id][MAX_SHARE_NAME] = '\0';
+        _sketchOwned[id] = true;
+
+        // Attach through the same code path a browser attach takes.
+        Pardalote.command(DEVICE_ULTRASONIC, CMD_ULTRASONIC_ATTACH, id, trig, echo);
+
+        // Tell any connected browsers now (no-op when none are connected;
+        // announce() covers future connects): name → attach. Echo pin only for
+        // 4-wire, matching the browser's own attach frame.
+        broadcastShare(id);
+        FrameBuilder fa;
+        fa.begin(CMD_ULTRASONIC_ATTACH, DEVICE_ULTRASONIC);
+        fa.addInt(id); fa.addInt(_trigPins[id]);
+        if (_echoPins[id] != -1) fa.addInt(_echoPins[id]);
+        Pardalote.broadcastFrame(fa);
+
+        return id;
+    }
+
+    static void broadcastShare(int id) {
+        FrameBuilder fb;
+        fb.begin(CMD_SHARE, DEVICE_ULTRASONIC);
+        fb.addInt(id);
+        fb.addString(_names[id]);
+        Pardalote.broadcastFrame(fb);
+    }
+
     // -------------------------------------------------------------------
     // Main dispatch
     // -------------------------------------------------------------------
@@ -160,6 +237,16 @@ public:
         for (int i = 0; i < MAX_ULTRASONIC; i++) {
             if (!_attached[i]) continue;
 
+            // Sketch-created sensor: send its SHARE frame FIRST so the browser
+            // materialises arduino.<name> before the state frames below.
+            if (_sketchOwned[i]) {
+                FrameBuilder fsh;
+                fsh.begin(CMD_SHARE, DEVICE_ULTRASONIC);
+                fsh.addInt(i);
+                fsh.addString(_names[i]);
+                Pardalote.sendFrame(clientNum, fsh);
+            }
+
             FrameBuilder fa;
             fa.begin(CMD_ULTRASONIC_ATTACH, DEVICE_ULTRASONIC);
             fa.addInt(i);
@@ -175,6 +262,47 @@ public:
         }
     }
 };
+
+// -------------------------------------------------------------------
+// PardaloteUltrasonic — sketch-facing collection of distance sensors.
+//
+// Create a sensor from the sketch (the browser sees it automatically as
+// arduino.<name> — a full Ultrasonic instance, identical to a browser-created
+// one):
+//   int front = PardaloteUltrasonic.attach("front", 7, 8);   // name, trig, echo
+//   float cm  = PardaloteUltrasonic.read(front);             // blocking measure
+//
+// 3-wire sensors share one pin: attach("front", 7). Like the PWM servo, the
+// inside/outside boundary is per sensor (each owns its pins). read() blocks in
+// pulseIn() for up to the timeout — don't call it every loop; the browser
+// polls on its own timer. A private sensor shouldn't be here — read it with
+// pulseIn() directly.
+// -------------------------------------------------------------------
+class PardaloteUltrasonicAccess {
+public:
+    // attach(name, trigPin, echoPin?) — create a sensor and make it visible to
+    // browsers as arduino.<name>. echoPin omitted → 3-wire (shared pin).
+    // Returns the logical id for read()/etc., or -1 if no slot is free.
+    // Names >MAX_SHARE_NAME (15) are truncated. Idempotent per name.
+    int attach(const char* name, int trigPin, int echoPin = -1) const {
+        return UltrasonicExt::sketchAttach(name, trigPin, echoPin);
+    }
+
+    int  scan(int* out, int max) const { return UltrasonicExt::listAttached(out, max); }
+    bool attached(int id)        const { return UltrasonicExt::attachedId(id); }
+
+    // read(id) — blocking measurement in centimetres (decimal), -1 on timeout.
+    // readInches(id) — same in inches. Matches arduino.<name>.distance on JS.
+    float read(int id)       const { int32_t t = UltrasonicExt::measureId(id, UNIT_CM);   return (t < 0) ? -1.0f : t / 10.0f; }
+    float readInches(int id) const { int32_t t = UltrasonicExt::measureId(id, UNIT_INCH); return (t < 0) ? -1.0f : t / 10.0f; }
+
+    // setTimeout(id, ms) — cap on pulseIn() per read (1–1000 ms). Longer =
+    // greater max range but a longer loop stall on a miss.
+    void setTimeout(int id, int ms) const {
+        Pardalote.command(DEVICE_ULTRASONIC, CMD_ULTRASONIC_SET_TIMEOUT, id, ms);
+    }
+};
+inline PardaloteUltrasonicAccess PardaloteUltrasonic;
 
 INSTALL_EXTENSION(DEVICE_ULTRASONIC, UltrasonicExt::handle, UltrasonicExt::announce)
 

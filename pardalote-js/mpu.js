@@ -424,3 +424,7 @@ class MPU extends Extension {
         };
     }
 }
+
+// Let the core materialise an MPU when the SKETCH creates one
+// (PardaloteMPU.attach("imu", "6050") → CMD_SHARE → arduino.imu).
+registerExtensionType(MPU);

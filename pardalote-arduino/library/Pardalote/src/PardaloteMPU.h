@@ -166,6 +166,15 @@ inline constexpr SensorDef SENSORS[] = {
 };
 inline constexpr uint8_t NUM_SENSORS = sizeof(SENSORS) / sizeof(SENSORS[0]);
 
+// One IMU's live reading (returned by PardaloteMPU.read()). Accel in g,
+// gyro in °/s, temp in °C. ok = false if the I2C read failed.
+struct PardaloteMPUReading {
+    float ax, ay, az;
+    float gx, gy, gz;
+    float temp;
+    bool  ok;
+};
+
 // -------------------------------------------------------------------
 // MpuExt — extension class
 // -------------------------------------------------------------------
@@ -185,6 +194,12 @@ private:
     inline static float _calGx[MAX_MPUS] = {};
     inline static float _calGy[MAX_MPUS] = {};
     inline static float _calGz[MAX_MPUS] = {};
+
+    // Sketch-created sensors (PardaloteMPU.attach("name", "6050")). The name is
+    // what the browser binds (arduino.<name>); announce() replays a CMD_SHARE
+    // frame for these. Browser-created sensors have _sketchOwned = false.
+    inline static bool  _sketchOwned[MAX_MPUS] = {};
+    inline static char  _names[MAX_MPUS][MAX_SHARE_NAME + 1] = {};
 
     static bool validId(int id)   { return id >= 0 && id < MAX_MPUS; }
 
@@ -254,6 +269,31 @@ private:
         return true;
     }
 
+    // Bring up I2C, bind the sensor descriptor, and initialise the device.
+    // Shared by the CMD_MPU_ATTACH handler (browser) and sketchAttach (board)
+    // so both take the identical path. sda/scl are ESP32-only (ignored else,
+    // -1 = board default). Returns false if the device didn't identify.
+    static bool attachDevice(int id, uint8_t addr, int code, int sda, int scl) {
+#if defined(PLATFORM_ESP32)
+        if (sda >= 0 && scl >= 0) { if (!ensureWire(sda, scl)) ensureWire(); }
+        else                      ensureWire();
+#else
+        (void)sda; (void)scl;
+        ensureWire();
+#endif
+        _addr[id]       = addr;
+        _def[id]        = &SENSORS[code];
+        _accelRange[id] = 0;
+        _gyroRange[id]  = 0;
+        _calibrated[id] = false;
+        _calAx[id] = _calAy[id] = _calAz[id] = 0.0f;
+        _calGx[id] = _calGy[id] = _calGz[id] = 0.0f;
+
+        if (!initDevice(id)) return false;
+        _attached[id] = true;
+        return true;
+    }
+
     // ---- Data read --------------------------------------------------
     // Reads the 14-byte burst block and converts to physical units.
     // Byte offsets and endianness come from the sensor descriptor.
@@ -280,6 +320,95 @@ private:
     }
 
 public:
+    // -------------------------------------------------------------------
+    // Sketch-facing accessors (used by the PardaloteMPU object).
+    // -------------------------------------------------------------------
+    static bool attachedId(int id) { return validId(id) && _attached[id]; }
+    static int  listAttached(int* out, int max) {
+        int n = 0;
+        for (int i = 0; i < MAX_MPUS && n < max; i++) if (_attached[i]) out[n++] = i;
+        return n;
+    }
+    // Blocking I2C read of one sensor — sketch-local (does not broadcast).
+    static PardaloteMPUReading readData(int id) {
+        PardaloteMPUReading r = { 0,0,0, 0,0,0, 0, false };
+        if (validId(id) && _attached[id])
+            r.ok = readSensor(id, r.ax, r.ay, r.az, r.gx, r.gy, r.gz, r.temp);
+        return r;
+    }
+
+    // -------------------------------------------------------------------
+    // Sketch-created IMUs — PardaloteMPU.attach("name", "6050", addr?).
+    //
+    // Creation and browser visibility are one act (see the servo extension for
+    // the rationale). The model NAME rides in a payload, which Pardalote.
+    // command() can't carry, so this shares the attach path with the handler
+    // via attachDevice() instead of round-tripping a frame. A CMD_SHARE frame
+    // (+ attach/range state) is broadcast so browsers materialise arduino.
+    // <name>; announce() replays it. Logical ids allocated TOP-DOWN. Idempotent
+    // per name. addr = 0 → the model's default (0x68 MPU family, 0x6A LSM6).
+    // Returns the logical id, or -1 (bad name / unknown model / no slot / the
+    // device didn't identify on the bus).
+    // -------------------------------------------------------------------
+    static int sketchAttach(const char* name, const char* model,
+                            int addr, int sda, int scl) {
+        if (name == nullptr || name[0] == '\0') return -1;
+
+        int code = findSensor((const uint8_t*)model, model ? (uint16_t)strlen(model) : 0);
+        if (code < 0) {
+            Serial.print(F("IMU: unknown model \""));
+            if (model) Serial.print(model);
+            Serial.println(F("\""));
+            return -1;
+        }
+
+        int id = -1;
+        for (int i = 0; i < MAX_MPUS; i++)
+            if (_sketchOwned[i] && strcmp(_names[i], name) == 0) { id = i; break; }
+        if (id < 0)
+            for (int i = MAX_MPUS - 1; i >= 0; i--)
+                if (!_attached[i] && !_sketchOwned[i]) { id = i; break; }
+        if (id < 0) {
+            Serial.print(F("IMU: no free slot for '"));
+            Serial.print(name); Serial.println('\'');
+            return -1;
+        }
+
+        uint8_t a = (addr > 0) ? (uint8_t)addr
+                               : (strncmp(model, "LSM", 3) == 0 ? 0x6A : 0x68);
+        if (!attachDevice(id, a, code, sda, scl)) return -1;   // leaves slot free
+
+        strncpy(_names[id], name, MAX_SHARE_NAME);
+        _names[id][MAX_SHARE_NAME] = '\0';
+        _sketchOwned[id] = true;
+
+        // Tell any connected browsers now (announce() covers future connects):
+        // name → attach (model in payload) → ranges.
+        broadcastShare(id);
+        FrameBuilder fa;
+        fa.begin(CMD_MPU_ATTACH, DEVICE_MPU);
+        fa.addInt(id); fa.addInt(a); fa.addString(_def[id]->name);
+        Pardalote.broadcastFrame(fa);
+        FrameBuilder fr;
+        fr.begin(CMD_MPU_SET_ACCEL_RANGE, DEVICE_MPU);
+        fr.addInt(id); fr.addInt(_accelRange[id]);
+        Pardalote.broadcastFrame(fr);
+        FrameBuilder fg;
+        fg.begin(CMD_MPU_SET_GYRO_RANGE, DEVICE_MPU);
+        fg.addInt(id); fg.addInt(_gyroRange[id]);
+        Pardalote.broadcastFrame(fg);
+
+        return id;
+    }
+
+    static void broadcastShare(int id) {
+        FrameBuilder fb;
+        fb.begin(CMD_SHARE, DEVICE_MPU);
+        fb.addInt(id);
+        fb.addString(_names[id]);
+        Pardalote.broadcastFrame(fb);
+    }
+
     // -------------------------------------------------------------------
     // Main dispatch
     // -------------------------------------------------------------------
@@ -319,36 +448,12 @@ public:
                                     || _def[id]  != &SENSORS[code];
                 if (!stateChanged) break;
 
-                // Initialise I2C. On ESP32, optional custom SDA/SCL via params[2,3].
+                // On ESP32, optional custom SDA/SCL via params[2,3].
+                int sda = -1, scl = -1;
 #if defined(PLATFORM_ESP32)
-                if (nparams >= 4) {
-                    int sda = (int)paramInt(params, 2);
-                    int scl = (int)paramInt(params, 3);
-                    if (sda >= 0 && scl >= 0) {
-                        // Try custom pins; if Wire was already inited elsewhere,
-                        // ensureWire(sda, scl) returns false and we just use the
-                        // existing pins (no-op on a second ensureWire()).
-                        if (!ensureWire(sda, scl)) ensureWire();
-                    } else {
-                        ensureWire();
-                    }
-                } else {
-                    ensureWire();
-                }
-#else
-                ensureWire();
+                if (nparams >= 4) { sda = (int)paramInt(params, 2); scl = (int)paramInt(params, 3); }
 #endif
-
-                _addr[id]        = addr;
-                _def[id]         = &SENSORS[code];
-                _accelRange[id]  = 0;
-                _gyroRange[id]   = 0;
-                _calibrated[id]  = false;
-                _calAx[id] = _calAy[id] = _calAz[id] = 0.0f;
-                _calGx[id] = _calGy[id] = _calGz[id] = 0.0f;
-
-                if (!initDevice(id)) return;
-                _attached[id] = true;
+                if (!attachDevice(id, addr, code, sda, scl)) return;
 
                 Serial.print(F("IMU ")); Serial.print(id);
                 Serial.print(F(" attached: ")); Serial.print(_def[id]->name);
@@ -475,6 +580,16 @@ public:
         for (int i = 0; i < MAX_MPUS; i++) {
             if (!_attached[i] || !_def[i]) continue;
 
+            // Sketch-created sensor: send its SHARE frame FIRST so the browser
+            // materialises arduino.<name> before the state frames below.
+            if (_sketchOwned[i]) {
+                FrameBuilder fsh;
+                fsh.begin(CMD_SHARE, DEVICE_MPU);
+                fsh.addInt(i);
+                fsh.addString(_names[i]);
+                Pardalote.sendFrame(clientNum, fsh);
+            }
+
             // Re-send attach state. Model name is carried in the payload so
             // the JS side can identify the sensor by its string key.
             FrameBuilder fa;
@@ -505,6 +620,51 @@ public:
         }
     }
 };
+
+// -------------------------------------------------------------------
+// PardaloteMPU — sketch-facing collection of IMUs.
+//
+// Create an IMU from the sketch (the browser sees it automatically as
+// arduino.<name> — a full MPU instance, identical to a browser-created one):
+//   int imu = PardaloteMPU.attach("imu", "6050");   // name, model
+//   PardaloteMPUReading r = PardaloteMPU.read(imu); // accel g / gyro °·s⁻¹
+//   if (r.ok) { float ax = r.ax; ... }
+//
+// Models: "6050", "6500", "9250", "9255" (0x68 default), "LSM6DS3",
+// "LSM6DSOX" (0x6A default). Pass an explicit address for the AD0-HIGH
+// variant, and on ESP32 optionally custom SDA/SCL pins. All IMUs share the
+// one I2C bus (ensureWire), so — like a Pardalote serial-servo bus — the
+// bus itself is Pardalote's; a private IMU means talking to Wire yourself.
+// read() does a blocking I2C burst; the browser polls on its own timer.
+// -------------------------------------------------------------------
+class PardaloteMPUAccess {
+public:
+    // attach(name, model?, addr?, sda?, scl?) — create an IMU and make it
+    // visible to browsers as arduino.<name>. model defaults to "6050"; addr 0
+    // → the model's default. Returns the logical id for read()/etc., or -1
+    // (unknown model / no slot / the device didn't answer on the bus). Names
+    // >MAX_SHARE_NAME (15) are truncated. Idempotent per name.
+    int attach(const char* name, const char* model = "6050",
+               int addr = 0, int sda = -1, int scl = -1) const {
+        return MpuExt::sketchAttach(name, model, addr, sda, scl);
+    }
+
+    int  scan(int* out, int max) const { return MpuExt::listAttached(out, max); }
+    bool attached(int id)        const { return MpuExt::attachedId(id); }
+
+    // read(id) — one blocking I2C burst → accel (g), gyro (°/s), temp (°C).
+    // Check .ok before using the values.
+    PardaloteMPUReading read(int id) const { return MpuExt::readData(id); }
+
+    // Ranges: 0..3 → accel ±2/4/8/16 g, gyro ±250/500/1000/2000 °/s.
+    void setAccelRange(int id, int range) const { Pardalote.command(DEVICE_MPU, CMD_MPU_SET_ACCEL_RANGE, id, range); }
+    void setGyroRange(int id, int range)  const { Pardalote.command(DEVICE_MPU, CMD_MPU_SET_GYRO_RANGE, id, range); }
+
+    // calibrate(id) — hold the sensor flat & still; averages `samples` reads
+    // to zero the offsets (blocks ~samples × 2 ms). Echoed to browsers.
+    void calibrate(int id, int samples = 200) const { Pardalote.command(DEVICE_MPU, CMD_MPU_CALIBRATE, id, samples); }
+};
+inline PardaloteMPUAccess PardaloteMPU;
 
 INSTALL_EXTENSION(DEVICE_MPU, MpuExt::handle, MpuExt::announce)
 

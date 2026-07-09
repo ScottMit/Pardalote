@@ -10,8 +10,13 @@
 //     the LeRobot SO-100/SO-101 arms.
 //   - Feetech SC / SCS series (0–1023 counts) — e.g. SCS15.
 //
-// Unlike PWM servos, every bus servo shares one UART and is addressed by a
-// hardware servo ID (1–253). Positions are RAW ENCODER COUNTS, not degrees.
+// Unlike PWM servos, every bus servo shares one UART, so the inside/outside
+// boundary is per-BUS, not per-servo: a serial bus is either a Pardalote bus
+// (every servo on it is Pardalote hardware) or it isn't (private, driven by
+// the sketch on a separate UART — Pardalote never touches it). A servo's
+// hardware ID (1–253) is its ADDRESS ON THE BUS, passed to attach(); after
+// that you drive it through this instance (arduino.<name>), never by raw id.
+// Positions are RAW ENCODER COUNTS, not degrees.
 //
 // Usage:
 //   const arduino = new Arduino();
@@ -20,7 +25,7 @@
 //   arduino.connect('192.168.1.42');
 //
 //   arduino.on('ready', () => {
-//       arduino.shoulder.attach(1);      // servo ID 1 (ST series by default)
+//       arduino.shoulder.attach(1);      // bus id 1 (ST series by default)
 //       arduino.elbow.attach(2);
 //       arduino.shoulder.center();       // → 2048
 //       arduino.elbow.write(3000);       // raw counts
@@ -100,6 +105,16 @@ class BusServo extends Extension {
         this._pingResolvers = [];
         this._doneResolvers = [];
 
+        // Home position (counts) — where home() goes; null = centre of range.
+        this.homePosition = null;
+
+        // Promise for the most recent move, consumed by whenDone(). Armed by
+        // every position write (the board polls the Moving flag and emits
+        // 'done' when it settles); cleared by runSpeed (wheel mode — no
+        // arrival). _moveDuration feeds the default timeout.
+        this._movePromise  = null;
+        this._moveDuration = 0;
+
         this._announcedByArduino = false;
     }
 
@@ -111,6 +126,9 @@ class BusServo extends Extension {
         this._drain(this._scanResolvers, []);
         this._drain(this._pingResolvers, null);
         this._drain(this._doneResolvers, this.position);
+        this._movePromise  = null;
+        this._moveDuration = 0;
+        this.homePosition  = null;
         this.servoId     = 0;
         this.isAttached  = false;
         this.mode        = BUSSERVO_MODE_POSITION;
@@ -126,7 +144,7 @@ class BusServo extends Extension {
             this._raw(CMD_BUSSERVO_SET_MODE, [this.logicalId, this.mode]);
             this._raw(CMD_BUSSERVO_TORQUE,   [this.logicalId, this.torqueOn ? 1 : 0]);
             if (this.limitEnabled) {
-                this._raw(CMD_BUSSERVO_SET_LIMITS, [this.logicalId, this.limitMin, this.limitMax]);
+                this._raw(CMD_BUSSERVO_SET_LIMITS, [this.logicalId, this.limitMin, this.limitMax, 1]);
             }
         }
         if (this.isAttached && this._readInterval > 0) {
@@ -182,7 +200,8 @@ class BusServo extends Extension {
     // -------------------------------------------------------------------
     write(position, { speed = 2400, acc = 50 } = {}) {
         if (!this._requireAttached('write')) return this;
-        position = Math.round(position);
+        this._armDone();          // the board polls Moving and emits 'done'
+        position = this._clampPos(Math.round(position));
         this.target = position;                     // commanded goal; position is feedback
         this.arduino.send(encodeFrame(CMD_BUSSERVO_WRITE, DEVICE_BUSSERVO,
             [this.logicalId, position, speed, acc]));
@@ -209,29 +228,34 @@ class BusServo extends Extension {
     // -------------------------------------------------------------------
     writeTimed(position, duration = 1000) {
         if (!this._requireAttached('writeTimed')) return this;
-        position = Math.round(position);
+        position = this._clampPos(Math.round(position));   // clamp BEFORE sizing the speed
         const distance = Math.abs(position - this.position);   // last-read position
         const speed = Math.min(this.maxMoveSpeed,
                                Math.max(1, Math.round(distance / Math.max(0.001, duration / 1000))));
-        return this.write(position, { speed });
+        this.write(position, { speed });             // arms whenDone()
+        this._moveDuration = Math.max(0, duration);  // better default timeout
+        return this;
     }
 
     // stop() — halt motion: hold the last-read position (or zero speed in
     // wheel mode). Matches servo.stop() / stepper.stop().
     stop() {
         if (!this._requireAttached('stop')) return this;
-        if (this.mode === BUSSERVO_MODE_WHEEL) this.writeSpeed(0);
+        if (this.mode === BUSSERVO_MODE_WHEEL) this.runSpeed(0);
         else this.write(this.position);
         return this;
     }
 
     // -------------------------------------------------------------------
     // Continuous rotation (wheel mode). Sign of speed sets direction.
-    // Call setMode('wheel') first, or just call writeSpeed — the servo is
+    // Call setMode('wheel') first, or just call runSpeed — the servo is
     // put in wheel mode on the board when it receives a speed command.
+    // Named to match stepper.runSpeed() (the Feetech lib calls it WriteSpe).
     // -------------------------------------------------------------------
-    writeSpeed(speed, { acc = 50 } = {}) {
-        if (!this._requireAttached('writeSpeed')) return this;
+    runSpeed(speed, { acc = 50 } = {}) {
+        if (!this._requireAttached('runSpeed')) return this;
+        this._movePromise  = null;   // continuous — never "arrives"
+        this._moveDuration = 0;
         if (this.mode !== BUSSERVO_MODE_WHEEL) this.setMode('wheel');
         this.arduino.send(encodeFrame(CMD_BUSSERVO_WRITE_SPEED, DEVICE_BUSSERVO,
             [this.logicalId, Math.round(speed), acc]));
@@ -275,15 +299,52 @@ class BusServo extends Extension {
     _stopRead() { if (this._readTimer) { clearInterval(this._readTimer); this._readTimer = null; } this._readInterval = 0; }
 
     // -------------------------------------------------------------------
-    // Soft limits — clamped on the Arduino AND written to the servo's own
-    // Min/Max position registers, so the servo enforces them too.
+    // Soft limits (safety) — same shape as stepper/servo setLimits().
+    // Clamped in board RAM on every write path (browser, sketch, group
+    // SyncWrite) and mirrored here. Deliberately software-only: does NOT
+    // write the servo's EEPROM limit registers (no wear, no unverified
+    // unLockEprom path). Limits therefore live on the board, not in the
+    // servo — the board re-applies them; a bare servo on another bus won't.
     // -------------------------------------------------------------------
     setLimits(min, max) {
-        this.limitMin = Math.round(min);
-        this.limitMax = Math.round(max);
+        min = Math.round(min);
+        max = Math.round(max);
+        this.limitMin = Math.min(min, max);
+        this.limitMax = Math.max(min, max);
         this.limitEnabled = true;
-        if (this.isAttached) this._raw(CMD_BUSSERVO_SET_LIMITS, [this.logicalId, this.limitMin, this.limitMax]);
+        if (this.isAttached) this._raw(CMD_BUSSERVO_SET_LIMITS, [this.logicalId, this.limitMin, this.limitMax, 1]);
         return this;
+    }
+
+    clearLimits() {
+        this.limitEnabled = false;
+        if (this.isAttached) this._raw(CMD_BUSSERVO_SET_LIMITS, [this.logicalId, this.limitMin, this.limitMax, 0]);
+        return this;
+    }
+
+    // Mirror the board's RAM clamp so cached target matches what it applied.
+    _clampPos(pos) {
+        if (this.limitEnabled) pos = Math.max(this.limitMin, Math.min(this.limitMax, pos));
+        return pos;
+    }
+
+    // -------------------------------------------------------------------
+    // Home — setHome() declares the home position (no-arg: "here is home",
+    // from the last-read position — hand-pose with torque off, read(), then
+    // setHome()); home() goes there, home(duration) goes there smoothly.
+    // Default home is the centre of range (2048 ST / 512 SC).
+    //   arduino.shoulder.setHome(1500);
+    //   await arduino.shoulder.home(1000).whenDone();
+    // -------------------------------------------------------------------
+    setHome(position) {
+        this.homePosition = Math.round(position === undefined ? this.position : position);
+        return this;
+    }
+
+    home(duration) {
+        const target = this.homePosition ?? Math.round(this.resolution / 2);
+        return (duration > 0) ? this.writeTimed(target, duration)
+                              : this.write(target);
     }
 
     // -------------------------------------------------------------------
@@ -331,6 +392,32 @@ class BusServo extends Extension {
     // Resolves when the board reports the servo settled (CMD_BUSSERVO_DONE).
     _whenDone() { return new Promise(resolve => this._doneResolvers.push(resolve)); }
 
+    // Arm the whenDone() promise for a move that will emit 'done'.
+    _armDone(durationMs = 0) {
+        this._moveDuration = Math.max(0, durationMs);
+        this._movePromise  = this._whenDone();
+    }
+
+    // whenDone({ timeout }?) — Promise for the most recent move. Resolves
+    // `true` on CMD_BUSSERVO_DONE (the servo's own Moving flag settled — real
+    // arrival, not a timer; or immediately if no move is pending / it already
+    // finished), `false` on the safety timeout. timeout: ms (default
+    // max(duration × 2, 10000); 0 = wait forever). Also accepts a bare
+    // number: whenDone(5000).
+    //
+    //   await arduino.j1.writeTimed(2048, 1500).whenDone();
+    whenDone(opts = {}) {
+        const t = (typeof opts === 'number') ? opts : opts.timeout;
+        const timeout = t ?? Math.max(this._moveDuration * 2, 10000);
+        if (!this._movePromise) return Promise.resolve(true);
+        const done = this._movePromise.then(() => true);
+        if (!timeout) return done;
+        return Promise.race([
+            done,
+            new Promise(res => setTimeout(() => res(false), timeout)),
+        ]);
+    }
+
     // -------------------------------------------------------------------
     // Incoming frames from Arduino.
     // -------------------------------------------------------------------
@@ -355,7 +442,7 @@ class BusServo extends Extension {
             case CMD_BUSSERVO_SET_LIMITS:
                 this.limitMin = frame.params[1];
                 this.limitMax = frame.params[2];
-                this.limitEnabled = true;
+                this.limitEnabled = (frame.params[3] ?? 1) === 1;
                 break;
 
             case CMD_BUSSERVO_WRITE:
@@ -406,8 +493,9 @@ class BusServo extends Extension {
     // default move speed/acc; memberValue reports the last-read position.
     // -------------------------------------------------------------------
     _memberWrite(position) {
-        if (!this._requireAttached('group set')) return [];
-        position = Math.round(position);
+        if (!this._requireAttached('group write')) return [];
+        this._armDone();
+        position = this._clampPos(Math.round(position));
         this.target = position;               // mirror individual write()
         this._emit('write', { position });
         return [encodeFrame(CMD_BUSSERVO_WRITE, DEVICE_BUSSERVO,
@@ -424,20 +512,20 @@ class BusServo extends Extension {
     }
 
     // -------------------------------------------------------------------
-    // Hardware sync-write hooks (used by Group.set()). Members sharing a
+    // Hardware sync-write hooks (used by group.write()). Members sharing a
     // sync key are coalesced into one Feetech SyncWrite packet, so they
     // latch their goals simultaneously — tighter than one-message batching.
     // Only bus servos of the SAME series can share a packet.
     // -------------------------------------------------------------------
     _memberSyncKey() { return this.isAttached ? `busservo:${this.series}` : null; }
 
-    // Immediate coordinated write (group.set()). entries: [[member, position, speed?], ...]
+    // Immediate coordinated write (group.write()). entries: [[member, position, speed?], ...]
     // — one SyncWrite packet; speed defaults to each member's defaultSpeed.
     _memberSetEncode(entries) {
         const bytes = new Uint8Array(entries.length * 6);
         const dv = new DataView(bytes.buffer);
         entries.forEach(([m, v, speed], i) => {
-            const pos = Math.max(0, Math.round(v));
+            const pos = m._clampPos(Math.max(0, Math.round(v)));
             const spd = Math.max(0, Math.round(speed !== undefined ? speed : m.defaultSpeed)) & 0xFFFF;
             const off = i * 6;
             dv.setUint8 (off,     m.servoId & 0xFF);
@@ -445,12 +533,13 @@ class BusServo extends Extension {
             dv.setUint16(off + 3, spd, false);
             dv.setUint8 (off + 5, m.defaultAcc & 0xFF);
             m.target = pos;                   // mirror individual write()
+            m._armDone();
             m._emit('write', { position: pos });
         });
         return [encodeFrame(CMD_BUSSERVO_SYNC_WRITE, DEVICE_BUSSERVO, [this.series], bytes)];
     }
 
-    // Timed arrive-together (group.moveTo()). entries: [[member, target, current], ...].
+    // Timed arrive-together (group.writeTimed()). entries: [[member, target, current], ...].
     // Bus servos do their own motion, so we match speeds: speed_i = distance_i /
     // duration, scaled down uniformly if the fastest exceeds the cap (ratios —
     // and thus simultaneous arrival — preserved), floored at 1 to avoid the
@@ -460,7 +549,7 @@ class BusServo extends Extension {
         const cap      = this.maxMoveSpeed || 4095;
         const minSpeed = 1;
         const items = entries.map(([m, target, current]) => {
-            const t = Math.round(target);
+            const t = m._clampPos(Math.round(target));   // clamp BEFORE distance/speed matching
             const distance = Math.abs(t - Math.round(current ?? m.memberValue ?? 0));
             return { m, target: t, distance };
         });
@@ -470,7 +559,9 @@ class BusServo extends Extension {
             const s = Math.min(cap, Math.max(minSpeed, Math.round((it.distance / durSec) * scale)));
             return [it.m, it.target, s];
         });
-        return this._memberSetEncode(recs);
+        const frames = this._memberSetEncode(recs);   // arms each member's whenDone()
+        recs.forEach(([m]) => { m._moveDuration = Math.max(0, durationMs); });
+        return frames;
     }
 
     // -------------------------------------------------------------------
@@ -493,6 +584,7 @@ class BusServo extends Extension {
             temperature: this.temperature,
             current:     this.current,
             limits:      this.limitEnabled ? { min: this.limitMin, max: this.limitMax } : null,
+            home:        this.homePosition ?? Math.round(this.resolution / 2),
             interval:    this._readInterval,
         };
     }
@@ -513,3 +605,7 @@ class BusServo extends Extension {
         resolvers.forEach(r => r(value));
     }
 }
+
+// Let the core materialise a BusServo when the SKETCH creates one
+// (PardaloteBusServo.attach("wrist", 5) → CMD_SHARE → arduino.wrist).
+registerExtensionType(BusServo);

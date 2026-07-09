@@ -7,6 +7,8 @@ Requires `<PardaloteServo.h>` in the sketch (plus the `ESP32Servo` library on ES
 arduino.add('pan', new Servo());
 ```
 
+Alternatively, the **sketch** can create the servo — `PardaloteServo.attach("pan", 9)` on the Arduino — and `arduino.pan` appears automatically, no `add()` needed: a full `Servo` instance, identical to the above, present before `'ready'` fires. See [The Arduino sketch](arduino.html#creating-actuators-from-the-sketch).
+
 ## attach()
 
 Attaches the servo to a pin. Call inside `on('ready')`.
@@ -112,11 +114,43 @@ arduino.pan.on('done', ({ angle }) => { /* arrived */ });
 
 An immediate `write()` cancels an in-progress timed move.
 
+## whenDone()
+
+Promise for the most recent timed move — resolves `true` on the servo's `done` (or immediately if no move is pending), `false` on the safety timeout (default `max(duration × 2, 10000)` ms; pass `{ timeout }` or a bare number to override, `0` to wait forever). The same method exists on steppers, bus servos, and groups.
+
+<div class="sig">await arduino.pan.<span class="fn">whenDone</span>([{ timeout }])</div>
+
+```javascript Example — sequence timed moves
+await arduino.pan.writeTimed(120, 1500).whenDone();
+await arduino.pan.writeTimed(60,  1500).whenDone();
+```
+
 ## stop()
 
 Cancels a timed move and holds the current angle.
 
 <div class="sig">arduino.pan.<span class="fn">stop</span>()</div>
+
+## setLimits() / clearLimits()
+
+Soft angle limits, enforced **on the Arduino** — every commanded angle (browser write, sketch write, timed or group move) is clamped to the range before it reaches the servo. Same shape as `setLimits` on the stepper and bus servo.
+
+<div class="sig">arduino.pan.<span class="fn">setLimits</span>(min, max) · arduino.pan.<span class="fn">clearLimits</span>()</div>
+
+| Parameter | Type | Description |
+|---|---|---|
+| `min`, `max` | number | Allowed angle range, `0`–`180`. |
+
+## setHome() / home()
+
+`setHome(angle)` declares the home angle — no-arg means "the current angle is home". `home()` snaps there; `home(duration)` glides there over `duration` ms. Default home is `90` (centre). Same pair as the stepper and bus servo.
+
+<div class="sig">arduino.pan.<span class="fn">setHome</span>([angle]) · arduino.pan.<span class="fn">home</span>([duration])</div>
+
+```javascript Example — ease home
+arduino.pan.setHome(45);
+await arduino.pan.home(1000).whenDone();
+```
 
 ## Events
 

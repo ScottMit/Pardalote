@@ -108,8 +108,8 @@ function buildRig() {
 function onReady() {
     attachOne(motorA, typeA, TYPES[typeA].pinsA);
     attachOne(motorB, typeB, TYPES[typeB].pinsB);
-    // Snap to the low pose so moveTo() measures distance from a known start.
-    group.set({ a: TYPES[typeA].low, b: TYPES[typeB].low });
+    // Snap to the low pose so writeTimed() measures distance from a known start.
+    group.write({ a: TYPES[typeA].low, b: TYPES[typeB].low });
     ready = true;
     setStatus(`sweeping — A: ${TYPES[typeA].label}, B: ${TYPES[typeB].label}`);
 }
@@ -131,7 +131,7 @@ function attachOne(motor, type, pins) {
 
 // -------------------------------------------------------------------
 // The sweep: ping-pong both motors between their low and high poses.
-// One group.moveToAsync() per leg → they arrive together.
+// One group.writeTimed().whenDone() per leg → they arrive together.
 // -------------------------------------------------------------------
 async function sweepLoop(token) {
     let goHigh = true;
@@ -143,7 +143,7 @@ async function sweepLoop(token) {
         startDisplayLeg(targetA, targetB);
 
         const leg = ready
-            ? group.moveToAsync({ a: targetA, b: targetB }, { duration: legDur })
+            ? group.writeTimed({ a: targetA, b: targetB }, legDur).whenDone()
             : wait(legDur);
         await leg;
 

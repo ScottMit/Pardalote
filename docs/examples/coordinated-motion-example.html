@@ -46,7 +46,7 @@ chosen independently from the popup under its dial, so the pair can be <strong>m
 (the default is a servo + a stepper). Both motors ping-pong between two positions,
 arriving together on every leg. Each dial visualises the motion — a <strong>180° gauge</strong>
 for PWM servos, a <strong>360° dial</strong> for bus servos and steppers.</p>
-<p>This is the p5.js demonstration of <code>group.moveTo()</code> / <code>moveToAsync()</code>: one call
+<p>This is the p5.js demonstration of <code>group.writeTimed()</code> / <code>whenDone()</code>: one call
 moves both motors, and each motor type reaches its target its own way (bus
 servos via matched-speed SyncWrite, PWM servos via on-board interpolation,
 steppers via a board-timed constant-speed move) — all in one WebSocket message.</p>
@@ -166,8 +166,8 @@ steppers via a board-timed constant-speed move) — all in one WebSocket message
 <span class="kd">function</span> <span class="nx">onReady</span><span class="p">()</span> <span class="p">{</span>
     <span class="nx">attachOne</span><span class="p">(</span><span class="nx">motorA</span><span class="p">,</span> <span class="nx">typeA</span><span class="p">,</span> <span class="nx">TYPES</span><span class="p">[</span><span class="nx">typeA</span><span class="p">].</span><span class="nx">pinsA</span><span class="p">);</span>
     <span class="nx">attachOne</span><span class="p">(</span><span class="nx">motorB</span><span class="p">,</span> <span class="nx">typeB</span><span class="p">,</span> <span class="nx">TYPES</span><span class="p">[</span><span class="nx">typeB</span><span class="p">].</span><span class="nx">pinsB</span><span class="p">);</span>
-    <span class="c1">// Snap to the low pose so moveTo() measures distance from a known start.</span>
-    <span class="nx">group</span><span class="p">.</span><span class="nx">set</span><span class="p">({</span> <span class="nx">a</span><span class="o">:</span> <span class="nx">TYPES</span><span class="p">[</span><span class="nx">typeA</span><span class="p">].</span><span class="nx">low</span><span class="p">,</span> <span class="nx">b</span><span class="o">:</span> <span class="nx">TYPES</span><span class="p">[</span><span class="nx">typeB</span><span class="p">].</span><span class="nx">low</span> <span class="p">});</span>
+    <span class="c1">// Snap to the low pose so writeTimed() measures distance from a known start.</span>
+    <span class="nx">group</span><span class="p">.</span><span class="nx">write</span><span class="p">({</span> <span class="nx">a</span><span class="o">:</span> <span class="nx">TYPES</span><span class="p">[</span><span class="nx">typeA</span><span class="p">].</span><span class="nx">low</span><span class="p">,</span> <span class="nx">b</span><span class="o">:</span> <span class="nx">TYPES</span><span class="p">[</span><span class="nx">typeB</span><span class="p">].</span><span class="nx">low</span> <span class="p">});</span>
     <span class="nx">ready</span> <span class="o">=</span> <span class="kc">true</span><span class="p">;</span>
     <span class="nx">setStatus</span><span class="p">(</span><span class="sb">`sweeping — A: </span><span class="si">${</span><span class="nx">TYPES</span><span class="p">[</span><span class="nx">typeA</span><span class="p">].</span><span class="nx">label</span><span class="si">}</span><span class="sb">, B: </span><span class="si">${</span><span class="nx">TYPES</span><span class="p">[</span><span class="nx">typeB</span><span class="p">].</span><span class="nx">label</span><span class="si">}</span><span class="sb">`</span><span class="p">);</span>
 <span class="p">}</span>
@@ -189,7 +189,7 @@ steppers via a board-timed constant-speed move) — all in one WebSocket message
 
 <span class="c1">// -------------------------------------------------------------------</span>
 <span class="c1">// The sweep: ping-pong both motors between their low and high poses.</span>
-<span class="c1">// One group.moveToAsync() per leg → they arrive together.</span>
+<span class="c1">// One group.writeTimed().whenDone() per leg → they arrive together.</span>
 <span class="c1">// -------------------------------------------------------------------</span>
 <span class="k">async</span> <span class="kd">function</span> <span class="nx">sweepLoop</span><span class="p">(</span><span class="nx">token</span><span class="p">)</span> <span class="p">{</span>
     <span class="kd">let</span> <span class="nx">goHigh</span> <span class="o">=</span> <span class="kc">true</span><span class="p">;</span>
@@ -201,7 +201,7 @@ steppers via a board-timed constant-speed move) — all in one WebSocket message
         <span class="nx">startDisplayLeg</span><span class="p">(</span><span class="nx">targetA</span><span class="p">,</span> <span class="nx">targetB</span><span class="p">);</span>
 
         <span class="kd">const</span> <span class="nx">leg</span> <span class="o">=</span> <span class="nx">ready</span>
-            <span class="o">?</span> <span class="nx">group</span><span class="p">.</span><span class="nx">moveToAsync</span><span class="p">({</span> <span class="nx">a</span><span class="o">:</span> <span class="nx">targetA</span><span class="p">,</span> <span class="nx">b</span><span class="o">:</span> <span class="nx">targetB</span> <span class="p">},</span> <span class="p">{</span> <span class="nx">duration</span><span class="o">:</span> <span class="nx">legDur</span> <span class="p">})</span>
+            <span class="o">?</span> <span class="nx">group</span><span class="p">.</span><span class="nx">writeTimed</span><span class="p">({</span> <span class="nx">a</span><span class="o">:</span> <span class="nx">targetA</span><span class="p">,</span> <span class="nx">b</span><span class="o">:</span> <span class="nx">targetB</span> <span class="p">},</span> <span class="nx">legDur</span><span class="p">).</span><span class="nx">whenDone</span><span class="p">()</span>
             <span class="o">:</span> <span class="nx">wait</span><span class="p">(</span><span class="nx">legDur</span><span class="p">);</span>
         <span class="k">await</span> <span class="nx">leg</span><span class="p">;</span>
 
@@ -349,7 +349,7 @@ is to include all three so you can switch type without re-flashing:</p>
 move smoothly even before the board connects (you'll see <code>status: reconnecting…</code> until it does). The <code>feedback</code> readout shows each motor's real
 position once polling returns values (bus servo / stepper).</li>
 <li>The sweep starts each leg from the last commanded position, so the motors are
-snapped to the low pose once on connect (<code>group.set</code>) to establish a known
+snapped to the low pose once on connect (<code>group.write</code>) to establish a known
 start — see the note on first moves in the <a href="../reference/groups.html">Groups docs</a>.</li>
 <li>Edit the <code>low</code> / <code>high</code> values in <code>TYPES</code> to change each type's sweep range.</li>
 </ul>

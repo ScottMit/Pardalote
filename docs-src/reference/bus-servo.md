@@ -95,17 +95,28 @@ Reaches a position in about a set time — the speed is picked from the move dis
 | `counts` | number | Target position in counts. |
 | `duration` | number | Approximate arrival time in ms. |
 
+## whenDone()
+
+Promise for the most recent move — resolves `true` when the board reports the servo settled (its own `Moving` flag — real arrival, not a timer), `false` on the safety timeout (default `max(duration × 2, 10000)` ms; pass `{ timeout }` or a bare number to override, `0` to wait forever). The same method exists on servos, steppers, and groups.
+
+<div class="sig">await arduino.shoulder.<span class="fn">whenDone</span>([{ timeout }])</div>
+
+```javascript Example — sequence moves
+await arduino.shoulder.writeTimed(3000, 1500).whenDone();
+await arduino.shoulder.writeTimed(1000, 1500).whenDone();
+```
+
 ## stop()
 
 Halts the servo — holds the last-read position.
 
 <div class="sig">arduino.shoulder.<span class="fn">stop</span>()</div>
 
-## setMode() / writeSpeed()
+## setMode() / runSpeed()
 
-Wheel mode for continuous rotation.
+Wheel mode for continuous rotation — the same verb as the stepper's `runSpeed()`.
 
-<div class="sig">arduino.shoulder.<span class="fn">setMode</span>(mode) · arduino.shoulder.<span class="fn">writeSpeed</span>(speed)</div>
+<div class="sig">arduino.shoulder.<span class="fn">setMode</span>(mode) · arduino.shoulder.<span class="fn">runSpeed</span>(speed)</div>
 
 | Parameter | Type | Description |
 |---|---|---|
@@ -114,8 +125,8 @@ Wheel mode for continuous rotation.
 
 ```javascript Example — wheel mode
 arduino.wheel.setMode('wheel');
-arduino.wheel.writeSpeed(2000);
-arduino.wheel.writeSpeed(0);
+arduino.wheel.runSpeed(2000);
+arduino.wheel.runSpeed(0);
 arduino.wheel.setMode('position');
 ```
 
@@ -135,11 +146,29 @@ Starts polling feedback. One bus transaction per poll returns position, velocity
 |---|---|---|
 | `interval` | number | Optional. Poll interval in ms. Pass `END` to stop. |
 
-## setLimits()
+## setLimits() / clearLimits()
 
-Position limits, written into the servo's own registers — so the **servo enforces them** even without the browser in the loop.
+Soft position limits, enforced **on the Arduino** — every commanded position (browser write, sketch write, or group SyncWrite) is clamped to the range before it reaches the servo. Software-only by design: the servo's own EEPROM limit registers are never written. Same shape as `setLimits` on the stepper and PWM servo.
 
-<div class="sig">arduino.shoulder.<span class="fn">setLimits</span>(min, max)</div>
+<div class="sig">arduino.shoulder.<span class="fn">setLimits</span>(min, max) · arduino.shoulder.<span class="fn">clearLimits</span>()</div>
+
+| Parameter | Type | Description |
+|---|---|---|
+| `min`, `max` | number | Allowed position range in counts. |
+
+## setHome() / home()
+
+`setHome(position)` declares the home position — no-arg means "the current position is home", which pairs naturally with torque-off hand-posing (pose the joint, `read()`, `setHome()`). `home()` moves there; `home(duration)` moves there smoothly. Default home is the centre of range (2048 ST / 512 SC). Same pair as the stepper and PWM servo.
+
+<div class="sig">arduino.shoulder.<span class="fn">setHome</span>([position]) · arduino.shoulder.<span class="fn">home</span>([duration])</div>
+
+```javascript Example — pose by hand, then make it home
+arduino.shoulder.disableTorque();
+// ...move the joint by hand...
+arduino.shoulder.read();
+arduino.shoulder.setHome().enableTorque();
+await arduino.shoulder.home(1000).whenDone();
+```
 
 ## calibrate()
 

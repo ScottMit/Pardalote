@@ -5,12 +5,15 @@
 // GPL-3.0 License
 // ==============================================================
 
-let ArduinoIP = '10.1.1.186';   // Change this to your Arduino's IP
+let ArduinoIP = '10.1.1.128';   // Change this to your Arduino's IP
 
 let arduino;
 
-// Arduino pins - Change this to match the pin you are using
-const POTPIN = 14;
+// Arduino pins - Change this to match the pin you are using.
+// NOTE (ESP32): analog input must be on an ADC1 pin — ADC2 pins
+// (GPIO 0,2,4,12-15,25-27) are disabled while WiFi is on and read 0.
+// ADC1 pins: 36(A0), 39(A3), 32(A4), 33(A5), 34(A6), 35(A7).
+const POTPIN = 36;   // A0
 
 function setup() {
     createCanvas(600, 600);
@@ -28,7 +31,7 @@ function draw() {
 
     // get reading from the Arduino
     let dial = arduino.analogRead(POTPIN);
-    let circleRadius = map(dial, 0, 1023, 2, 100);
+    let circleRadius = map(dial, 0, arduino.analogMax, 2, 300);
     // for UNO the ADC range is 0-1023
     // for ESP32 the ADC range is 0-4095
     // you can also use arduino.analogMax to automatically get the board's ADC range.

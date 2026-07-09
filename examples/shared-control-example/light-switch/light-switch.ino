@@ -6,16 +6,16 @@
 // the light; both stay in sync.
 //
 // Wiring:
-//   LED   on pin 13 (built-in on most boards)
-//   BTN_ON  on pin 7  → GND   (uses INPUT_PULLUP)
-//   BTN_OFF on pin 8  → GND   (uses INPUT_PULLUP)
+//   LED   on pin 13 (built-in on some boards)
+//   BTN_ON  on pin 7 or 26  → GND   (uses INPUT_PULLUP)
+//   BTN_OFF on pin 8 or 27  → GND   (uses INPUT_PULLUP)
 // ==============================================================
 
 #include <Pardalote.h>
 
 const int LIGHT  = 13;
-const int BTN_ON = 7;
-const int BTN_OFF = 8;
+const int BTN_ON = 26; // e.g. pin 7 for Arduino UNO R4, pin 26 for ESP32
+const int BTN_OFF = 27; // e.g. pin 8 for Arduino UNO R4, pin 27 for ESP32
 
 bool lastOn  = HIGH;   // INPUT_PULLUP: idle is HIGH, press pulls LOW
 bool lastOff = HIGH;

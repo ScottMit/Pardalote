@@ -74,6 +74,7 @@ void PardaloteClass::run() {
         _sendHello(c);
         _announcePins(c);
         announceAll(c);
+        _announceMessages(c);
         _sendSyncComplete(c);
     }
 
@@ -130,7 +131,13 @@ void PardaloteClass::_handleWsEvent(uint8_t num, WStype_t type,
                 Frame f = parseFrame(payload, pos, length);
                 if (!f.valid) break;
 
-                if (f.target < RESERVED_START) {
+                _emitFrame(PARDALOTE_FRAME_IN, f);   // frame monitor tap
+
+                if (f.cmd == CMD_MESSAGE) {
+                    // Routed by cmd, not target range — the flags in the
+                    // target high byte can push it past RESERVED_START.
+                    _handleMessageFrame(num, f, payload + pos);
+                } else if (f.target < RESERVED_START) {
                     _handleCoreFrame(num, f);
                 } else {
                     dispatchExtension(num, f.target, f.cmd, f.typeMask,
@@ -328,6 +335,213 @@ void PardaloteClass::send(uint8_t pin, int value) {
     broadcastFrame(fb);
 }
 
+// ===================================================================
+// Message channel — user-defined key/value messages (CMD_MESSAGE).
+// ===================================================================
+
+// Public send() overloads. The key is a string, so these never collide
+// with send(uint8_t pin, int value) — pins are numeric.
+void PardaloteClass::send(const char* key, int value, uint8_t flags) {
+    _emitMessage(MSG_TYPE_INT, flags, key, (int32_t)value, 0.0f, nullptr, 0);
+}
+void PardaloteClass::send(const char* key, double value, uint8_t flags) {
+    _emitMessage(MSG_TYPE_FLOAT, flags, key, 0, (float)value, nullptr, 0);
+}
+void PardaloteClass::send(const char* key, bool value, uint8_t flags) {
+    _emitMessage(MSG_TYPE_BOOL, flags, key, value ? 1 : 0, 0.0f, nullptr, 0);
+}
+void PardaloteClass::send(const char* key, char value, uint8_t flags) {
+    _emitMessage(MSG_TYPE_CHAR, flags, key, (int32_t)(uint8_t)value, 0.0f, nullptr, 0);
+}
+void PardaloteClass::send(const char* key, const char* text, uint8_t flags) {
+    _emitMessage(MSG_TYPE_TEXT, flags, key, 0, 0.0f,
+                 (const uint8_t*)text, (uint16_t)strlen(text));
+}
+void PardaloteClass::sendBlob(const char* key, const uint8_t* data, uint16_t len, uint8_t flags) {
+    _emitMessage(MSG_TYPE_BLOB, flags, key, 0, 0.0f, data, len);
+}
+
+// Build [header][param?][keyLen][key][value?] for a message frame.
+void PardaloteClass::_buildMessageFrame(FrameBuilder& fb, uint8_t type, uint8_t flags,
+        const char* key, uint8_t keyLen, int32_t intVal, float floatVal,
+        const uint8_t* value, uint16_t valueLen) {
+    fb.begin(CMD_MESSAGE, MSG_TARGET(type, flags));
+    switch (type) {
+        case MSG_TYPE_FLOAT: fb.addFloat(floatVal); break;
+        case MSG_TYPE_INT:
+        case MSG_TYPE_BOOL:
+        case MSG_TYPE_CHAR:  fb.addInt(intVal);     break;
+        default: break;   // TEXT / BLOB carry no param
+    }
+    fb.addByte(keyLen);
+    fb.addBytes((const uint8_t*)key, keyLen);
+    if ((type == MSG_TYPE_TEXT || type == MSG_TYPE_BLOB) && valueLen)
+        fb.addBytes(value, valueLen);
+}
+
+// Sketch-originated send: retain if asked, then broadcast to every browser.
+// A sketch's own watchers do NOT fire (that would echo your own send —
+// same rule as pin send() not calling onChange locally).
+void PardaloteClass::_emitMessage(uint8_t type, uint8_t flags, const char* key,
+        int32_t intVal, float floatVal, const uint8_t* value, uint16_t valueLen) {
+    if (!key) return;
+    uint8_t keyLen = (uint8_t)strnlen(key, MAX_MESSAGE_KEY);
+
+    if (flags & MSG_FLAG_RETAIN)
+        _storeRetained(key, keyLen, type, intVal, floatVal, value, valueLen);
+
+    if (!anyConnected()) return;
+    FrameBuilder fb;
+    _buildMessageFrame(fb, type, flags, key, keyLen, intVal, floatVal, value, valueLen);
+    broadcastFrame(fb);
+}
+
+// Browser → board: decode, retain, deliver to watchers, relay if broadcast.
+void PardaloteClass::_handleMessageFrame(uint8_t clientNum, const Frame& f, uint8_t* frameStart) {
+    if (f.payloadLen < 1) return;
+    uint8_t type   = MSG_TYPE(f.target);
+    uint8_t flags  = MSG_FLAGS(f.target);
+    uint8_t keyLen = f.payload[0];
+    if ((uint16_t)1 + keyLen > f.payloadLen) return;
+
+    const uint8_t* keyPtr = f.payload + 1;
+    const uint8_t* valPtr = keyPtr + keyLen;
+    uint16_t       valLen = f.payloadLen - 1 - keyLen;
+
+    char keyBuf[MAX_MESSAGE_KEY + 1];
+    uint8_t kl = keyLen > MAX_MESSAGE_KEY ? MAX_MESSAGE_KEY : keyLen;
+    memcpy(keyBuf, keyPtr, kl);
+    keyBuf[kl] = 0;
+
+    Message m = {};
+    m.key  = keyBuf;
+    m.type = type;
+
+    char textBuf[128];
+    switch (type) {
+        case MSG_TYPE_FLOAT:
+            m.floatValue = (f.nparams > 0) ? paramFloat(f.params, 0) : 0.0f;
+            break;
+        case MSG_TYPE_INT:
+        case MSG_TYPE_BOOL:
+        case MSG_TYPE_CHAR:
+            m.intValue = (f.nparams > 0) ? paramInt(f.params, 0) : 0;
+            break;
+        case MSG_TYPE_TEXT: {
+            uint16_t n = valLen < sizeof(textBuf) - 1 ? valLen : sizeof(textBuf) - 1;
+            memcpy(textBuf, valPtr, n);
+            textBuf[n] = 0;
+            m.text   = textBuf;
+            m.length = valLen;
+            break;
+        }
+        case MSG_TYPE_BLOB:
+            m.blob   = valPtr;
+            m.length = valLen;
+            break;
+    }
+
+    if (flags & MSG_FLAG_RETAIN)
+        _storeRetained(keyBuf, kl, type, m.intValue, m.floatValue, valPtr, valLen);
+
+    _dispatchMessage(m);
+
+    // Relay to the OTHER browsers (the board is the hub). Send the exact
+    // received bytes; receivers process it as an ordinary inbound message.
+    if (flags & MSG_FLAG_BROADCAST) {
+        for (int c = 0; c < MAX_WS_CLIENTS; c++) {
+            if (c != clientNum && (_connectedClients & (1 << c)))
+                _ws.sendBIN((uint8_t)c, frameStart, f.totalLen);
+        }
+    }
+}
+
+void PardaloteClass::_dispatchMessage(const Message& m) {
+    for (uint8_t i = 0; i < _watcherCount; i++) {
+        if (_watchers[i].cb && strncmp(_watchers[i].key, m.key, MAX_MESSAGE_KEY) == 0)
+            _watchers[i].cb(m);
+    }
+    if (_messageHandler) _messageHandler(m);
+}
+
+void PardaloteClass::_storeRetained(const char* key, uint8_t keyLen, uint8_t type,
+        int32_t intVal, float floatVal, const uint8_t* value, uint16_t valueLen) {
+    bool scalar = (type != MSG_TYPE_TEXT && type != MSG_TYPE_BLOB);
+    if (!scalar && valueLen > RETAIN_VALUE_MAX) {
+        Serial.print(F("[Pardalote] retain: value too large for key '"));
+        Serial.print(key); Serial.println(F("' — not stored"));
+        return;
+    }
+
+    Retained* slot = nullptr;
+    for (int i = 0; i < NUM_RETAINED; i++)
+        if (_retained[i].used && strncmp(_retained[i].key, key, MAX_MESSAGE_KEY) == 0) { slot = &_retained[i]; break; }
+    if (!slot)
+        for (int i = 0; i < NUM_RETAINED; i++)
+            if (!_retained[i].used) { slot = &_retained[i]; break; }
+    if (!slot) { Serial.println(F("[Pardalote] retain table full")); return; }
+
+    slot->used = true;
+    memcpy(slot->key, key, keyLen);
+    slot->key[keyLen] = 0;
+    slot->keyLen   = keyLen;
+    slot->type     = type;
+    slot->intVal   = intVal;
+    slot->floatVal = floatVal;
+    if (scalar) {
+        slot->valueLen = 0;
+    } else {
+        memcpy(slot->valueBuf, value, valueLen);
+        slot->valueLen = valueLen;
+    }
+}
+
+void PardaloteClass::_announceMessages(uint8_t clientNum) {
+    for (int i = 0; i < NUM_RETAINED; i++) {
+        Retained& r = _retained[i];
+        if (!r.used) continue;
+        FrameBuilder fb;
+        _buildMessageFrame(fb, r.type, MSG_FLAG_RETAIN, r.key, r.keyLen,
+                           r.intVal, r.floatVal, r.valueBuf, r.valueLen);
+        sendFrame(clientNum, fb);
+    }
+}
+
+void PardaloteClass::watch(const char* key, PardaloteMessageHandler cb) {
+    for (uint8_t i = 0; i < _watcherCount; i++)
+        if (strncmp(_watchers[i].key, key, MAX_MESSAGE_KEY) == 0) { _watchers[i].cb = cb; return; }
+    if (_watcherCount >= NUM_WATCHERS) { Serial.println(F("[Pardalote] watch table full")); return; }
+    strncpy(_watchers[_watcherCount].key, key, MAX_MESSAGE_KEY);
+    _watchers[_watcherCount].key[MAX_MESSAGE_KEY] = 0;
+    _watchers[_watcherCount].cb = cb;
+    _watcherCount++;
+}
+
+void PardaloteClass::onMessage(PardaloteMessageHandler cb) { _messageHandler = cb; }
+void PardaloteClass::onFrame(PardaloteFrameHandler cb)     { _frameHandler   = cb; }
+
+// Frame monitor delivery.
+void PardaloteClass::_emitFrame(uint8_t dir, const Frame& f) {
+    if (!_frameHandler) return;
+    FrameEvent ev;
+    ev.dir        = dir;
+    ev.cmd        = f.cmd;
+    ev.target     = f.target;
+    ev.nparams    = f.nparams;
+    ev.typeMask   = f.typeMask;
+    ev.params     = f.params;
+    ev.payloadLen = f.payloadLen;
+    ev.payload    = f.payload;
+    ev.name       = pardaloteFrameName(f.target, f.cmd);
+    _frameHandler(ev);
+}
+
+void PardaloteClass::_emitFrameOut(uint8_t* buf, size_t len) {
+    if (!_frameHandler) return;
+    Frame f = parseFrame(buf, 0, len);
+    if (f.valid) _emitFrame(PARDALOTE_FRAME_OUT, f);
+}
+
 // -------------------------------------------------------------------
 // Public send methods — extensions call Pardalote.sendFrame /
 // Pardalote.broadcastFrame from phase 5 onward.
@@ -336,6 +550,7 @@ void PardaloteClass::sendFrame(uint8_t clientNum, FrameBuilder& fb) {
     if (clientNum >= MAX_WS_CLIENTS) return;   // loopback client (sketch command) has no socket
     size_t len = fb.finish();
     if (len == 0) return;
+    _emitFrameOut(fb.buf, len);
     _ws.sendBIN(clientNum, fb.buf, len);
 }
 
@@ -361,6 +576,7 @@ void PardaloteClass::_command(uint16_t deviceId, uint8_t cmd, const int32_t* par
 void PardaloteClass::broadcastFrame(FrameBuilder& fb) {
     size_t len = fb.finish();
     if (len == 0) return;
+    _emitFrameOut(fb.buf, len);
     for (int c = 0; c < MAX_WS_CLIENTS; c++) {
         if (_connectedClients & (1 << c))
             _ws.sendBIN((uint8_t)c, fb.buf, len);

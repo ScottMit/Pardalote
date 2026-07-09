@@ -172,11 +172,11 @@
 </tr>
 </tbody>
 </table>
-<h2 id="movetoasync">moveToAsync()</h2>
-<p>Promise variant of <code>moveTo()</code> — resolves when the move completes. Handy for sequencing.</p>
-<div class="sig">await arduino.x.<span class="fn">moveToAsync</span>(target)</div>
-<div class="code-ex"><div class="bar">Example — sequence moves</div><pre><code><span class="k">await</span> <span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">moveToAsync</span><span class="p">(</span><span class="mf">2000</span><span class="p">);</span>
-<span class="k">await</span> <span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">moveToAsync</span><span class="p">(</span><span class="mf">0</span><span class="p">);</span>
+<h2 id="whendone">whenDone()</h2>
+<p>Promise for the most recent move — resolves <code>true</code> when the board reports <code>done</code> (or immediately if the move already finished), <code>false</code> on the safety timeout (default <code>max(duration × 2, 10000)</code> ms; pass <code>{ timeout }</code> or a bare number to override, <code>0</code> to wait forever). Handy for sequencing. The same method exists on servos, bus servos, and groups.</p>
+<div class="sig">await arduino.x.<span class="fn">whenDone</span>([{ timeout }])</div>
+<div class="code-ex"><div class="bar">Example — sequence moves</div><pre><code><span class="k">await</span> <span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">moveTo</span><span class="p">(</span><span class="mf">2000</span><span class="p">).</span><span class="nx">whenDone</span><span class="p">();</span>
+<span class="k">await</span> <span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">moveTo</span><span class="p">(</span><span class="mf">0</span><span class="p">).</span><span class="nx">whenDone</span><span class="p">();</span>
 </code></pre></div>
 <h2 id="movetotimed">moveToTimed()</h2>
 <p>Runs a <strong>constant-speed</strong> move sized to arrive in about <code>duration</code> ms — the board computes the speed from its own exact position. This is what lets steppers <strong>arrive together</strong> inside a <a href="groups.html">group</a>. Constant speed skips the acceleration ramp, so keep the speed reasonable to avoid stalling; use <code>moveTo()</code> when arrival timing doesn't matter.</p>
@@ -257,6 +257,56 @@
 </tr>
 </tbody>
 </table>
+<h2 id="setlimitswitch--clearlimitswitch">setLimitSwitch() / clearLimitSwitch()</h2>
+<p>Hardware end-stops — none, one, or two, one call per switch. The trip happens <strong>on the board</strong> (no WiFi round-trip): moving into a pressed switch stops the motor <em>instantly</em> (no deceleration ramp); moving away is always allowed, so you can back off. When a switch trips, a <code>'limit'</code> event fires, <code>limitHit</code> is set (<code>'min'</code>/<code>'max'</code>, cleared by the next move), and the normal <code>'done'</code> follows — <code>whenDone()</code> still settles.</p>
+<div class="sig">arduino.x.<span class="fn">setLimitSwitch</span>(which, pin, [trigger]) · arduino.x.<span class="fn">clearLimitSwitch</span>(which)</div>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>which</code></td>
+<td>constant</td>
+<td><code>LIMIT_MIN</code> or <code>LIMIT_MAX</code> — which end of travel the switch guards (same constants as the Arduino side).</td>
+</tr>
+<tr>
+<td><code>pin</code></td>
+<td>number/string</td>
+<td>Switch pin. <code>-1</code> clears.</td>
+</tr>
+<tr>
+<td><code>trigger</code></td>
+<td>constant</td>
+<td><code>LOW</code> (default — internal pull-up, wire the switch to GND) or <code>HIGH</code>.</td>
+</tr>
+</tbody>
+</table>
+<div class="code-ex"><div class="bar">Example — two end-stops</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">setLimitSwitch</span><span class="p">(</span><span class="nx">LIMIT_MIN</span><span class="p">,</span> <span class="mf">9</span><span class="p">);</span>          <span class="c1">// active LOW</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">setLimitSwitch</span><span class="p">(</span><span class="nx">LIMIT_MAX</span><span class="p">,</span> <span class="mf">10</span><span class="p">,</span> <span class="nx">HIGH</span><span class="p">);</span>   <span class="c1">// active HIGH</span>
+
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;limit&#39;</span><span class="p">,</span> <span class="p">({</span> <span class="nx">which</span><span class="p">,</span> <span class="nx">position</span> <span class="p">})</span> <span class="p">=&gt;</span> <span class="p">{</span>
+    <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="sb">`hit the </span><span class="si">${</span><span class="nx">which</span><span class="si">}</span><span class="sb"> switch at </span><span class="si">${</span><span class="nx">position</span><span class="si">}</span><span class="sb">`</span><span class="p">);</span>
+<span class="p">});</span>
+</code></pre></div>
+<p>After a trip the step counter is suspect (an instant stop above the acceleration limit can lose steps) — that's what homing is for.</p>
+<h2 id="sethome--home">setHome() / home()</h2>
+<p><code>setHome(value)</code> declares where home is (no-arg: &quot;right here is home&quot; — the board resolves it from its own counter). Home is just a coordinate, not the origin. <code>home()</code> goes home:</p>
+<ul>
+<li><strong>With a limit switch</strong> — a board-side routine: seek the switch (MIN if configured, else MAX) at a homing speed (default <code>maxSpeed/4</code>, override with <code>{ speed }</code>), set the counter to <code>0</code> when it trips (<strong>the homing switch is the origin</strong> by definition), back off until it releases, then travel to the home position. Re-establishes the counter from the switch, so it works even when the counter is wrong. With only a MAX switch, that switch reads <code>0</code> and travel is in negative coordinates.</li>
+<li><strong>Without a switch</strong> — a plain accel move to the home position (counter trusted).</li>
+</ul>
+<p>The seek/back-off legs are <strong>capped</strong> (default 30 s, <code>{ timeout }</code> to override): if the switch never trips or never releases, the board hard-stops, fires <code>'homeFail'</code> <code>{ position }</code>, then <code>'done'</code> — nothing spins forever, and <code>whenDone()</code> still settles. <code>done</code> fires when the travel leg arrives; any explicit move cancels an in-progress routine.</p>
+<div class="sig">arduino.x.<span class="fn">setHome</span>([value]) · arduino.x.<span class="fn">home</span>([{ speed, timeout }])</div>
+<div class="code-ex"><div class="bar">Example — home against the min switch</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">setLimitSwitch</span><span class="p">(</span><span class="nx">LIMIT_MIN</span><span class="p">,</span> <span class="mf">9</span><span class="p">);</span>   <span class="c1">// the switch is 0 by definition</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">setHome</span><span class="p">(</span><span class="mf">800</span><span class="p">);</span>                   <span class="c1">// home is step 800 from the switch</span>
+
+<span class="k">await</span> <span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">home</span><span class="p">().</span><span class="nx">whenDone</span><span class="p">({</span> <span class="nx">timeout</span><span class="o">:</span> <span class="mf">30000</span> <span class="p">});</span>
+</code></pre></div>
 <h2 id="degrees-and-revolutions">Degrees and revolutions</h2>
 <p>Convenience helpers convert to raw steps on the JS side. Set steps-per-revolution to match your microstepping first (a 1.8° motor at 16 microsteps = 200 × 16 = 3200):</p>
 <div class="sig">arduino.x.<span class="fn">setStepsPerRev</span>(steps)</div>
@@ -285,12 +335,22 @@
 <tr>
 <td><code>'done'</code></td>
 <td><code>{ position }</code></td>
-<td>A position-mode target is reached.</td>
+<td>A position-mode target is reached (or motion ends at a limit switch).</td>
 </tr>
 <tr>
 <td><code>'move'</code></td>
 <td><code>{ target }</code></td>
 <td>A move is issued.</td>
+</tr>
+<tr>
+<td><code>'limit'</code></td>
+<td><code>{ which, position }</code></td>
+<td>A limit switch tripped and the board hard-stopped the motor.</td>
+</tr>
+<tr>
+<td><code>'homeFail'</code></td>
+<td><code>{ position }</code></td>
+<td>Homing gave up (seek/back-off timeout) — the switch never responded.</td>
 </tr>
 </tbody>
 </table>

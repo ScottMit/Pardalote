@@ -68,15 +68,15 @@ Accel-limited moves to an absolute or relative target.
 | `target` | number | Absolute position in steps. |
 | `delta` | number | Steps relative to the current position (negative = reverse). |
 
-## moveToAsync()
+## whenDone()
 
-Promise variant of `moveTo()` — resolves when the move completes. Handy for sequencing.
+Promise for the most recent move — resolves `true` when the board reports `done` (or immediately if the move already finished), `false` on the safety timeout (default `max(duration × 2, 10000)` ms; pass `{ timeout }` or a bare number to override, `0` to wait forever). Handy for sequencing. The same method exists on servos, bus servos, and groups.
 
-<div class="sig">await arduino.x.<span class="fn">moveToAsync</span>(target)</div>
+<div class="sig">await arduino.x.<span class="fn">whenDone</span>([{ timeout }])</div>
 
 ```javascript Example — sequence moves
-await arduino.x.moveToAsync(2000);
-await arduino.x.moveToAsync(0);
+await arduino.x.moveTo(2000).whenDone();
+await arduino.x.moveTo(0).whenDone();
 ```
 
 ## moveToTimed()
@@ -143,6 +143,47 @@ Soft limits, enforced **on the Arduino** — every target is clamped to the rang
 |---|---|---|
 | `min`, `max` | number | Allowed position range in steps. |
 
+## setLimitSwitch() / clearLimitSwitch()
+
+Hardware end-stops — none, one, or two, one call per switch. The trip happens **on the board** (no WiFi round-trip): moving into a pressed switch stops the motor *instantly* (no deceleration ramp); moving away is always allowed, so you can back off. When a switch trips, a `'limit'` event fires, `limitHit` is set (`'min'`/`'max'`, cleared by the next move), and the normal `'done'` follows — `whenDone()` still settles.
+
+<div class="sig">arduino.x.<span class="fn">setLimitSwitch</span>(which, pin, [trigger]) · arduino.x.<span class="fn">clearLimitSwitch</span>(which)</div>
+
+| Parameter | Type | Description |
+|---|---|---|
+| `which` | constant | `LIMIT_MIN` or `LIMIT_MAX` — which end of travel the switch guards (same constants as the Arduino side). |
+| `pin` | number/string | Switch pin. `-1` clears. |
+| `trigger` | constant | `LOW` (default — internal pull-up, wire the switch to GND) or `HIGH`. |
+
+```javascript Example — two end-stops
+arduino.x.setLimitSwitch(LIMIT_MIN, 9);          // active LOW
+arduino.x.setLimitSwitch(LIMIT_MAX, 10, HIGH);   // active HIGH
+
+arduino.x.on('limit', ({ which, position }) => {
+    console.log(`hit the ${which} switch at ${position}`);
+});
+```
+
+After a trip the step counter is suspect (an instant stop above the acceleration limit can lose steps) — that's what homing is for.
+
+## setHome() / home()
+
+`setHome(value)` declares where home is (no-arg: "right here is home" — the board resolves it from its own counter). Home is just a coordinate, not the origin. `home()` goes home:
+
+- **With a limit switch** — a board-side routine: seek the switch (MIN if configured, else MAX) at a homing speed (default `maxSpeed/4`, override with `{ speed }`), set the counter to `0` when it trips (**the homing switch is the origin** by definition), back off until it releases, then travel to the home position. Re-establishes the counter from the switch, so it works even when the counter is wrong. With only a MAX switch, that switch reads `0` and travel is in negative coordinates.
+- **Without a switch** — a plain accel move to the home position (counter trusted).
+
+The seek/back-off legs are **capped** (default 30 s, `{ timeout }` to override): if the switch never trips or never releases, the board hard-stops, fires `'homeFail'` `{ position }`, then `'done'` — nothing spins forever, and `whenDone()` still settles. `done` fires when the travel leg arrives; any explicit move cancels an in-progress routine.
+
+<div class="sig">arduino.x.<span class="fn">setHome</span>([value]) · arduino.x.<span class="fn">home</span>([{ speed, timeout }])</div>
+
+```javascript Example — home against the min switch
+arduino.x.setLimitSwitch(LIMIT_MIN, 9);   // the switch is 0 by definition
+arduino.x.setHome(800);                   // home is step 800 from the switch
+
+await arduino.x.home().whenDone({ timeout: 30000 });
+```
+
 ## Degrees and revolutions
 
 Convenience helpers convert to raw steps on the JS side. Set steps-per-revolution to match your microstepping first (a 1.8° motor at 16 microsteps = 200 × 16 = 3200):
@@ -164,8 +205,10 @@ arduino.x.moveRevolutions(0.5);
 | Event | Payload | Fires when |
 |---|---|---|
 | `'read'` | `{ position, distanceToGo, speed, isRunning }` | A poll result arrives. |
-| `'done'` | `{ position }` | A position-mode target is reached. |
+| `'done'` | `{ position }` | A position-mode target is reached (or motion ends at a limit switch). |
 | `'move'` | `{ target }` | A move is issued. |
+| `'limit'` | `{ which, position }` | A limit switch tripped and the board hard-stopped the motor. |
+| `'homeFail'` | `{ position }` | Homing gave up (seek/back-off timeout) — the switch never responded. |
 
 Shorthand: `onRead(fn)`, `onDone(fn)`, `onMove(fn)`.
 

@@ -154,8 +154,57 @@
 </code></pre></div>
 <h2 id="when-not-to-share">When not to share</h2>
 <p>Not every pin needs to be shared. In the light-switch example the two button pins are only used by the Arduino — the browser has its own buttons, so there's no reason to tell it about the physical ones. Share only the pins you want the browser to see.</p>
+<h2 id="creating-actuators-from-the-sketch">Creating actuators from the sketch</h2>
+<p>The sketch can create a servo itself — and every browser receives it automatically, as a full <code>Servo</code> instance named <code>arduino.&lt;name&gt;</code>, identical to one created with <code>arduino.add()</code>.</p>
+<div class="sig">PardaloteServo.<span class="fn">attach</span>(name, pin, minPulse?, maxPulse?)</div>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>name</code></td>
+<td>string</td>
+<td>The browser-side name — <code>arduino.&lt;name&gt;</code>. Max 15 chars.</td>
+</tr>
+<tr>
+<td><code>pin</code></td>
+<td>int</td>
+<td>The servo signal pin.</td>
+</tr>
+<tr>
+<td><code>minPulse</code></td>
+<td>int</td>
+<td>Optional pulse range, default 544.</td>
+</tr>
+<tr>
+<td><code>maxPulse</code></td>
+<td>int</td>
+<td>Optional pulse range, default 2400.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns</strong> the logical id for the <code>write()</code> / <code>read()</code> calls below, or −1 if no slot is free.</p>
+<div class="code-ex"><div class="bar">sketch.ino — the sketch creates a servo</div><pre><code><span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;Pardalote.h&gt;</span><span class="cp"></span>
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;PardaloteServo.h&gt;</span><span class="cp"></span>
+
+<span class="kt">int</span><span class="w"> </span><span class="n">pan</span><span class="p">;</span><span class="w"></span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">setup</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">begin</span><span class="p">();</span><span class="w"></span>
+<span class="w">    </span><span class="n">pan</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">PardaloteServo</span><span class="p">.</span><span class="n">attach</span><span class="p">(</span><span class="s">&quot;pan&quot;</span><span class="p">,</span><span class="w"> </span><span class="mi">9</span><span class="p">);</span><span class="w">   </span><span class="c1">// arduino.pan now exists in every browser</span>
+<span class="w">    </span><span class="n">PardaloteServo</span><span class="p">.</span><span class="n">write</span><span class="p">(</span><span class="n">pan</span><span class="p">,</span><span class="w"> </span><span class="mi">90</span><span class="p">);</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</code></pre></div>
+<p>The object exists in the browser before <code>'ready'</code> fires, and browsers that connect later get it too. <code>arduino.on('share', ({ name, extension }) =&gt; …)</code> fires the moment it appears. Calling <code>attach</code> again with the same name reuses the same servo; names that would collide with the browser core API (like <code>&quot;connect&quot;</code>) are refused with a console warning.</p>
+<p>Unlike raw pins, there's no separate <code>share()</code> step — a Pardalote servo has no life outside Pardalote, so creating it <em>is</em> sharing it. A servo that should stay private to the sketch shouldn't go through Pardalote at all: use the plain <code>Servo</code>/<code>ESP32Servo</code> library directly, the way unshared pins just use <code>pinMode()</code>.</p>
+<p><em>(Currently servos; steppers and bus servos will follow the same pattern.)</em></p>
 <h2 id="the-actuator-objects">The actuator objects</h2>
-<p><code>share</code>/<code>send</code> cover raw pins. For the <strong>extension actuators</strong> the browser configured, each type gives the sketch a small <strong>bus object</strong>. The browser and the sketch share the same actuator (last writer wins), just as they share raw pins.</p>
+<p><code>share</code>/<code>send</code> cover raw pins. For the <strong>extension actuators</strong> — browser-configured or sketch-created — each type gives the sketch a small <strong>bus object</strong>. The browser and the sketch share the same actuator (last writer wins), just as they share raw pins.</p>
 <table>
 <thead>
 <tr>
@@ -170,7 +219,7 @@
 <td><code>PardaloteServo</code></td>
 <td>attached servo ids</td>
 <td>angle (0–180)</td>
-<td>logical id (the <code>arduino.add()</code> order)</td>
+<td>logical id (<code>arduino.add()</code> order, or returned by sketch <code>attach</code>)</td>
 </tr>
 <tr>
 <td><code>PardaloteStepper</code></td>

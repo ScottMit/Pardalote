@@ -241,3 +241,7 @@ class Ultrasonic extends Extension {
         };
     }
 }
+
+// Let the core materialise an Ultrasonic when the SKETCH creates one
+// (PardaloteUltrasonic.attach("front", 7, 8) → CMD_SHARE → arduino.front).
+registerExtensionType(Ultrasonic);

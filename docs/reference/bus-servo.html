@@ -186,12 +186,18 @@
 </tr>
 </tbody>
 </table>
+<h2 id="whendone">whenDone()</h2>
+<p>Promise for the most recent move — resolves <code>true</code> when the board reports the servo settled (its own <code>Moving</code> flag — real arrival, not a timer), <code>false</code> on the safety timeout (default <code>max(duration × 2, 10000)</code> ms; pass <code>{ timeout }</code> or a bare number to override, <code>0</code> to wait forever). The same method exists on servos, steppers, and groups.</p>
+<div class="sig">await arduino.shoulder.<span class="fn">whenDone</span>([{ timeout }])</div>
+<div class="code-ex"><div class="bar">Example — sequence moves</div><pre><code><span class="k">await</span> <span class="nx">arduino</span><span class="p">.</span><span class="nx">shoulder</span><span class="p">.</span><span class="nx">writeTimed</span><span class="p">(</span><span class="mf">3000</span><span class="p">,</span> <span class="mf">1500</span><span class="p">).</span><span class="nx">whenDone</span><span class="p">();</span>
+<span class="k">await</span> <span class="nx">arduino</span><span class="p">.</span><span class="nx">shoulder</span><span class="p">.</span><span class="nx">writeTimed</span><span class="p">(</span><span class="mf">1000</span><span class="p">,</span> <span class="mf">1500</span><span class="p">).</span><span class="nx">whenDone</span><span class="p">();</span>
+</code></pre></div>
 <h2 id="stop">stop()</h2>
 <p>Halts the servo — holds the last-read position.</p>
 <div class="sig">arduino.shoulder.<span class="fn">stop</span>()</div>
-<h2 id="setmode--writespeed">setMode() / writeSpeed()</h2>
-<p>Wheel mode for continuous rotation.</p>
-<div class="sig">arduino.shoulder.<span class="fn">setMode</span>(mode) · arduino.shoulder.<span class="fn">writeSpeed</span>(speed)</div>
+<h2 id="setmode--runspeed">setMode() / runSpeed()</h2>
+<p>Wheel mode for continuous rotation — the same verb as the stepper's <code>runSpeed()</code>.</p>
+<div class="sig">arduino.shoulder.<span class="fn">setMode</span>(mode) · arduino.shoulder.<span class="fn">runSpeed</span>(speed)</div>
 <table>
 <thead>
 <tr>
@@ -214,8 +220,8 @@
 </tbody>
 </table>
 <div class="code-ex"><div class="bar">Example — wheel mode</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">wheel</span><span class="p">.</span><span class="nx">setMode</span><span class="p">(</span><span class="s1">&#39;wheel&#39;</span><span class="p">);</span>
-<span class="nx">arduino</span><span class="p">.</span><span class="nx">wheel</span><span class="p">.</span><span class="nx">writeSpeed</span><span class="p">(</span><span class="mf">2000</span><span class="p">);</span>
-<span class="nx">arduino</span><span class="p">.</span><span class="nx">wheel</span><span class="p">.</span><span class="nx">writeSpeed</span><span class="p">(</span><span class="mf">0</span><span class="p">);</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">wheel</span><span class="p">.</span><span class="nx">runSpeed</span><span class="p">(</span><span class="mf">2000</span><span class="p">);</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">wheel</span><span class="p">.</span><span class="nx">runSpeed</span><span class="p">(</span><span class="mf">0</span><span class="p">);</span>
 <span class="nx">arduino</span><span class="p">.</span><span class="nx">wheel</span><span class="p">.</span><span class="nx">setMode</span><span class="p">(</span><span class="s1">&#39;position&#39;</span><span class="p">);</span>
 </code></pre></div>
 <h2 id="enabletorque--disabletorque">enableTorque() / disableTorque()</h2>
@@ -240,9 +246,34 @@
 </tr>
 </tbody>
 </table>
-<h2 id="setlimits">setLimits()</h2>
-<p>Position limits, written into the servo's own registers — so the <strong>servo enforces them</strong> even without the browser in the loop.</p>
-<div class="sig">arduino.shoulder.<span class="fn">setLimits</span>(min, max)</div>
+<h2 id="setlimits--clearlimits">setLimits() / clearLimits()</h2>
+<p>Soft position limits, enforced <strong>on the Arduino</strong> — every commanded position (browser write, sketch write, or group SyncWrite) is clamped to the range before it reaches the servo. Software-only by design: the servo's own EEPROM limit registers are never written. Same shape as <code>setLimits</code> on the stepper and PWM servo.</p>
+<div class="sig">arduino.shoulder.<span class="fn">setLimits</span>(min, max) · arduino.shoulder.<span class="fn">clearLimits</span>()</div>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>min</code>, <code>max</code></td>
+<td>number</td>
+<td>Allowed position range in counts.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="sethome--home">setHome() / home()</h2>
+<p><code>setHome(position)</code> declares the home position — no-arg means &quot;the current position is home&quot;, which pairs naturally with torque-off hand-posing (pose the joint, <code>read()</code>, <code>setHome()</code>). <code>home()</code> moves there; <code>home(duration)</code> moves there smoothly. Default home is the centre of range (2048 ST / 512 SC). Same pair as the stepper and PWM servo.</p>
+<div class="sig">arduino.shoulder.<span class="fn">setHome</span>([position]) · arduino.shoulder.<span class="fn">home</span>([duration])</div>
+<div class="code-ex"><div class="bar">Example — pose by hand, then make it home</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">shoulder</span><span class="p">.</span><span class="nx">disableTorque</span><span class="p">();</span>
+<span class="c1">// ...move the joint by hand...</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">shoulder</span><span class="p">.</span><span class="nx">read</span><span class="p">();</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">shoulder</span><span class="p">.</span><span class="nx">setHome</span><span class="p">().</span><span class="nx">enableTorque</span><span class="p">();</span>
+<span class="k">await</span> <span class="nx">arduino</span><span class="p">.</span><span class="nx">shoulder</span><span class="p">.</span><span class="nx">home</span><span class="p">(</span><span class="mf">1000</span><span class="p">).</span><span class="nx">whenDone</span><span class="p">();</span>
+</code></pre></div>
 <h2 id="calibrate">calibrate()</h2>
 <p>Declares the servo's current physical position as centre. Move the joint to its zero pose by hand (torque off) first.</p>
 <div class="sig">arduino.shoulder.<span class="fn">calibrate</span>()</div>

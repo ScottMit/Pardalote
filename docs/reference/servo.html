@@ -62,6 +62,7 @@
 <p>Requires <code>&lt;PardaloteServo.h&gt;</code> in the sketch (plus the <code>ESP32Servo</code> library on ESP32). Register instances before connecting; examples assume:</p>
 <pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;pan&#39;</span><span class="p">,</span> <span class="ow">new</span> <span class="nx">Servo</span><span class="p">());</span>
 </code></pre>
+<p>Alternatively, the <strong>sketch</strong> can create the servo — <code>PardaloteServo.attach(&quot;pan&quot;, 9)</code> on the Arduino — and <code>arduino.pan</code> appears automatically, no <code>add()</code> needed: a full <code>Servo</code> instance, identical to the above, present before <code>'ready'</code> fires. See <a href="arduino.html#creating-actuators-from-the-sketch">The Arduino sketch</a>.</p>
 <h2 id="attach">attach()</h2>
 <p>Attaches the servo to a pin. Call inside <code>on('ready')</code>.</p>
 <div class="sig">arduino.pan.<span class="fn">attach</span>(pin, [minPulse], [maxPulse])</div>
@@ -229,9 +230,40 @@
 <span class="nx">arduino</span><span class="p">.</span><span class="nx">pan</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;done&#39;</span><span class="p">,</span> <span class="p">({</span> <span class="nx">angle</span> <span class="p">})</span> <span class="p">=&gt;</span> <span class="p">{</span> <span class="cm">/* arrived */</span> <span class="p">});</span>
 </code></pre></div>
 <p>An immediate <code>write()</code> cancels an in-progress timed move.</p>
+<h2 id="whendone">whenDone()</h2>
+<p>Promise for the most recent timed move — resolves <code>true</code> on the servo's <code>done</code> (or immediately if no move is pending), <code>false</code> on the safety timeout (default <code>max(duration × 2, 10000)</code> ms; pass <code>{ timeout }</code> or a bare number to override, <code>0</code> to wait forever). The same method exists on steppers, bus servos, and groups.</p>
+<div class="sig">await arduino.pan.<span class="fn">whenDone</span>([{ timeout }])</div>
+<div class="code-ex"><div class="bar">Example — sequence timed moves</div><pre><code><span class="k">await</span> <span class="nx">arduino</span><span class="p">.</span><span class="nx">pan</span><span class="p">.</span><span class="nx">writeTimed</span><span class="p">(</span><span class="mf">120</span><span class="p">,</span> <span class="mf">1500</span><span class="p">).</span><span class="nx">whenDone</span><span class="p">();</span>
+<span class="k">await</span> <span class="nx">arduino</span><span class="p">.</span><span class="nx">pan</span><span class="p">.</span><span class="nx">writeTimed</span><span class="p">(</span><span class="mf">60</span><span class="p">,</span>  <span class="mf">1500</span><span class="p">).</span><span class="nx">whenDone</span><span class="p">();</span>
+</code></pre></div>
 <h2 id="stop">stop()</h2>
 <p>Cancels a timed move and holds the current angle.</p>
 <div class="sig">arduino.pan.<span class="fn">stop</span>()</div>
+<h2 id="setlimits--clearlimits">setLimits() / clearLimits()</h2>
+<p>Soft angle limits, enforced <strong>on the Arduino</strong> — every commanded angle (browser write, sketch write, timed or group move) is clamped to the range before it reaches the servo. Same shape as <code>setLimits</code> on the stepper and bus servo.</p>
+<div class="sig">arduino.pan.<span class="fn">setLimits</span>(min, max) · arduino.pan.<span class="fn">clearLimits</span>()</div>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>min</code>, <code>max</code></td>
+<td>number</td>
+<td>Allowed angle range, <code>0</code>–<code>180</code>.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="sethome--home">setHome() / home()</h2>
+<p><code>setHome(angle)</code> declares the home angle — no-arg means &quot;the current angle is home&quot;. <code>home()</code> snaps there; <code>home(duration)</code> glides there over <code>duration</code> ms. Default home is <code>90</code> (centre). Same pair as the stepper and bus servo.</p>
+<div class="sig">arduino.pan.<span class="fn">setHome</span>([angle]) · arduino.pan.<span class="fn">home</span>([duration])</div>
+<div class="code-ex"><div class="bar">Example — ease home</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">pan</span><span class="p">.</span><span class="nx">setHome</span><span class="p">(</span><span class="mf">45</span><span class="p">);</span>
+<span class="k">await</span> <span class="nx">arduino</span><span class="p">.</span><span class="nx">pan</span><span class="p">.</span><span class="nx">home</span><span class="p">(</span><span class="mf">1000</span><span class="p">).</span><span class="nx">whenDone</span><span class="p">();</span>
+</code></pre></div>
 <h2 id="events">Events</h2>
 <div class="sig">arduino.pan.<span class="fn">on</span>(event, handler)</div>
 <table>

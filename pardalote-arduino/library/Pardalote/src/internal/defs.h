@@ -47,6 +47,7 @@
 #define CMD_PING          0x08  // JS → Arduino: heartbeat request
 #define CMD_PONG          0x09  // Arduino → JS: heartbeat response
 #define CMD_SYNC_COMPLETE 0x0A  // Arduino → JS: all announce frames sent; JS fires 'ready'
+#define CMD_MESSAGE       0x0B  // Both ways: user-defined key/value message (see Message Channel below)
 
 // -------------------------------------------------------------------
 // Pin tracking
@@ -99,6 +100,11 @@
                                            // All listed servos interpolate over the SAME duration → arrive together
 #define CMD_SERVO_STOP               0x1C  // params: [instanceId] — cancel a timed move, hold current angle
 #define CMD_SERVO_DONE          0x1D  // Ar→JS (unsolicited): [instanceId, angle] — timed move reached target
+// Numbered after the stepper switch block (0x52–0x53) — the 0x14–0x1D servo
+// block was full; dispatch is by (deviceId, cmd) so the gap is cosmetic only.
+#define CMD_SERVO_SET_LIMITS    0x54  // JS→Ar: [instanceId, minAngle, maxAngle, enabled] — soft angle
+                                      //   limits, clamped ON THE BOARD (browser and sketch writes alike).
+                                      // Ar→JS (announce): same shape, replays limit state.
 
 // -------------------------------------------------------------------
 // Ultrasonic Commands (0x1E–0x27)
@@ -174,7 +180,16 @@
 #define CMD_STEPPER_READ          0x3E  // JS→Ar: [id]
                                         // Ar→JS: [id, position, distanceToGo, speed(f), isRunning]
 #define CMD_STEPPER_DONE          0x3F  // Ar→JS (unsolicited): [id, position] — position-mode target reached
-#define CMD_STEPPER_HOME          0x40  // JS→Ar: [id, dir, speed]    — RESERVED v2 (limit-switch homing)
+#define CMD_STEPPER_HOME          0x40  // JS→Ar: [id, speed?, timeoutMs?] — run the homing routine: seek
+                                        //   the limit switch (MIN if configured, else MAX) at `speed`
+                                        //   (0 = default, maxSpeed/4), on trip set the counter to the
+                                        //   switch's declared coordinate (SET_SWITCH_POS, default 0), back
+                                        //   off until released, then travel to home — the origin, 0. DONE
+                                        //   fires on arrival. With no switch: plain accel move to 0.
+                                        //   timeoutMs caps the SEEK+BACKOFF legs (0 = default 30 s) —
+                                        //   an unplugged/stuck switch can't spin the motor forever.
+                                        // Ar→JS (unsolicited): [id, position] — homing GAVE UP (timeout);
+                                        //   motor hard-stopped where it was. DONE follows (motion settled).
 // Timed / coordinated moves. Numbered after the bus-servo block (0x41–0x4E)
 // because the 0x33–0x40 stepper block was full; dispatch is by (deviceId, cmd)
 // so the numeric gap is cosmetic only.
@@ -182,6 +197,64 @@
 #define CMD_STEPPER_SYNC_MOVE     0x50  // JS→Ar (global): [durationMs] + payload:
                                         //   N × { logicalId u8, target i32 } (5 bytes each)
                                         // Board computes matched speeds from its own positions → arrive together
+// Limit switches (0x51 is CMD_BUSSERVO_DONE — numbered after it, same
+// cosmetic-gap note as 0x4F–0x50).
+#define CMD_STEPPER_SET_SWITCH    0x52  // JS→Ar: [id, which, pin, trigger] — configure one limit switch.
+                                        //   which: LIMIT_MIN/LIMIT_MAX; pin -1 = clear; trigger 0=LOW,
+                                        //   1=HIGH. The coordinate the switch sits at is set separately by
+                                        //   SET_SWITCH_POS (default 0).
+                                        // Ar→JS (announce): same shape, replays each configured switch.
+#define CMD_STEPPER_LIMIT         0x53  // Ar→JS (unsolicited): [id, which, position] — switch tripped,
+                                        //   motion was hard-stopped on the board. CMD_STEPPER_DONE follows.
+#define CMD_STEPPER_SET_SWITCH_POS 0x54 // JS→Ar: [id, which, coord] — declare the coordinate a limit switch
+                                        //   physically sits at, INDEPENDENT of the soft limits. Homing
+                                        //   adopts this coordinate when the switch trips (default 0 = the
+                                        //   switch is the origin). Lets home sit anywhere relative to the
+                                        //   switch (e.g. switch at -500, home the origin at 0).
+                                        // Ar→JS (echo + announce): same shape — silent JS sync.
+#define CMD_STEPPER_SET_HOME      0x55  // JS→Ar: [id, value?] — re-zero the coordinate frame: the current
+                                        //   physical position BECOMES `value` (default 0 = the origin/home).
+                                        //   Soft limits and switch positions shift by the same offset so
+                                        //   they keep pointing at the same physical spots. home() returns
+                                        //   to the origin (0).
+                                        // Ar→JS (echo): the board broadcasts the shifted SET_POSITION,
+                                        //   SET_LIMITS and SET_SWITCH_POS frames — silent JS sync.
+// Uses the next-free device-scoped code (0x57; 0x56 is CMD_SHARE) — sits
+// outside the 0x3x stepper block by allocation order, not by category.
+#define CMD_STEPPER_HARD_STOP     0x57  // JS→Ar: [id] — instant halt, no decel ramp (cf. CMD_STEPPER_STOP,
+                                        //   which decelerates). Keeps the current position; DONE follows.
+
+// -------------------------------------------------------------------
+// Sketch-created hardware objects (Ar→JS)
+//
+// The sketch-facing API is the same verb the browser uses — e.g.
+// PardaloteServo.attach("pan", 9) — creation and browser visibility are
+// one act (unlike raw pins, where the hardware exists outside Pardalote
+// and share() only informs). On the wire, the board tells browsers about
+// the new object with CMD_SHARE: a device-scoped command like any other,
+// but the VALUE is reserved across ALL extension device IDs — the JS
+// core intercepts it generically (before per-instance routing) and
+// materialises a browser object of the right class. Shape, for every
+// device type:
+//
+//   Ar→JS: [logicalId] + payload: UTF-8 name → browser creates the
+//   extension instance and binds it as arduino.<name>. The normal
+//   announce/state frames (ATTACH, WRITE, …) follow and sync it.
+//
+// Board-created objects allocate logical ids from the TOP of each
+// extension's range downward; browser-created ids grow from 0 upward,
+// so the two sides can't collide until the range is full.
+// Currently implemented by: DEVICE_SERVO.
+// -------------------------------------------------------------------
+#define CMD_SHARE  0x56
+
+// Longest browser-visible name a sketch can give an object (excl. NUL).
+#define MAX_SHARE_NAME  15
+
+// Limit-switch ends (param 1 of SET_SWITCH / LIMIT). Named LIMIT_* because
+// some cores define MIN/MAX macros.
+#define LIMIT_MIN  0
+#define LIMIT_MAX  1
 
 // Stepper interface types (param 1 of CMD_STEPPER_ATTACH) — match AccelStepper
 #define STEPPER_DRIVER     1   // STEP/DIR: pin1=STEP, pin2=DIR (TMC2208/2209, A4988, EasyDriver)
@@ -214,7 +287,10 @@
 #define CMD_BUSSERVO_TORQUE      0x47  // JS→Ar: [id, enable]  0 = go limp (hand-pose / read)
 #define CMD_BUSSERVO_READ        0x48  // JS→Ar: [id]
                                        // Ar→JS: [id, position, speed, load, voltage, temp, current]
-#define CMD_BUSSERVO_SET_LIMITS  0x49  // JS→Ar: [id, minPos, maxPos]  (servo-enforced, EEPROM)
+#define CMD_BUSSERVO_SET_LIMITS  0x49  // JS→Ar: [id, minPos, maxPos, enabled] — soft position limits,
+                                       //   clamped ON THE BOARD (RAM only; deliberately does NOT touch
+                                       //   the servo's EEPROM limit registers — no wear, no unverified
+                                       //   unLockEprom path).
 #define CMD_BUSSERVO_CALIBRATE   0x4A  // JS→Ar: [id]  set current position as centre (homing offset)
 #define CMD_BUSSERVO_SET_ID      0x4B  // JS→Ar: [id, newServoId]  (renumber — one servo on the bus!)
 #define CMD_BUSSERVO_PING        0x4C  // JS→Ar: [id, servoId]  Ar→JS: [id, servoId, found]
@@ -234,5 +310,40 @@
 // Operating mode (param of CMD_BUSSERVO_SET_MODE)
 #define BUSSERVO_MODE_POSITION  0
 #define BUSSERVO_MODE_WHEEL     1
+
+// -------------------------------------------------------------------
+// Message Channel (CMD_MESSAGE 0x0B) — user-defined key/value messages
+// that aren't tied to any pin or hardware device. Symmetric: the same
+// frame shape flows JS→Ar and Ar→JS.
+//
+// Routed by CMD (like HELLO/ANNOUNCE/PONG), NOT by the target range —
+// the flags in the TARGET high byte can push it past RESERVED_START, so
+// the target range check would misroute it to the extension dispatch.
+//
+// Frame:
+//   TARGET      low byte  = value type (MSG_TYPE_*)
+//               high byte = flags (MSG_FLAG_*)
+//   NPARAMS     = 1 for INT/BOOL/FLOAT/CHAR (the value) ; 0 for TEXT/BLOB
+//   TYPE_MASK   = bit0 set iff FLOAT (so the param decodes as float32)
+//   PAYLOAD     = [keyLen:u8][key UTF-8 …][value bytes … (TEXT/BLOB only)]
+// -------------------------------------------------------------------
+#define MSG_TYPE_INT    0   // int32 param
+#define MSG_TYPE_BOOL   1   // int32 param (0/1)
+#define MSG_TYPE_FLOAT  2   // float32 param (TYPE_MASK bit0 set)
+#define MSG_TYPE_CHAR   3   // int32 param (one code unit)
+#define MSG_TYPE_TEXT   4   // UTF-8 string in payload (after the key)
+#define MSG_TYPE_BLOB   5   // raw bytes in payload (after the key)
+
+// TARGET high-byte flags.
+#define MSG_FLAG_RETAIN     0x01  // board stores the latest value, replays it on connect
+#define MSG_FLAG_BROADCAST  0x02  // board relays a browser message to the OTHER browsers too
+
+// Pack / unpack the TARGET field of a message frame.
+#define MSG_TARGET(type, flags)  ((uint16_t)(((uint16_t)(flags) << 8) | ((type) & 0xFF)))
+#define MSG_TYPE(target)         ((uint8_t)((target) & 0xFF))
+#define MSG_FLAGS(target)        ((uint8_t)(((target) >> 8) & 0xFF))
+
+// Longest message key (excl. NUL). Keys are length-prefixed with a u8.
+#define MAX_MESSAGE_KEY  24
 
 #endif

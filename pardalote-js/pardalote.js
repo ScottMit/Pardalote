@@ -20,6 +20,13 @@ const CMD_END           = 0x07;
 const CMD_PING          = 0x08;
 const CMD_PONG          = 0x09;
 const CMD_SYNC_COMPLETE = 0x0A;  // Arduino → JS: all announce frames sent; triggers 'ready'
+const CMD_MESSAGE       = 0x0B;  // Both ways: user-defined key/value message (see the message channel)
+
+// Device-scoped share command — the VALUE is reserved across all extension
+// device IDs. Ar→JS: [logicalId] + payload: name. The core intercepts it
+// generically and materialises a browser object of the class registered for
+// that deviceId (see registerExtensionType), bound as arduino.<name>.
+const CMD_SHARE = 0x56;
 
 // Pin modes
 const INPUT          = 0;
@@ -34,6 +41,26 @@ const HIGH = 1;
 
 // Pass as interval to stop a periodic read
 const END = -1;
+
+// Limit-switch ends — stepper.setLimitSwitch(LIMIT_MIN, pin) / (LIMIT_MAX, pin).
+// Named to match the firmware's LIMIT_MIN/LIMIT_MAX constants.
+const LIMIT_MIN = 0;
+const LIMIT_MAX = 1;
+
+// Message-channel value types (low byte of a CMD_MESSAGE target) and flags
+// (high byte). Must match defs.h MSG_TYPE_* / MSG_FLAG_*.
+const MSG_TYPE_INT   = 0;
+const MSG_TYPE_BOOL  = 1;
+const MSG_TYPE_FLOAT = 2;
+const MSG_TYPE_CHAR  = 3;
+const MSG_TYPE_TEXT  = 4;
+const MSG_TYPE_BLOB  = 5;
+const MSG_TYPE_NAMES = ['int', 'bool', 'float', 'char', 'text', 'blob'];
+
+const MSG_FLAG_RETAIN    = 0x01;
+const MSG_FLAG_BROADCAST = 0x02;
+
+const MAX_MESSAGE_KEY = 24;   // matches defs.h MAX_MESSAGE_KEY
 
 // Per-board pin alias tables.
 // Keys match the PARDALOTE_BOARD string sent in the HELLO handshake.
@@ -74,6 +101,50 @@ const BOARD_ALIASES = {
 };
 
 const RESERVED_START = 200;
+
+// -------------------------------------------------------------------
+// Command-name table for the frame monitor (arduino.on('frame', …)) —
+// keyed '<deviceId>:<cmd>' for extension frames, 'core:<cmd>' for core.
+// Maintained by hand alongside defs.h (mirror of internal/frame_names.h).
+// frameName() falls back to a hex label for anything not listed.
+// -------------------------------------------------------------------
+const _FRAME_NAMES = {
+    'core:0':  'HELLO',      'core:1':  'ANNOUNCE',      'core:2':  'PIN_MODE',
+    'core:3':  'DIGITAL_WRITE', 'core:4': 'DIGITAL_READ', 'core:5': 'ANALOG_WRITE',
+    'core:6':  'ANALOG_READ', 'core:7': 'END',           'core:8': 'PING',
+    'core:9':  'PONG',       'core:10': 'SYNC_COMPLETE',  'core:11': 'MESSAGE',
+    '200:10': 'NEO_INIT', '200:11': 'NEO_SET_PIXEL', '200:12': 'NEO_FILL',
+    '200:13': 'NEO_CLEAR', '200:14': 'NEO_BRIGHTNESS', '200:15': 'NEO_SHOW',
+    '201:20': 'SERVO_ATTACH', '201:21': 'SERVO_DETACH', '201:22': 'SERVO_WRITE',
+    '201:23': 'SERVO_WRITE_MICROSECONDS', '201:24': 'SERVO_READ', '201:25': 'SERVO_ATTACHED',
+    '201:26': 'SERVO_WRITE_TIMED', '201:27': 'SERVO_SYNC_TIMED', '201:28': 'SERVO_STOP',
+    '201:29': 'SERVO_DONE', '201:84': 'SERVO_SET_LIMITS',
+    '202:30': 'ULTRASONIC_ATTACH', '202:31': 'ULTRASONIC_DETACH',
+    '202:32': 'ULTRASONIC_READ', '202:33': 'ULTRASONIC_SET_TIMEOUT',
+    '203:40': 'MPU_ATTACH', '203:41': 'MPU_DETACH', '203:42': 'MPU_READ',
+    '203:43': 'MPU_SET_ACCEL_RANGE', '203:44': 'MPU_SET_GYRO_RANGE', '203:45': 'MPU_CALIBRATE',
+    '204:48': 'CAMERA_INIT', '204:49': 'CAMERA_SET_RES', '204:50': 'CAMERA_SET_QUALITY',
+    '205:51': 'STEPPER_ATTACH', '205:52': 'STEPPER_DETACH', '205:53': 'STEPPER_MOVE_TO',
+    '205:54': 'STEPPER_MOVE', '205:55': 'STEPPER_SET_MAX_SPEED', '205:56': 'STEPPER_SET_ACCEL',
+    '205:57': 'STEPPER_RUN_SPEED', '205:58': 'STEPPER_STOP', '205:59': 'STEPPER_SET_POSITION',
+    '205:60': 'STEPPER_ENABLE', '205:61': 'STEPPER_SET_LIMITS', '205:62': 'STEPPER_READ',
+    '205:63': 'STEPPER_DONE', '205:64': 'STEPPER_HOME', '205:79': 'STEPPER_MOVE_TIMED',
+    '205:80': 'STEPPER_SYNC_MOVE', '205:82': 'STEPPER_SET_SWITCH', '205:83': 'STEPPER_LIMIT',
+    '205:85': 'STEPPER_SET_HOME', '205:87': 'STEPPER_HARD_STOP',
+    '206:65': 'BUSSERVO_BUS_CONFIG', '206:66': 'BUSSERVO_ATTACH', '206:67': 'BUSSERVO_DETACH',
+    '206:68': 'BUSSERVO_WRITE', '206:69': 'BUSSERVO_WRITE_SPEED', '206:70': 'BUSSERVO_SET_MODE',
+    '206:71': 'BUSSERVO_TORQUE', '206:72': 'BUSSERVO_READ', '206:73': 'BUSSERVO_SET_LIMITS',
+    '206:74': 'BUSSERVO_CALIBRATE', '206:75': 'BUSSERVO_SET_ID', '206:76': 'BUSSERVO_PING',
+    '206:77': 'BUSSERVO_SCAN', '206:78': 'BUSSERVO_SYNC_WRITE', '206:81': 'BUSSERVO_DONE',
+};
+
+// Resolve a decoded frame's command to a readable name (hex fallback).
+function frameName(target, cmd) {
+    if (cmd === CMD_MESSAGE) return 'MESSAGE';
+    if (cmd === CMD_SHARE)   return 'SHARE';
+    const key = target < RESERVED_START ? `core:${cmd}` : `${target}:${cmd}`;
+    return _FRAME_NAMES[key] || `0x${cmd.toString(16).padStart(2, '0').toUpperCase()}`;
+}
 
 // -------------------------------------------------------------------
 // Frame encoding
@@ -169,6 +240,92 @@ function encodeBatch(frames) {
 }
 
 // -------------------------------------------------------------------
+// Encode a CMD_MESSAGE frame. The value type is inferred from the JS
+// value (boolean→bool, integer→int, fractional→float, string→text,
+// Uint8Array/ArrayBuffer→blob); override with opts.type ('char' is the
+// one that can't be inferred — a JS char is just a length-1 string).
+//
+//   Layout: TARGET = (flags << 8) | type ;  PAYLOAD = [keyLen][key][value?]
+//
+// Built by hand (not via encodeFrame) so the FLOAT type tag and the
+// param's float32 encoding always agree, even for whole-number floats.
+// -------------------------------------------------------------------
+function encodeMessage(key, value, opts = {}) {
+    const t = opts.type;
+    let type, param = null, isFloat = false, valueBytes = null;
+
+    if (t === 'char') {
+        type  = MSG_TYPE_CHAR;
+        param = (typeof value === 'string' ? value.charCodeAt(0) : (value | 0)) & 0xFF;
+    } else if (t === 'bool' || (t == null && typeof value === 'boolean')) {
+        type = MSG_TYPE_BOOL; param = value ? 1 : 0;
+    } else if (t === 'float' || (t == null && typeof value === 'number' && !Number.isInteger(value))) {
+        type = MSG_TYPE_FLOAT; param = value; isFloat = true;
+    } else if (t === 'int' || (t == null && typeof value === 'number')) {
+        type = MSG_TYPE_INT; param = value | 0;
+    } else if (t === 'text' || (t == null && typeof value === 'string')) {
+        type = MSG_TYPE_TEXT; valueBytes = new TextEncoder().encode(String(value));
+    } else if (t === 'blob' || value instanceof Uint8Array || value instanceof ArrayBuffer) {
+        type = MSG_TYPE_BLOB;
+        valueBytes = value instanceof ArrayBuffer ? new Uint8Array(value) : value;
+    } else {
+        throw new Error(`Pardalote: cannot send message "${key}" — unsupported value type`);
+    }
+
+    const flags  = (opts.retain ? MSG_FLAG_RETAIN : 0) | (opts.broadcast ? MSG_FLAG_BROADCAST : 0);
+    const target = ((flags & 0xFF) << 8) | (type & 0xFF);
+
+    let keyBytes = new TextEncoder().encode(String(key));
+    if (keyBytes.length > MAX_MESSAGE_KEY) {
+        console.warn(`Pardalote: message key "${key}" exceeds ${MAX_MESSAGE_KEY} bytes — truncated`);
+        keyBytes = keyBytes.subarray(0, MAX_MESSAGE_KEY);
+    }
+    const kl      = keyBytes.length;
+    const vlen    = valueBytes ? valueBytes.length : 0;
+    const nparams = param === null ? 0 : 1;
+
+    const buf   = new ArrayBuffer(8 + nparams * 4 + 1 + kl + vlen);
+    const v     = new DataView(buf);
+    v.setUint8(0, CMD_MESSAGE);
+    v.setUint16(1, target, false);
+    v.setUint8(3, nparams);
+    v.setUint16(4, isFloat ? 0x0001 : 0x0000, false);   // TYPE_MASK: bit0 for the float param
+    v.setUint16(6, 1 + kl + vlen, false);               // PAYLOAD_LEN
+    if (nparams) {
+        if (isFloat) v.setFloat32(8, param, false);
+        else         v.setInt32(8, param, false);
+    }
+    const bytes    = new Uint8Array(buf);
+    const payStart = 8 + nparams * 4;
+    bytes[payStart] = kl;
+    bytes.set(keyBytes, payStart + 1);
+    if (vlen) bytes.set(valueBytes, payStart + 1 + kl);
+    return buf;
+}
+
+// Decode a CMD_MESSAGE frame → { key, value, type } (type is a name string).
+function decodeMessage(frame) {
+    const type = frame.target & 0xFF;
+    const p    = frame.payload ? new Uint8Array(frame.payload) : null;
+    if (!p || p.length < 1) return null;
+    const keyLen = p[0];
+    if (1 + keyLen > p.length) return null;
+    const key = new TextDecoder().decode(p.subarray(1, 1 + keyLen));
+
+    let value;
+    switch (type) {
+        case MSG_TYPE_INT:   value = frame.params.length ? (frame.params[0] | 0) : 0; break;
+        case MSG_TYPE_BOOL:  value = !!(frame.params.length && frame.params[0]);      break;
+        case MSG_TYPE_FLOAT: value = frame.params.length ? frame.params[0] : 0;       break;
+        case MSG_TYPE_CHAR:  value = String.fromCharCode((frame.params[0] || 0) & 0xFF); break;
+        case MSG_TYPE_TEXT:  value = new TextDecoder().decode(p.subarray(1 + keyLen)); break;
+        case MSG_TYPE_BLOB:  value = p.slice(1 + keyLen);                              break;  // Uint8Array
+        default: return null;
+    }
+    return { key, value, type: MSG_TYPE_NAMES[type] || `type${type}` };
+}
+
+// -------------------------------------------------------------------
 // Extension base class
 //
 // All JS extensions inherit from this. It provides:
@@ -177,11 +334,24 @@ function encodeBatch(frames) {
 //   - _reRegister()                  — override to restore state on reconnect
 //   - handleMessage(frame)           — override to handle incoming frames
 // -------------------------------------------------------------------
+// Registry of extension classes by deviceId — each extension file calls
+// registerExtensionType(<Class>) at its bottom. The core uses this to
+// materialise browser objects for hardware the SKETCH created (the board
+// announces them with CMD_SHARE; see Arduino._onShare).
+const _extensionTypes = new Map();
+function registerExtensionType(cls) { _extensionTypes.set(cls.deviceId, cls); }
+
 class Extension {
     constructor() {
         this.arduino   = null;   // injected by arduino.add()
         this.logicalId = null;
         this._cbs      = {};
+
+        // True for instances the BOARD created (sketch-side attach, announced
+        // via CMD_SHARE). The board owns their lifecycle: the browser never
+        // replays their state on reconnect, and they're dropped when
+        // connect() switches to a different board.
+        this._sharedFromBoard = false;
     }
 
     on(event, fn)  { (this._cbs[event] ||= []).push(fn); return this; }
@@ -262,6 +432,12 @@ class Arduino {
         // Actuator groups, keyed by name (see group())
         this._groups      = {};
 
+        // Message channel: last received value per key, plus per-key watchers.
+        // (Watchers are user subscriptions and survive connect(), like on(…);
+        // the cached values are board state and are cleared in connect().)
+        this.messages  = {};
+        this._watchers = new Map();   // key → fn[]
+
         // Connection-level callbacks
         this._cbs = {};
 
@@ -285,7 +461,24 @@ class Arduino {
         this._reads.clear();
         this._writeCbs.clear();
         this._available.clear();
+        this.messages = {};                                     // cached message values are board state
         this._queue = [];                                       // drop frames queued for the old board
+
+        // Board-created (shared) objects belong to the previous board —
+        // remove them entirely. The new board announces its own via
+        // CMD_SHARE. Browser-created extensions persist and _reset().
+        for (const [name, ext] of Object.entries(this._extensions)) {
+            if (!ext._sharedFromBoard) continue;
+            ext._reset();
+            delete this._extensions[name];
+            if (this[name] === ext) delete this[name];
+            const list = this._extByDevice.get(ext.constructor.deviceId);
+            if (list) {
+                const i = list.indexOf(ext);
+                if (i >= 0) list.splice(i, 1);
+            }
+        }
+
         Object.values(this._extensions).forEach(ext => ext._reset());
 
         // Cancel any pending auto-reconnect timer
@@ -398,14 +591,34 @@ class Arduino {
     // Connection-level events: 'connect', 'disconnect', 'ready', 'announce'
     // -------------------------------------------------------------------
     on(event, fn)  { (this._cbs[event] ||= []).push(fn); return this; }
+    off(event, fn) {
+        const list = this._cbs[event];
+        if (!list) return this;
+        if (fn) { const i = list.indexOf(fn); if (i >= 0) list.splice(i, 1); }
+        else    delete this._cbs[event];
+        return this;
+    }
     _emit(event, data) { (this._cbs[event] || []).forEach(fn => fn(data)); }
 
     // -------------------------------------------------------------------
     // Sending
     // -------------------------------------------------------------------
-    send(frameOrArray) {
+    // send() has two forms:
+    //   send(key, value, opts?) — a message (string key). See the message channel.
+    //   send(frameOrArray)      — internal transport of encoded frame(s).
+    // A string first arg is never a valid frame, so the two never collide.
+    send(frameOrArray, value, opts) {
+        if (typeof frameOrArray === 'string') {
+            this._queueFrame(encodeMessage(frameOrArray, value, opts || {}));
+            return this;
+        }
         const frames = Array.isArray(frameOrArray) ? frameOrArray : [frameOrArray];
         this._queue.push(...frames);
+        if (this.connected && !this._flushing) this._flush();
+    }
+
+    _queueFrame(buf) {
+        this._queue.push(buf);
         if (this.connected && !this._flushing) this._flush();
     }
 
@@ -413,12 +626,68 @@ class Arduino {
         if (!this.connected || this._flushing || this._queue.length === 0) return;
         this._flushing = true;
         try {
-            this.socket.send(encodeBatch(this._queue.splice(0)));
+            const frames = this._queue.splice(0);
+            if (this._cbs['frame'] && this._cbs['frame'].length) {
+                for (const f of frames) {
+                    const decoded = decodeFrame(f, 0);
+                    if (decoded) this._emitFrame('out', decoded);
+                }
+            }
+            this.socket.send(encodeBatch(frames));
         } catch (e) {
             console.error('Send failed:', e);
         } finally {
             this._flushing = false;
         }
+    }
+
+    // -------------------------------------------------------------------
+    // Message channel — user-defined key/value messages.
+    //
+    //   arduino.send('temp', 22.5);                    // infer type
+    //   arduino.send('mode', 'idle', { retain: true, broadcast: true });
+    //   arduino.watch('temp', (value, key, type) => …);
+    //   arduino.on('message', ({ key, value, type }) => …);
+    //   arduino.messages['mode'];                        // last received value
+    // -------------------------------------------------------------------
+    watch(key, fn) {
+        if (!this._watchers.has(key)) this._watchers.set(key, []);
+        this._watchers.get(key).push(fn);
+        return this;
+    }
+
+    unwatch(key, fn) {
+        const list = this._watchers.get(key);
+        if (!list) return this;
+        if (fn) { const i = list.indexOf(fn); if (i >= 0) list.splice(i, 1); }
+        else    this._watchers.delete(key);
+        return this;
+    }
+
+    // Frame monitor — fires for every frame in and out (decoded). Alias for
+    // on('frame', fn); costs nothing until a listener is registered.
+    monitor(fn) { return this.on('frame', fn); }
+
+    _onMessage(frame) {
+        const msg = decodeMessage(frame);
+        if (!msg) return;
+        this.messages[msg.key] = msg.value;
+        const list = this._watchers.get(msg.key);
+        if (list) list.forEach(fn => fn(msg.value, msg.key, msg.type));
+        this._emit('message', msg);
+    }
+
+    _emitFrame(dir, frame) {
+        const listeners = this._cbs['frame'];
+        if (!listeners || !listeners.length) return;
+        listeners.forEach(fn => fn({
+            dir,
+            cmd:     frame.cmd,
+            cmdName: frameName(frame.target, frame.cmd),
+            target:  frame.target,
+            params:  frame.params,
+            payload: frame.payload ? new Uint8Array(frame.payload) : null,
+        }));
     }
 
     // -------------------------------------------------------------------
@@ -435,10 +704,18 @@ class Arduino {
     }
 
     _dispatch(frame) {
+        // Frame monitor — sees every inbound frame (guarded: no-op unless a
+        // listener is registered).
+        this._emitFrame('in', frame);
+
         // These three are checked first — they carry no pin/device context.
         if (frame.cmd === CMD_HELLO)    { this._onHello(frame);    return; }
         if (frame.cmd === CMD_ANNOUNCE) { this._onAnnounce(frame); return; }
         if (frame.cmd === CMD_PONG)     { this._onPong();          return; }
+
+        // Message channel — routed by cmd (the flags in the target high byte
+        // can push it past RESERVED_START, so the range check would misroute).
+        if (frame.cmd === CMD_MESSAGE)  { this._onMessage(frame);  return; }
 
         // Extension frames — routed by device ID.
         if (frame.target >= RESERVED_START) {
@@ -570,7 +847,12 @@ class Arduino {
         // Let extensions restore their state.
         // Each extension's _reRegister() checks whether the Arduino announced
         // its state (running) or not (reset) and acts accordingly.
-        Object.values(this._extensions).forEach(ext => ext._reRegister());
+        // Board-created (shared) objects are skipped: the SKETCH owns their
+        // lifecycle — after a board reset it recreates them itself, and the
+        // announce we just processed re-synced any that survived.
+        Object.values(this._extensions).forEach(ext => {
+            if (!ext._sharedFromBoard) ext._reRegister();
+        });
 
         this._synced = true;  // announce phase complete — write broadcasts now fire callbacks
         this._flush();
@@ -584,6 +866,10 @@ class Arduino {
     }
 
     _routeExtension(frame) {
+        // A sketch-created object — materialise it before instance routing.
+        // CMD_SHARE's value is reserved across every extension device ID.
+        if (frame.cmd === CMD_SHARE) { this._onShare(frame); return; }
+
         const exts = this._extByDevice.get(frame.target);
         if (!exts) {
             console.warn(`No extension registered for deviceId ${frame.target}`);
@@ -599,10 +885,90 @@ class Arduino {
     }
 
     // -------------------------------------------------------------------
+    // CMD_SHARE — the sketch created a hardware object (e.g.
+    // PardaloteServo.attach("pan", 9)). Materialise a browser instance of
+    // the registered class for that deviceId and bind it as arduino.<name>,
+    // exactly as arduino.add(name, new <Class>()) would have. The board
+    // follows with the normal announce/state frames (ATTACH, WRITE, …),
+    // which sync the new instance through the existing machinery — so the
+    // result is indistinguishable from a browser-created object, and it
+    // exists before 'ready' fires.
+    //
+    // Frame: [logicalId] + payload: UTF-8 name. The logical id is board-
+    // assigned (from the top of the range down; add() assigns from 0 up).
+    // -------------------------------------------------------------------
+    _onShare(frame) {
+        const deviceId = frame.target;
+        const id       = frame.params[0];
+        const name     = frame.payload ? new TextDecoder().decode(frame.payload) : '';
+        if (!name) return;
+
+        // Reconnect to a running board: the instance already exists —
+        // reuse it (state re-syncs from the announce frames that follow).
+        const exts     = this._extByDevice.get(deviceId);
+        const existing = exts ? exts.find(e => e.logicalId === id) : null;
+        if (existing) {
+            if (!existing._sharedFromBoard) {
+                // A browser-created extension already holds this id — the two
+                // allocation directions (browser 0-up, board top-down) have
+                // met, i.e. the id space for this device is exhausted.
+                console.warn(`Pardalote: the board created '${name}' with id ${id}, but a ` +
+                             `browser-created extension already uses that id — too many ` +
+                             `instances for deviceId ${deviceId}`);
+                return;
+            }
+            if (this._extensions[name] !== existing) {
+                this._extensions[name] = existing;
+                this[name] = existing;
+            }
+            return;
+        }
+
+        const cls = _extensionTypes.get(deviceId);
+        if (!cls) {
+            console.warn(`Pardalote: the board created '${name}' (deviceId ${deviceId}), ` +
+                         `but no extension file for that device is loaded — include it ` +
+                         `(e.g. <script src="servo.js">) to use arduino.${name}`);
+            return;
+        }
+
+        // Refuse names that would clobber the Arduino API itself
+        // (e.g. a servo named "connect"). Extension re-binds are allowed —
+        // last one wins, with a warning, same as add() overwriting.
+        if ((name in this) && !this._extensions[name]) {
+            console.warn(`Pardalote: the board created '${name}', but arduino.${name} ` +
+                         `is part of the core API — rename it in the sketch`);
+            return;
+        }
+        if (this._extensions[name]) {
+            console.warn(`Pardalote: the board created '${name}' — replacing the existing arduino.${name}`);
+        }
+
+        const ext = new cls();
+        ext.arduino          = this;
+        ext.logicalId        = id;
+        ext._sharedFromBoard = true;
+        this._extensions[name] = ext;
+        this[name] = ext;
+        if (!this._extByDevice.has(deviceId)) this._extByDevice.set(deviceId, []);
+        this._extByDevice.get(deviceId).push(ext);
+
+        this._emit('share', { name, extension: ext });
+    }
+
+    // -------------------------------------------------------------------
     // Extension registration
     // -------------------------------------------------------------------
     add(name, extension) {
         extension.arduino  = this;
+        // Skip ids already held by board-created objects (they allocate from
+        // the top of the range down; add() from 0 up — this guard only
+        // matters once the two meet).
+        const taken = new Set();
+        this._extByDevice.forEach(list => list.forEach(e => {
+            if (e._sharedFromBoard) taken.add(e.logicalId);
+        }));
+        while (taken.has(this._nextId)) this._nextId++;
         extension.logicalId = this._nextId++;
         this._extensions[name] = extension;
         this[name] = extension;  // shorthand: arduino.servo
@@ -619,8 +985,9 @@ class Arduino {
     // Create a named group of actuators for coordinated control. `members`
     // maps channel names to extension instances:
     //   arduino.group('arm', { shoulder: arduino.s1, elbow: arduino.s2 });
-    // group.set({...}) writes every member in ONE batched WebSocket message
-    // so they move together. Returns the Group (also at arduino[name]).
+    // group.write({...}) writes every member in ONE batched WebSocket message
+    // so they move together; group.writeTimed({...}, ms) makes them arrive
+    // together. Returns the Group (also at arduino[name]).
     // -------------------------------------------------------------------
     group(name, members) {
         const g = new Group(this, name, members);
@@ -799,7 +1166,10 @@ class Arduino {
 // =====================================================================
 // Group — a named collection of actuators for coordinated control.
 //
-// Layer 1: set() writes every member's value in a SINGLE batched WebSocket
+// Naming mirrors the single actuators: write() = immediate, writeTimed() =
+// arrive together in ~duration ms, whenDone() = awaitable completion.
+//
+// Layer 1: write() sends every member's value in a SINGLE batched WebSocket
 // message (frames coalesced via arduino.send([...])). On the board they are
 // parsed and applied back-to-back within one receive, so the members move
 // together. read() polls/reports every member.
@@ -815,8 +1185,13 @@ class Group {
         this.members = {};
 
         // Last-commanded value per member — the assumed "current" position for
-        // moveTo() distance/speed matching. Seeded from memberValue on first use.
+        // writeTimed() distance/speed matching. Seeded from memberValue on first use.
         this._commanded = {};
+
+        // Members involved in the most recent write()/writeTimed(), and that
+        // move's duration — consumed by whenDone().
+        this._lastMoved    = [];
+        this._lastDuration = 0;
 
         if (!members || typeof members !== 'object' || Array.isArray(members)) {
             throw new TypeError(
@@ -833,15 +1208,19 @@ class Group {
         }
     }
 
-    // set({ name: value, ... }) — write all named members in ONE message.
+    // write({ name: value, ... }) — write all named members in ONE message.
+    // The group counterpart of servo.write() / stepper.moveTo(): immediate,
+    // each member at its own configured/default speed.
     //
     // Members that expose a hardware sync key (_memberSyncKey) and share it
     // with another member in the same call are coalesced into a single sync
     // frame (e.g. bus servos of one series → one Feetech SyncWrite packet, so
     // they latch together). Everything else uses _memberWrite. All resulting
     // frames still go out in one batched WebSocket message.
-    set(values) {
+    write(values) {
         if (!values || typeof values !== 'object') return this;
+        this._lastMoved    = [];
+        this._lastDuration = 0;
 
         const buckets = new Map();   // syncKey → [[member, value], ...]
         const loose   = [];          // [[member, value], ...]
@@ -849,6 +1228,7 @@ class Group {
             const m = this.members[key];
             if (!m) { console.warn(`Group '${this.name}': no member '${key}'`); continue; }
             if (typeof v === 'number') this._commanded[key] = Math.round(v);
+            this._lastMoved.push(m);
             const sk = (typeof m._memberSyncKey === 'function') ? m._memberSyncKey() : null;
             if (sk) {
                 if (!buckets.has(sk)) buckets.set(sk, []);
@@ -872,20 +1252,25 @@ class Group {
         return this;
     }
 
-    // moveTo({ name: target, ... }, { duration })
+    // writeTimed({ name: target, ... }, duration)
     // Coordinated move where all members ARRIVE together after ~`duration` ms.
+    // The group counterpart of servo.writeTimed() / stepper.moveToTimed() —
+    // same shape: targets first, duration in ms second.
     // Each actuator type does this its own way, via _memberMoveEncode():
     //   - bus servos: one SyncWrite with matched per-servo speeds;
     //   - PWM servos: one on-board interpolated SYNC_TIMED (shared duration);
+    //   - steppers:  one SYNC_MOVE with board-computed matched speeds;
     // all coalesced into a single batched message.
     //
     // "Current" position is the last commanded value (seeded from memberValue).
     // For an accurate first move from an unknown pose, poll read() first or move
-    // from a known start (center()/set()).
+    // from a known start (center()/write()).
     //
-    // Members without a timed-move hook (e.g. steppers, for now) move immediately.
-    moveTo(targets, { duration = 1000 } = {}) {
+    // Members without a timed-move hook move immediately.
+    writeTimed(targets, duration = 1000) {
         if (!targets || typeof targets !== 'object') return this;
+        this._lastMoved    = [];
+        this._lastDuration = Math.max(0, duration);
 
         const buckets = new Map();   // syncKey → [[m, target, current], ...]
         const loose   = [];          // [[m, target], ...]
@@ -895,6 +1280,7 @@ class Group {
             const target  = Math.round(raw);
             const current = (this._commanded[key] !== undefined) ? this._commanded[key] : (m.memberValue || 0);
             this._commanded[key] = target;
+            this._lastMoved.push(m);
             const sk = (typeof m._memberSyncKey === 'function') ? m._memberSyncKey() : null;
             if (sk && typeof m._memberMoveEncode === 'function') {
                 if (!buckets.has(sk)) buckets.set(sk, []);
@@ -914,24 +1300,27 @@ class Group {
         return this;
     }
 
-    // Like moveTo(), but returns a Promise that resolves after `duration` ms —
-    // time-based (not feedback-confirmed), for sequencing coordinated moves.
-    // Like moveTo(), but the Promise resolves when every moved member reports
-    // it actually ARRIVED (each actuator's 'done'), not on a timer. A safety
-    // timeout resolves anyway if a member never reports (dead servo / lost link).
-    moveToAsync(targets, opts = {}) {
-        if (!targets || typeof targets !== 'object') return Promise.resolve();
-        // Arm the completion promises BEFORE the move, so the 'done' isn't missed.
-        const waits = Object.keys(targets)
-            .map(key => this.members[key])
-            .filter(m => m && typeof m._whenDone === 'function')
-            .map(m => m._whenDone());
-        this.moveTo(targets, opts);
-        if (!waits.length) return Promise.resolve();
-        const timeout = opts.timeout ?? Math.max((opts.duration ?? 1000) * 2, 10000);
+    // whenDone({ timeout }?) — Promise for the group's most recent
+    // write()/writeTimed(). Resolves `true` when EVERY moved member reports it
+    // actually ARRIVED (each actuator's 'done' — feedback-confirmed, not a
+    // timer), or `false` on the safety timeout (dead servo / lost link).
+    // Members arm their completion promise inside the move itself, so calling
+    // whenDone() late is safe — already-finished members resolve immediately.
+    //
+    //   await arm.writeTimed({ shoulder: 45, elbow: 120 }, 1500).whenDone();
+    //
+    // timeout: ms before giving up (default max(duration × 2, 10000); 0 = wait
+    // forever). Also accepts a bare number: whenDone(5000).
+    whenDone(opts = {}) {
+        const t = (typeof opts === 'number') ? opts : opts.timeout;
+        const timeout = t ?? Math.max(this._lastDuration * 2, 10000);
+        const waits = this._lastMoved.map(m => m._movePromise).filter(Boolean);
+        if (!waits.length) return Promise.resolve(true);
+        const done = Promise.all(waits).then(() => true);
+        if (!timeout) return done;
         return Promise.race([
-            Promise.all(waits),
-            new Promise(res => setTimeout(res, timeout)),
+            done,
+            new Promise(res => setTimeout(() => res(false), timeout)),
         ]);
     }
 
@@ -952,8 +1341,30 @@ class Group {
         return out;
     }
 
-    // Stop polling every member.
-    stop() { Object.values(this.members).forEach(m => m.read(END)); return this; }
+    // Halt every member's motion — the group counterpart of member.stop().
+    // (To stop polling, use read(END), same as a single actuator.)
+    stop() {
+        Object.values(this.members).forEach(m => { if (typeof m.stop === 'function') m.stop(); });
+        return this;
+    }
+
+    // home(duration?) — send every member home. Servos and bus servos move
+    // to their stored home (timed if `duration` is given); steppers run
+    // their homing routine (a routine has no duration — the number is
+    // ignored by stepper.home()). NOT arrive-together: each member homes
+    // at its own pace. whenDone() resolves when every member settles —
+    // homing can be slow, so raise the timeout:
+    //   await rig.home(1500).whenDone({ timeout: 30000 });
+    home(duration) {
+        this._lastMoved    = [];
+        this._lastDuration = Math.max(0, duration || 0);
+        for (const m of Object.values(this.members)) {
+            if (typeof m.home !== 'function') continue;
+            m.home(duration);
+            this._lastMoved.push(m);
+        }
+        return this;
+    }
 
     getState() {
         const out = {};

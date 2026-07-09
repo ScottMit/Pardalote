@@ -59,7 +59,7 @@
     <main class="ref-main">
       <h1>Groups</h1>
       <p class="lede">Drive several actuators as one — a single message moves every member, and coordinated moves arrive together.</p>
-<p>A <strong>group</strong> is a named collection of actuators you drive together. <code>set()</code> writes every member in a <strong>single WebSocket message</strong>, and <code>moveTo()</code> coordinates a move so all members <strong>arrive together</strong>. Groups currently take <strong>Servo</strong>, <strong>BusServo</strong>, and <strong>Stepper</strong> members (pins and NeoPixels are planned).</p>
+<p>A <strong>group</strong> is a named collection of actuators you drive together, with methods that mirror the single actuators. <code>write()</code> writes every member in a <strong>single WebSocket message</strong>, <code>writeTimed()</code> coordinates a move so all members <strong>arrive together</strong>, and <code>whenDone()</code> awaits real completion. Groups currently take <strong>Servo</strong>, <strong>BusServo</strong>, and <strong>Stepper</strong> members (pins and NeoPixels are planned).</p>
 <h2 id="arduinogroup">arduino.group()</h2>
 <p>Creates a group from named members. Call inside <code>on('ready')</code>, after attaching each member.</p>
 <div class="sig">arduino.<span class="fn">group</span>(name, members)</div>
@@ -100,9 +100,9 @@
     <span class="p">});</span>
 <span class="p">});</span>
 </code></pre></div>
-<h2 id="set">set()</h2>
-<p>Writes all named members at once. Every member's frame is packed into <strong>one</strong> WebSocket message, so the board applies them back-to-back within a single receive — they move together. Bus servos of the same series are additionally coalesced into a single hardware <strong>SyncWrite</strong> packet (a truly simultaneous latch).</p>
-<div class="sig">arm.<span class="fn">set</span>(targets)</div>
+<h2 id="write">write()</h2>
+<p>Writes all named members at once — the group counterpart of <code>servo.write()</code> / <code>stepper.moveTo()</code>. Every member's frame is packed into <strong>one</strong> WebSocket message, so the board applies them back-to-back within a single receive — they move together. Bus servos of the same series are additionally coalesced into a single hardware <strong>SyncWrite</strong> packet (a truly simultaneous latch).</p>
+<div class="sig">arm.<span class="fn">write</span>(targets)</div>
 <table>
 <thead>
 <tr>
@@ -119,10 +119,10 @@
 </tr>
 </tbody>
 </table>
-<div class="code-ex"><div class="bar">Example — write everyone at once</div><pre><code><span class="nx">arm</span><span class="p">.</span><span class="nx">set</span><span class="p">({</span> <span class="nx">shoulder</span><span class="o">:</span> <span class="mf">2048</span><span class="p">,</span> <span class="nx">elbow</span><span class="o">:</span> <span class="mf">3000</span><span class="p">,</span> <span class="nx">base</span><span class="o">:</span> <span class="mf">1600</span><span class="p">,</span> <span class="nx">wrist</span><span class="o">:</span> <span class="mf">90</span> <span class="p">});</span>
+<div class="code-ex"><div class="bar">Example — write everyone at once</div><pre><code><span class="nx">arm</span><span class="p">.</span><span class="nx">write</span><span class="p">({</span> <span class="nx">shoulder</span><span class="o">:</span> <span class="mf">2048</span><span class="p">,</span> <span class="nx">elbow</span><span class="o">:</span> <span class="mf">3000</span><span class="p">,</span> <span class="nx">base</span><span class="o">:</span> <span class="mf">1600</span><span class="p">,</span> <span class="nx">wrist</span><span class="o">:</span> <span class="mf">90</span> <span class="p">});</span>
 </code></pre></div>
-<h2 id="moveto">moveTo()</h2>
-<p>Moves every member to its target so they all finish after about <code>duration</code> ms. Each actuator type uses its own native mechanism:</p>
+<h2 id="writetimed">writeTimed()</h2>
+<p>Moves every member to its target so they all finish after about <code>duration</code> ms — the same shape as a single actuator's <code>writeTimed(value, duration)</code>. Each actuator type uses its own native mechanism:</p>
 <table>
 <thead>
 <tr>
@@ -146,7 +146,7 @@
 </tbody>
 </table>
 <p>All of it still goes out in <strong>one</strong> batched message — including mixed groups.</p>
-<div class="sig">arm.<span class="fn">moveTo</span>(targets, { duration })</div>
+<div class="sig">arm.<span class="fn">writeTimed</span>(targets, duration)</div>
 <table>
 <thead>
 <tr>
@@ -164,18 +164,34 @@
 <tr>
 <td><code>duration</code></td>
 <td>number</td>
-<td>Approximate arrival time in ms.</td>
+<td>Approximate arrival time in ms (default 1000).</td>
 </tr>
 </tbody>
 </table>
-<div class="code-ex"><div class="bar">Example — arrive together</div><pre><code><span class="nx">arm</span><span class="p">.</span><span class="nx">moveTo</span><span class="p">({</span> <span class="nx">shoulder</span><span class="o">:</span> <span class="mf">3000</span><span class="p">,</span> <span class="nx">elbow</span><span class="o">:</span> <span class="mf">1200</span><span class="p">,</span> <span class="nx">base</span><span class="o">:</span> <span class="mf">0</span><span class="p">,</span> <span class="nx">wrist</span><span class="o">:</span> <span class="mf">120</span> <span class="p">},</span> <span class="p">{</span> <span class="nx">duration</span><span class="o">:</span> <span class="mf">1500</span> <span class="p">});</span>
+<div class="code-ex"><div class="bar">Example — arrive together</div><pre><code><span class="nx">arm</span><span class="p">.</span><span class="nx">writeTimed</span><span class="p">({</span> <span class="nx">shoulder</span><span class="o">:</span> <span class="mf">3000</span><span class="p">,</span> <span class="nx">elbow</span><span class="o">:</span> <span class="mf">1200</span><span class="p">,</span> <span class="nx">base</span><span class="o">:</span> <span class="mf">0</span><span class="p">,</span> <span class="nx">wrist</span><span class="o">:</span> <span class="mf">120</span> <span class="p">},</span> <span class="mf">1500</span><span class="p">);</span>
 </code></pre></div>
-<p><code>duration</code> is approximate — it's the <em>arrival synchronisation</em> that's exact. For an accurate first move from an unknown pose, either poll <code>read()</code> first or start from a known pose (<code>center()</code> / <code>set()</code>), since <code>moveTo</code> measures distance from each member's last commanded position.</p>
-<h2 id="movetoasync">moveToAsync()</h2>
-<p>Promise variant — resolves after <code>duration</code> (time-based, for sequencing).</p>
-<div class="sig">await arm.<span class="fn">moveToAsync</span>(targets, { duration })</div>
-<div class="code-ex"><div class="bar">Example — sequence poses</div><pre><code><span class="k">await</span> <span class="nx">arm</span><span class="p">.</span><span class="nx">moveToAsync</span><span class="p">({</span> <span class="nx">shoulder</span><span class="o">:</span> <span class="mf">2048</span><span class="p">,</span> <span class="nx">elbow</span><span class="o">:</span> <span class="mf">2048</span> <span class="p">},</span> <span class="p">{</span> <span class="nx">duration</span><span class="o">:</span> <span class="mf">1000</span> <span class="p">});</span>
-<span class="k">await</span> <span class="nx">arm</span><span class="p">.</span><span class="nx">moveToAsync</span><span class="p">({</span> <span class="nx">shoulder</span><span class="o">:</span> <span class="mf">1000</span><span class="p">,</span> <span class="nx">elbow</span><span class="o">:</span> <span class="mf">3000</span> <span class="p">},</span> <span class="p">{</span> <span class="nx">duration</span><span class="o">:</span> <span class="mf">800</span> <span class="p">});</span>
+<p><code>duration</code> is approximate — it's the <em>arrival synchronisation</em> that's exact. For an accurate first move from an unknown pose, either poll <code>read()</code> first or start from a known pose (<code>center()</code> / <code>write()</code>), since <code>writeTimed</code> measures distance from each member's last commanded position.</p>
+<h2 id="whendone">whenDone()</h2>
+<p>Promise for the group's most recent <code>write()</code>/<code>writeTimed()</code>. Resolves <code>true</code> when <strong>every</strong> moved member reports it actually <strong>arrived</strong> (each actuator's real <code>done</code> — feedback-confirmed, not a timer), or <code>false</code> on the safety timeout if a member never reports (dead servo, lost link). The same method exists on every single actuator.</p>
+<div class="sig">await arm.<span class="fn">whenDone</span>([{ timeout }])</div>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>timeout</code></td>
+<td>number</td>
+<td>Safety timeout in ms (default <code>max(duration × 2, 10000)</code>; <code>0</code> waits forever). A bare number also works: <code>whenDone(5000)</code>.</td>
+</tr>
+</tbody>
+</table>
+<div class="code-ex"><div class="bar">Example — sequence poses</div><pre><code><span class="k">await</span> <span class="nx">arm</span><span class="p">.</span><span class="nx">writeTimed</span><span class="p">({</span> <span class="nx">shoulder</span><span class="o">:</span> <span class="mf">2048</span><span class="p">,</span> <span class="nx">elbow</span><span class="o">:</span> <span class="mf">2048</span> <span class="p">},</span> <span class="mf">1000</span><span class="p">).</span><span class="nx">whenDone</span><span class="p">();</span>
+<span class="k">await</span> <span class="nx">arm</span><span class="p">.</span><span class="nx">writeTimed</span><span class="p">({</span> <span class="nx">shoulder</span><span class="o">:</span> <span class="mf">1000</span><span class="p">,</span> <span class="nx">elbow</span><span class="o">:</span> <span class="mf">3000</span> <span class="p">},</span>  <span class="mf">800</span><span class="p">).</span><span class="nx">whenDone</span><span class="p">();</span>
 </code></pre></div>
 <h2 id="read--values">read() / values()</h2>
 <p>Polling and snapshots across every member.</p>
@@ -206,9 +222,14 @@
 </tr>
 </tbody>
 </table>
+<h2 id="home">home()</h2>
+<p>Sends every member to its stored home — servos and bus servos as (optionally timed) moves, steppers via their limit-switch homing routine (a routine has no duration). Not arrive-together: each member homes at its own pace. <code>whenDone()</code> resolves when every member settles; homing can be slow, so raise the timeout.</p>
+<div class="sig">arm.<span class="fn">home</span>([duration])</div>
+<div class="code-ex"><div class="bar">Example — everything to home pose</div><pre><code><span class="k">await</span> <span class="nx">arm</span><span class="p">.</span><span class="nx">home</span><span class="p">(</span><span class="mf">1500</span><span class="p">).</span><span class="nx">whenDone</span><span class="p">({</span> <span class="nx">timeout</span><span class="o">:</span> <span class="mf">30000</span> <span class="p">});</span>
+</code></pre></div>
 <h2 id="stop--getstate">stop() / getState()</h2>
 <div class="sig">arm.<span class="fn">stop</span>() · arm.<span class="fn">getState</span>()</div>
-<p><code>stop()</code> stops polling every member. <code>getState()</code> returns <code>{ name, members: { shoulder: {...}, base: {...}, ... } }</code>.</p>
+<p><code>stop()</code> halts every member's motion — the group counterpart of <code>member.stop()</code> (to stop polling, use <code>read(END)</code>). <code>getState()</code> returns <code>{ name, members: { shoulder: {...}, base: {...}, ... } }</code>.</p>
 <p>See also: <a href="servo.html">Servo</a> · <a href="stepper.html">Stepper</a> · <a href="bus-servo.html">Bus servo</a> · <a href="../examples/coordinated-motion-example.html">Coordinated motion example</a></p>
 
     </main>

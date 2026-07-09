@@ -1,0 +1,99 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+    background: #10121a;
+    color: #bbb;
+    font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+}
+
+main {
+    padding: 40px 20px;
+    width: 100%;
+    max-width: 560px;
+}
+
+h1 {
+    color: #fff;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+    margin-bottom: 12px;
+}
+
+h2 {
+    color: #eee;
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.hint  { font-size: 13px; line-height: 1.7; color: #666; margin-bottom: 28px; }
+.tiny  { font-size: 12px; color: #777; }
+.tiny code { color: #9ad; }
+
+.panel {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    padding: 18px 20px;
+    margin-bottom: 18px;
+}
+
+form { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 10px; }
+input[type="text"], input:not([type]) {
+    flex: 1;
+    min-width: 120px;
+    padding: 10px 12px;
+    background: #181b24;
+    color: #eee;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 14px;
+}
+label { font-size: 13px; color: #aaa; display: flex; align-items: center; gap: 5px; }
+
+button {
+    font-size: 14px;
+    font-weight: 600;
+    padding: 10px 20px;
+    background: rgba(120, 170, 255, 0.15);
+    color: #cfe0ff;
+    border: 1px solid rgba(120, 170, 255, 0.3);
+    border-radius: 6px;
+    cursor: pointer;
+    font-family: inherit;
+}
+button:hover { background: rgba(120, 170, 255, 0.25); color: #fff; }
+
+ul { list-style: none; max-height: 240px; overflow-y: auto; }
+#log li, #frames li {
+    padding: 6px 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    font-size: 13px;
+    line-height: 1.5;
+}
+#log b { color: #fff; }
+.mono li { font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+#frames li.in  { color: #8fd39a; }
+#frames li.out { color: #e0b877; }
+
+.badge {
+    font-size: 10px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: #789;
+    background: rgba(120, 150, 200, 0.12);
+    border-radius: 4px;
+    padding: 2px 6px;
+}
+
+#status { font-size: 11px; letter-spacing: 2px; text-align: center; margin-top: 20px; }
+#status.connected    { color: #4caf50; }
+#status.disconnected { color: #e53935; }

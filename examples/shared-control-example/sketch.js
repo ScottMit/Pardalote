@@ -8,7 +8,7 @@
 // that the other side picks up via arduino.onChange().
 // ==============================================================
 
-const ARDUINO_IP = '192.168.1.42';   // Change this to your Arduino's IP
+const ARDUINO_IP = '10.1.1.128';   // Change this to your Arduino's IP
 const LIGHT      = 13;
 
 const arduino = new Arduino();

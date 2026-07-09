@@ -9,8 +9,10 @@
 // self-registers, no further setup is required.
 //
 // Supports up to MAX_SERVOS simultaneously attached servos.
-// Each servo is addressed by a logical instance ID assigned by
-// the JS side when calling arduino.add('name', new Servo(arduino)).
+// Each servo is addressed by a logical instance ID, assigned by
+// the JS side when calling arduino.add('name', new Servo()) (ids
+// grow from 0 up) or by the board when the sketch calls
+// PardaloteServo.attach("name", pin) (ids grow from the top down).
 // ==============================================================
 
 #ifndef PARDALOTE_SERVO_H
@@ -35,6 +37,19 @@ private:
     inline static int16_t _maxPulse[MAX_SERVOS] = { 2400,2400,2400,2400,2400,2400,2400,2400 };
     inline static bool    _attached[MAX_SERVOS] = {};
 
+    // Sketch-created servos (PardaloteServo.attach("name", pin)). The name
+    // is what the browser binds (arduino.<name>); announce() replays a
+    // CMD_SHARE frame for these so every connecting browser materialises
+    // the object. Browser-created servos have _sketchOwned = false.
+    inline static bool    _sketchOwned[MAX_SERVOS] = {};
+    inline static char    _names[MAX_SERVOS][MAX_SHARE_NAME + 1] = {};
+
+    // Soft angle limits (safety) — every commanded angle is clamped on the
+    // board, so neither the browser nor a sketch can push past them.
+    inline static bool    _limitSet[MAX_SERVOS] = {};
+    inline static int16_t _limitMin[MAX_SERVOS] = {};
+    inline static int16_t _limitMax[MAX_SERVOS] = {};
+
     // On-board timed-move interpolation state (see loop()).
     inline static bool     _moving[MAX_SERVOS]     = {};
     inline static int16_t  _fromAngle[MAX_SERVOS]  = {};
@@ -50,9 +65,16 @@ private:
 
     static bool validId(int id) { return id >= 0 && id < MAX_SERVOS; }
 
+    // Clamp an angle to 0–180 and, if set, the soft limits.
+    static int clampAngle(int id, int angle) {
+        angle = constrain(angle, 0, 180);
+        if (_limitSet[id]) angle = constrain(angle, _limitMin[id], _limitMax[id]);
+        return angle;
+    }
+
     // Begin (or immediately apply, if dur == 0) a timed move to `angle`.
     static void startTimed(int id, int angle, uint32_t dur, uint32_t now) {
-        angle = constrain(angle, 0, 180);
+        angle = clampAngle(id, angle);
         if (dur == 0) {
             _servos[id].write(angle);
             _angles[id] = (int16_t)angle;
@@ -95,7 +117,74 @@ public:
         FrameBuilder fb;
         fb.begin(CMD_SERVO_WRITE, DEVICE_SERVO);
         fb.addInt(id);
-        fb.addInt(constrain(angle, 0, 180));
+        fb.addInt(clampAngle(id, angle));   // echo what was actually applied
+        Pardalote.broadcastFrame(fb);
+    }
+
+    // -------------------------------------------------------------------
+    // Sketch-created servos — PardaloteServo.attach("name", pin).
+    //
+    // Creation and browser visibility are one act: the servo is attached
+    // through the same handler a browser attach uses, and a CMD_SHARE
+    // frame (+ attach/angle state) is broadcast so connected browsers
+    // materialise arduino.<name> immediately. announce() replays the same
+    // sequence for browsers that connect later.
+    //
+    // Logical ids are allocated from the TOP of the range downward —
+    // browser-assigned ids grow from 0 upward, so the two sides can't
+    // collide until all MAX_SERVOS slots are in use.
+    //
+    // Idempotent on the name: calling attach again with a name that is
+    // already sketch-owned reuses its id (and the shared handler skips
+    // the detach/attach cycle when the params are unchanged too).
+    // -------------------------------------------------------------------
+    static int sketchAttach(const char* name, int pin, int minP, int maxP) {
+        if (name == nullptr || name[0] == '\0') return -1;
+
+        int id = -1;
+        for (int i = 0; i < MAX_SERVOS; i++) {
+            if (_sketchOwned[i] && strcmp(_names[i], name) == 0) { id = i; break; }
+        }
+        if (id < 0) {
+            for (int i = MAX_SERVOS - 1; i >= 0; i--) {
+                if (!_attached[i] && !_sketchOwned[i]) { id = i; break; }
+            }
+        }
+        if (id < 0) {
+            Serial.print(F("Servo: no free slot for '"));
+            Serial.print(name); Serial.println('\'');
+            return -1;
+        }
+
+        strncpy(_names[id], name, MAX_SHARE_NAME);
+        _names[id][MAX_SHARE_NAME] = '\0';
+        _sketchOwned[id] = true;
+
+        // Attach through the same code path a browser attach takes.
+        Pardalote.command(DEVICE_SERVO, CMD_SERVO_ATTACH, id, pin, minP, maxP);
+
+        // Tell any connected browsers now (no-op when none are connected;
+        // announce() covers future connects): name → attach → angle, the
+        // same order announce() replays.
+        broadcastShare(id);
+        FrameBuilder fa;
+        fa.begin(CMD_SERVO_ATTACH, DEVICE_SERVO);
+        fa.addInt(id); fa.addInt(_pins[id]);
+        fa.addInt(_minPulse[id]); fa.addInt(_maxPulse[id]);
+        Pardalote.broadcastFrame(fa);
+        FrameBuilder fw;
+        fw.begin(CMD_SERVO_WRITE, DEVICE_SERVO);
+        fw.addInt(id); fw.addInt(_angles[id]);
+        Pardalote.broadcastFrame(fw);
+
+        return id;
+    }
+
+    static void broadcastShare(int id) {
+        FrameBuilder fb;
+        fb.begin(CMD_SHARE, DEVICE_SERVO);
+        fb.addInt(id);
+        fb.addString(_names[id]);
         Pardalote.broadcastFrame(fb);
     }
 
@@ -165,6 +254,7 @@ public:
                     _servos[id].detach();
                     _attached[id] = false;
                     _pins[id]     = -1;
+                    _limitSet[id] = false;
                     Serial.print(F("Servo ")); Serial.print(id);
                     Serial.println(F(" detached"));
                 }
@@ -173,7 +263,7 @@ public:
             case CMD_SERVO_WRITE: {
                 if (!_attached[id] || nparams < 2) return;
                 _moving[id] = false;   // an immediate write cancels a timed move
-                int angle = constrain((int)paramInt(params, 1), 0, 180);
+                int angle = clampAngle(id, (int)paramInt(params, 1));
                 _servos[id].write(angle);
                 _angles[id] = (int16_t)angle;
                 break;
@@ -183,6 +273,13 @@ public:
                 if (!_attached[id] || nparams < 2) return;
                 _moving[id] = false;   // an immediate write cancels a timed move
                 int us = constrain((int)paramInt(params, 1), 544, 2400);
+                if (_limitSet[id]) {
+                    // Translate the angle limits into the pulse domain.
+                    long span  = _maxPulse[id] - _minPulse[id];
+                    long usMin = _minPulse[id] + (long)_limitMin[id] * span / 180;
+                    long usMax = _minPulse[id] + (long)_limitMax[id] * span / 180;
+                    us = constrain(us, (int)usMin, (int)usMax);
+                }
                 _servos[id].writeMicroseconds(us);
                 break;
             }
@@ -198,6 +295,16 @@ public:
             case CMD_SERVO_STOP:
                 if (_attached[id]) _moving[id] = false;   // hold current angle
                 break;
+
+            case CMD_SERVO_SET_LIMITS: {
+                if (!_attached[id] || nparams < 4) return;
+                int lo = constrain((int)paramInt(params, 1), 0, 180);
+                int hi = constrain((int)paramInt(params, 2), 0, 180);
+                _limitMin[id] = (int16_t)min(lo, hi);
+                _limitMax[id] = (int16_t)max(lo, hi);
+                _limitSet[id] = paramInt(params, 3) != 0;
+                break;
+            }
 
             case CMD_SERVO_READ: {
                 // Delegate to the underlying Servo library's read().
@@ -256,6 +363,17 @@ public:
         for (int i = 0; i < MAX_SERVOS; i++) {
             if (!_attached[i]) continue;
 
+            // Sketch-created servo: send its SHARE frame FIRST so the
+            // browser materialises arduino.<name> before the attach/state
+            // frames below arrive to sync it.
+            if (_sketchOwned[i]) {
+                FrameBuilder fs;
+                fs.begin(CMD_SHARE, DEVICE_SERVO);
+                fs.addInt(i);
+                fs.addString(_names[i]);
+                Pardalote.sendFrame(clientNum, fs);
+            }
+
             FrameBuilder fa;
             fa.begin(CMD_SERVO_ATTACH, DEVICE_SERVO);
             fa.addInt(i);
@@ -269,6 +387,14 @@ public:
             fw.addInt(i);
             fw.addInt(_angles[i]);
             Pardalote.sendFrame(clientNum, fw);
+
+            // Replay soft limits if set.
+            if (_limitSet[i]) {
+                FrameBuilder fl;
+                fl.begin(CMD_SERVO_SET_LIMITS, DEVICE_SERVO);
+                fl.addInt(i); fl.addInt(_limitMin[i]); fl.addInt(_limitMax[i]); fl.addInt(1);
+                Pardalote.sendFrame(clientNum, fl);
+            }
         }
     }
 
@@ -300,14 +426,36 @@ public:
 };
 
 // -------------------------------------------------------------------
-// PardaloteServo — sketch-facing "bus" of PWM servos. Read the actuators
-// the browser configured, addressed by logical id:
+// PardaloteServo — sketch-facing "bus" of PWM servos.
+//
+// Create a servo from the sketch (the browser sees it automatically as
+// arduino.<name> — a full Servo instance, identical to one the browser
+// created itself):
+//   int pan = PardaloteServo.attach("pan", 9);   // name, pin → logical id
+//   PardaloteServo.write(pan, 90);
+//
+// Or read/drive actuators the browser configured, addressed by logical id:
 //   int ids[8];
 //   int n = PardaloteServo.scan(ids, 8);      // attached servos → their ids
 //   int angle = PardaloteServo.read(ids[0]);  // current angle (0–180), −1 if none
+//
+// Either way, every write goes through the same board-side handler the
+// browser uses — soft limits are enforced and the browser's cached angle
+// stays in sync (auto-echo). A servo that should stay private to the
+// sketch shouldn't be here at all: use the plain Servo/ESP32Servo
+// library directly, the way unshared pins just use pinMode().
 // -------------------------------------------------------------------
 class PardaloteServoAccess {
 public:
+    // attach(name, pin, minPulse?, maxPulse?) — create a servo and make it
+    // visible to browsers as arduino.<name>. Returns the logical id for
+    // write()/read()/etc., or -1 if no slot is free. Names longer than
+    // MAX_SHARE_NAME (15) chars are truncated. Idempotent per name.
+    int attach(const char* name, int pin,
+               int minPulse = 544, int maxPulse = 2400) const {
+        return ServoExt::sketchAttach(name, pin, minPulse, maxPulse);
+    }
+
     int  scan(int* out, int max) const { return ServoExt::listAttached(out, max); }
     int  read(int id)            const { return ServoExt::readAngle(id); }
     bool isMoving(int id)        const { return ServoExt::isMovingId(id); }

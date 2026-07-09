@@ -423,3 +423,7 @@ class NeoPixel extends Extension {
         }
     }
 }
+
+// Let the core materialise a NeoPixel when the SKETCH creates one
+// (PardaloteNeoPixel.attach("ring", 6, 24) → CMD_SHARE → arduino.ring).
+registerExtensionType(NeoPixel);

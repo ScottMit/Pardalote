@@ -181,9 +181,34 @@ arduino.onChange('A0', value => updateDisplay(value));   // no pinMode, no analo
 
 Not every pin needs to be shared. In the light-switch example, the two button pins (`BTN_ON`, `BTN_OFF`) are only used by the Arduino — the browser has its own buttons for that, so there's no reason to tell it about the physical ones. Share only the pins you want the browser to see.
 
+### Creating actuators from the sketch
+
+The sketch can create a servo itself — and every browser receives it automatically:
+
+```cpp
+#include <Pardalote.h>
+#include <PardaloteServo.h>
+
+int pan;
+
+void setup() {
+    Pardalote.begin();
+    pan = PardaloteServo.attach("pan", 9);   // name, pin → logical id
+    PardaloteServo.write(pan, 90);
+}
+```
+
+That one `attach` call attaches the servo on the board **and** announces it, so `arduino.pan` simply exists in the browser — a full `Servo` instance, identical to one created with `arduino.add('pan', new Servo())`: `write()`, `writeTimed()`, `whenDone()`, limits, groups, all of it. It's there before `'ready'` fires, and browsers that connect later get it too. Optional pulse-range args match the browser attach: `attach("pan", 9, 500, 2500)`.
+
+Unlike raw pins, there's no separate `share()` step — a Pardalote servo has no life outside Pardalote, so creating it *is* sharing it. A servo that should stay private to the sketch shouldn't go through Pardalote at all: use the plain `Servo`/`ESP32Servo` library directly, the way unshared pins just use `pinMode()`.
+
+Names are the sketch's choice (≤ 15 chars; names that would collide with the browser core API, like `"connect"`, are refused with a console warning), calling `attach` again with the same name reuses the same servo, and the browser can watch objects appear with `arduino.on('share', ({ name, extension }) => …)`. See **[examples/shared-servo-example/](examples/shared-servo-example/)**.
+
+*(Currently servos; steppers and bus servos will follow the same pattern.)*
+
 ### Reading and writing actuators from the sketch
 
-`share`/`send` cover raw pins. For the **extension actuators** (servos, steppers, bus servos) that the browser configured, each type gives the sketch a small **bus object** — `scan()` lists what's there, `read(id)` reads one, and `write(id, …)` drives one. The browser and the sketch share the same actuator (last writer wins), the way they already share raw pins — so the sketch can react to a position *and* command motion.
+`share`/`send` cover raw pins. For the **extension actuators** (servos, steppers, bus servos) — whether the browser configured them or the sketch created them — each type gives the sketch a small **bus object** — `scan()` lists what's there, `read(id)` reads one, and `write(id, …)` drives one. The browser and the sketch share the same actuator (last writer wins), the way they already share raw pins — so the sketch can react to a position *and* command motion.
 
 ```cpp
 #include <Pardalote.h>
@@ -200,7 +225,7 @@ The three objects, and how each is addressed:
 
 | Object | `scan()` returns | `read(id)` returns | `id` is |
 |---|---|---|---|
-| `PardaloteServo` | attached servo ids | angle (0–180) | logical id (the `arduino.add()` order) |
+| `PardaloteServo` | attached servo ids | angle (0–180) | logical id (`arduino.add()` order, or returned by sketch `attach`) |
 | `PardaloteStepper` | attached stepper ids | position (steps) | logical id |
 | `PardaloteBusServo` | responding servo ids | position (counts) | **hardware** servo ID |
 
@@ -248,6 +273,110 @@ Notes:
 - A **bus servo read/scan/write is a blocking bus transaction** — fine in `setup()` or a throttled `loop()`, not a tight high-rate loop competing with the browser's own polling.
 - **Sketch writes update the browser's record automatically.** A sketch write echoes the commanded value to the browser exactly as if the browser had issued it — a PWM servo sets the browser's `angle`, a stepper or bus servo sets its `target`. So the browser's record stays coherent with no `read()` needed. (The live `position` feedback is separate — that still comes from polling, as always.)
 - See **File → Examples → Pardalote → arduino-read**.
+
+---
+
+## Messaging
+
+`share`/`send` and the extensions all move *hardware* state. **Messaging** is the
+channel for everything else: named key/value messages that aren't tied to any pin
+or device. Send a value under a string key; the other side watches keys and reads
+values. It's symmetric — the same call works browser→Arduino and Arduino→browser —
+and it carries every basic type: `int`, `bool`, `float`, `char`, text, and binary
+blobs.
+
+```javascript
+arduino.send('temp', 22.5);      // float   (type inferred from the value)
+arduino.send('count', 42);       // int
+arduino.send('enabled', true);   // bool
+arduino.send('mode', 'idle');    // text
+arduino.send('frame', pixels);   // Uint8Array → blob
+```
+
+The key is a **string**, so `send` never collides with the pin `digitalWrite`/
+`analogWrite` calls — pins stay on their own verbs.
+
+### Watching and reading
+
+```javascript
+// Watch one key — the callback fires whenever a message with that key arrives
+arduino.watch('temp', (value, key, type) => console.log(key, '=', value));
+
+// Or catch every message
+arduino.on('message', ({ key, value, type }) => { /* type: 'int','float',… */ });
+
+// Last received value for any key
+let mode = arduino.messages['mode'];
+```
+
+### Retain and broadcast
+
+Two optional flags shape delivery:
+
+```javascript
+arduino.send('mode', 'idle', { retain: true });     // stored on the board,
+                                                     // replayed to browsers that connect later
+arduino.send('cursor', 120,   { broadcast: true });  // relayed to the OTHER browsers too
+arduino.send('mode', 'run',   { retain: true, broadcast: true });
+```
+
+- **`retain`** — the board keeps the latest value for that key and re-sends it to
+  any client that connects, in the same sync step as pin and extension state. New
+  clients immediately see the current value; without it, a message is a one-off
+  event.
+- **`broadcast`** — the board relays a browser's message to the *other* connected
+  browsers (it's the hub), so multiple browsers can coordinate. Without it, a
+  browser message goes only to the Arduino sketch.
+
+### From the Arduino sketch
+
+The same verb, mirrored — the string key distinguishes it from the pin
+`send(pin, value)`:
+
+```cpp
+Pardalote.send("temp", 22.5);                  // float
+Pardalote.send("mode", "idle", MSG_FLAG_RETAIN);
+Pardalote.watch("led", onLed);                 // handle one key
+Pardalote.onMessage(onAny);                    // handle every key
+```
+
+Callbacks receive a `Message`; `m.type` says which accessor is valid:
+
+```cpp
+void onLed(const Message& m) {
+    digitalWrite(LED_BUILTIN, m.asBool() ? HIGH : LOW);
+}
+
+void onAny(const Message& m) {
+    // m.asInt() / m.asBool() / m.asFloat() / m.asChar() / m.text / m.blob (m.length)
+}
+```
+
+A sketch `send` reaches every browser (retain still applies). Note the board's
+outgoing frame buffer caps a single Arduino→browser text/blob at ~240 bytes;
+browser→Arduino is not limited that way.
+
+### Inspecting all traffic
+
+The frame monitor is a superset of message-watching — it sees **every** frame in
+and out, decoded and named, so it doubles as a live protocol inspector:
+
+```javascript
+arduino.on('frame', ({ dir, cmdName, target, params, payload }) => {
+    console.log(dir, cmdName, params);   // 'in' 'SERVO_WRITE' [0, 90], 'out' 'MESSAGE', …
+});
+arduino.monitor(fn);   // shorthand
+arduino.off('frame', fn);
+```
+
+```cpp
+Pardalote.onFrame([](const FrameEvent& ev) {   // sketch-side, e.g. log to Serial
+    Serial.println(ev.name);                    // "MESSAGE", "DIGITAL_WRITE", …
+});
+```
+
+It costs nothing until a handler is registered. See **File → Examples → Pardalote
+→ messaging** and `examples/messaging-example/`.
 
 ---
 
@@ -491,9 +620,30 @@ arduino.pan.writeTimed(120, 1500);   // move to 120° over 1.5 s
 arduino.pan.stop();                  // cancel a timed move, hold current angle
 
 arduino.pan.on('done', ({ angle }) => { /* arrived */ });
+
+// or await it — whenDone() resolves on the same 'done'
+await arduino.pan.writeTimed(120, 1500).whenDone();
 ```
 
 An immediate `write()` cancels an in-progress timed move.
+
+#### Soft limits
+
+Same shape as the stepper's: every commanded angle — browser write, sketch write, timed move, or group move — is clamped **on the Arduino** before it reaches the servo, so an LLM or a buggy sketch can't push a joint past the range.
+
+```javascript
+arduino.pan.setLimits(20, 160);      // clamp commanded angles to [min, max]
+arduino.pan.clearLimits();
+```
+
+#### Home
+
+`setHome(angle)` declares the home angle (no-arg: "the current angle is home"); `home()` snaps there, `home(duration)` glides there. Default home is 90° (centre).
+
+```javascript
+arduino.pan.setHome(45);
+await arduino.pan.home(1000).whenDone();   // ease home over 1 s
+```
 
 #### Events
 
@@ -570,9 +720,9 @@ Accel-limited moves to an absolute or relative target. Chainable.
 arduino.x.moveTo(2000);               // absolute target (steps)
 arduino.x.move(-400);                 // relative to current position
 
-// Promise variants resolve when the move completes — handy for sequencing
-await arduino.x.moveToAsync(2000);
-await arduino.x.moveToAsync(0);
+// whenDone() resolves when the move completes — handy for sequencing
+await arduino.x.moveTo(2000).whenDone();
+await arduino.x.moveTo(0).whenDone();
 ```
 
 #### Timed moves
@@ -636,7 +786,48 @@ arduino.x.setLimits(-6400, 6400);     // clamp targets to [min, max]
 arduino.x.clearLimits();
 ```
 
-#### Working in degrees or revolutions
+#### Limit switches
+
+Hardware end-stops — none, one, or two, one call per switch. The trip happens **on the board** (no WiFi round-trip): moving into a pressed switch stops the motor *instantly* (no deceleration ramp), while moving away is always allowed so you can back off. Default wiring is active-LOW with the internal pull-up (switch between pin and GND); pass `HIGH` for active-HIGH switches.
+
+```javascript
+arduino.x.setLimitSwitch(LIMIT_MIN, 9);          // switch at the min end, active LOW
+arduino.x.setLimitSwitch(LIMIT_MAX, 10, HIGH);   // switch at the max end, active HIGH
+arduino.x.clearLimitSwitch(LIMIT_MIN);
+
+arduino.x.on('limit', ({ which, position }) => {
+    console.log(`hit the ${which} switch at ${position}`);
+});
+```
+
+When a switch trips, the board broadcasts a `limit` event and the normal `done` follows (the motion is over), so `whenDone()` still settles — check `limitHit` (`'min'`, `'max'`, or `null`, cleared by the next move) to know the move stopped short of its target. After a trip the step counter is suspect (an instant stop above the acceleration limit can lose steps) — that's what homing is for.
+
+#### Homing
+
+**Home is the origin (0).** A limit switch sits at its own coordinate, which you declare with `setSwitchPosition(which, coord)` — independent of the soft limits, and defaulting to `0` (switch at the origin, the historical behaviour). With a switch configured, `home()` runs a **board-side routine**: seek the switch (MIN if configured, else MAX) at a homing speed, set the counter to the switch's declared coordinate when it trips, back off until it releases, then travel to home (`0`). The counter is re-established from the switch, so it works even when the counter is wrong — run it at startup or after a limit trip. Without a switch, `home()` is a plain accel move to `0` (counter trusted as-is).
+
+This is the CNC/work-coordinate model: the switch is a fixed physical reference, and home is a user origin sitting at a known offset from it — so a MIN switch 500 steps below home sits at `-500`, and homing travels up to `0`.
+
+```javascript
+arduino.x.setLimitSwitch(LIMIT_MIN, 9);      // min-end switch on pin 9, active LOW
+arduino.x.setSwitchPosition(LIMIT_MIN, -500);// it sits 500 steps below home (the origin)
+
+await arduino.x.home().whenDone({ timeout: 30000 });   // seeks it, then travels to 0
+arduino.x.home({ speed: 400, timeout: 10000 });        // seek speed + safety cap
+```
+
+`setHome()` **re-zeros the frame**: the current physical position becomes `0` (home), and the soft limits and switch positions shift by the same offset so they keep pointing at the same physical spots. It's how you set a manual origin without a switch — jog to the spot, then `setHome()`. Pass a value (`setHome(50)`) to make the current spot that coordinate instead of `0`.
+
+```javascript
+// counter reads 500; declare "this is home":
+arduino.x.setHome();   // position → 0, and e.g. limitMax → limitMax − 500
+```
+
+The seek and back-off legs are **capped** (default 30 s, override with `{ timeout }`): if the switch never trips (unplugged, wrong pin) or never releases, the board hard-stops where it is, fires a `homeFail` event, and then `done` — so `whenDone()` still settles and nothing spins forever. Any explicit move (`moveTo`, `runSpeed`, `stop`, …) cancels an in-progress homing routine. `done` fires when the travel leg arrives.
+
+```javascript
+arduino.x.on('homeFail', ({ position }) => console.warn('homing gave up at', position));
+```
 
 Convenience helpers convert to raw steps on the JS side. Set steps-per-revolution to match your microstepping first (a 1.8° motor at 16 microsteps = 200 × 16 = 3200):
 
@@ -722,11 +913,12 @@ arduino.shoulder.center();                           // resolution / 2
 arduino.shoulder.writeDegrees(90);
 let deg = arduino.shoulder.positionDegrees;
 
-// Default speed/acc used by group set() and moveTo()
+// Default speed/acc used by group write() and writeTimed()
 arduino.shoulder.setMoveDefaults(2400, 50);
 
 // Reach a position in about a set time (speed picked from the move distance)
 arduino.shoulder.writeTimed(3000, 1500);   // ~1.5 s
+await arduino.shoulder.whenDone();          // resolves when the servo settles
 
 arduino.shoulder.stop();                    // halt — hold the last-read position
 ```
@@ -735,8 +927,8 @@ arduino.shoulder.stop();                    // halt — hold the last-read posit
 
 ```javascript
 arduino.wheel.setMode('wheel');
-arduino.wheel.writeSpeed(2000);     // sign sets direction
-arduino.wheel.writeSpeed(0);        // stop
+arduino.wheel.runSpeed(2000);       // sign sets direction (same verb as stepper)
+arduino.wheel.runSpeed(0);          // stop
 arduino.wheel.setMode('position');  // back to positioning
 ```
 
@@ -772,13 +964,23 @@ arduino.shoulder.on('read', ({ position, velocity, load, voltage, temperature })
 
 #### Limits and calibration
 
-Limits are written into the servo's own registers, so the **servo enforces them** even without the browser in the loop.
+Soft limits, enforced **on the Arduino** — every commanded position (browser write, sketch write, or group SyncWrite) is clamped to the range before it reaches the servo. Software-only by design: the servo's own EEPROM limit registers are never written (no wear, and limits update instantly and freely). Same shape as `setLimits` on the stepper and PWM servo.
 
 ```javascript
-arduino.shoulder.setLimits(1024, 3072);   // servo-enforced position range
+arduino.shoulder.setLimits(1024, 3072);   // clamp commanded positions to [min, max]
+arduino.shoulder.clearLimits();
 
 // Move the joint to its zero pose by hand (torque off), then:
 arduino.shoulder.calibrate();             // declare current position as centre
+```
+
+#### Home
+
+`setHome(position)` declares the home position (no-arg: "the current position is home" — pairs naturally with torque-off hand-posing: pose the joint, `read()`, `setHome()`); `home()` moves there, `home(duration)` moves there smoothly. Default home is the centre of range (2048 ST / 512 SC).
+
+```javascript
+arduino.shoulder.setHome(1500);
+await arduino.shoulder.home(1000).whenDone();
 ```
 
 #### Setup utilities
@@ -803,7 +1005,7 @@ arduino.shoulder.getState();
 
 ## Groups
 
-A **group** is a named collection of actuators you drive together. `group.set()` writes every member in a **single WebSocket message**, and `group.moveTo()` coordinates a move so all members **arrive together**. Groups currently take **Servo**, **BusServo**, and **Stepper** members (pins and NeoPixels are planned).
+A **group** is a named collection of actuators you drive together, and its methods mirror the single actuators: `group.write()` writes every member in a **single WebSocket message**, `group.writeTimed()` coordinates a move so all members **arrive together**, and `whenDone()` awaits real completion. Groups currently take **Servo**, **BusServo**, and **Stepper** members (pins and NeoPixels are planned).
 
 ```javascript
 arduino.add('shoulder', new BusServo());
@@ -824,12 +1026,12 @@ arduino.on('ready', () => {
 
 The group is also available as `arduino.arm`.
 
-#### Coordinated set
+#### Coordinated write
 
-`set()` writes all named members at once. Every member's frame is packed into **one** WebSocket message, so the board applies them back-to-back within a single receive — they move together. Bus servos of the same series are additionally coalesced into a single hardware **SyncWrite** packet (a truly simultaneous latch).
+`write()` writes all named members at once. Every member's frame is packed into **one** WebSocket message, so the board applies them back-to-back within a single receive — they move together. Bus servos of the same series are additionally coalesced into a single hardware **SyncWrite** packet (a truly simultaneous latch).
 
 ```javascript
-arm.set({ shoulder: 2048, elbow: 3000, base: 1600, wrist: 90 });
+arm.write({ shoulder: 2048, elbow: 3000, base: 1600, wrist: 90 });
 ```
 
 #### Reading
@@ -843,7 +1045,7 @@ arm.values();        // same snapshot, no polling change
 
 #### Arrive-together moves
 
-`moveTo(targets, { duration })` moves every member to its target so they all finish after about `duration` ms. Each actuator type does this with its own native mechanism:
+`writeTimed(targets, duration)` moves every member to its target so they all finish after about `duration` ms — the same shape as a single actuator's `writeTimed(value, duration)`. Each actuator type does this with its own native mechanism:
 
 | Member | How it arrives together |
 |---|---|
@@ -854,23 +1056,31 @@ arm.values();        // same snapshot, no polling change
 All of it still goes out in **one** batched message — including mixed groups.
 
 ```javascript
-arm.moveTo({ shoulder: 3000, elbow: 1200, base: 0, wrist: 120 }, { duration: 1500 });
+arm.writeTimed({ shoulder: 3000, elbow: 1200, base: 0, wrist: 120 }, 1500);
 
-// Promise variant resolves when every moved member actually ARRIVES —
+// whenDone() resolves when every moved member actually ARRIVES —
 // each actuator's real 'done', not a timer. Ideal for sequencing.
-await arm.moveToAsync({ shoulder: 2048, elbow: 2048 }, { duration: 1000 });
-await arm.moveToAsync({ shoulder: 1000, elbow: 3000 }, { duration: 800 });
+await arm.writeTimed({ shoulder: 2048, elbow: 2048 }, 1000).whenDone();
+await arm.writeTimed({ shoulder: 1000, elbow: 3000 },  800).whenDone();
 ```
 
-`moveToAsync` waits for real completion: the board reports `done` when a stepper's step count reaches target, a servo's timed interpolation finishes, and a bus servo's `Moving` flag settles (the board polls it). So the next line runs only once the whole group has settled. A safety `timeout` (default `max(duration × 2, 10000)` ms) resolves it anyway if a member never reports — pass `{ timeout }` to override.
+`whenDone()` waits for real completion: the board reports `done` when a stepper's step count reaches target, a servo's timed interpolation finishes, and a bus servo's `Moving` flag settles (the board polls it). So the next line runs only once the whole group has settled. It resolves `true` on arrival, or `false` on the safety timeout (default `max(duration × 2, 10000)` ms) if a member never reports — pass `whenDone({ timeout })` to override, `0` to wait forever. The same method exists on every single actuator: `await servo.writeTimed(90, 1000).whenDone()`.
 
-`duration` itself is approximate — it's the *arrival synchronisation* that's exact. For an accurate first move from an unknown pose, either poll `read()` first or start from a known pose (`center()` / `set()`), since `moveTo` measures distance from each member's last commanded position.
+`duration` itself is approximate — it's the *arrival synchronisation* that's exact. For an accurate first move from an unknown pose, either poll `read()` first or start from a known pose (`center()` / `write()`), since `writeTimed` measures distance from each member's last commanded position.
 
 #### State snapshot
 
 ```javascript
 arm.getState();   // { name, members: { shoulder: {...}, base: {...}, ... } }
-arm.stop();       // stop polling every member
+arm.stop();       // halt every member's motion (use read(END) to stop polling)
+```
+
+#### Going home
+
+`home(duration?)` sends every member to its stored home — servos and bus servos as (optionally timed) moves, steppers via their limit-switch homing routine (which has no duration). Not arrive-together: each member homes at its own pace. `whenDone()` resolves when every member settles; homing can be slow, so raise the timeout.
+
+```javascript
+await arm.home(1500).whenDone({ timeout: 30000 });
 ```
 
 ---
@@ -1334,6 +1544,7 @@ Pardalote/
     ├── stepper-example/            # Stepper position + continuous control
     ├── busservo-example/           # Feetech ST bus servos — pose & read back
     ├── coordinated-motion-example/ # Two motors sweeping in unison via a group
+    ├── messaging-example/          # Key/value messages + frame monitor
     ├── neopixel-example/           # NeoPixel colour picker
     ├── ultrasonic-sensor-example/  # Distance visualisation
     ├── mpu-example/                # IMU 3D orientation visualiser
@@ -1359,7 +1570,9 @@ Bytes 8+N×4 PAYLOAD      — optional string or binary data
 
 Multiple frames are batched into a single WebSocket message before sending. The `FrameBuilder` class (Arduino) and `encodeFrame()` / `encodeBatch()` functions (JS) handle this automatically.
 
-On connect, the Arduino sends its full current state — pin modes, output values, extension configuration, NeoPixel colours — before signalling `ready`. Any browser connecting to a running system immediately sees live state.
+On connect, the Arduino sends its full current state — pin modes, output values, extension configuration, NeoPixel colours, and retained messages — before signalling `ready`. Any browser connecting to a running system immediately sees live state.
+
+[Messages](#messaging) reuse this frame unchanged (command `CMD_MESSAGE`): the value type and flags ride in the `TARGET` field, the scalar value in a param, and the key (plus any text/blob value) in the payload as `[keyLen][key][value]`.
 
 ---
 

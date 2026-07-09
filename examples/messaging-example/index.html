@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Messaging — Pardalote</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <main>
+        <h1>Messaging</h1>
+        <p class="hint">
+            Send named key/value messages between this browser and the Arduino
+            sketch — no pin or hardware device involved. Watch keys, or inspect
+            all traffic with the frame monitor.
+        </p>
+
+        <section class="panel">
+            <h2>Send a message</h2>
+            <form id="send-form">
+                <input id="key" placeholder="key (e.g. brightness)" value="key" maxlength="24">
+                <input id="value" placeholder="value (e.g. 128, true, hello)" value="value">
+                <label><input type="checkbox" id="retain"> retain</label>
+                <label><input type="checkbox" id="broadcast" checked> broadcast</label>
+                <button type="submit">Send</button>
+            </form>
+            <p class="tiny">
+                Values are auto-typed: <code>42</code> → int, <code>2.5</code> → float,
+                <code>true</code>/<code>false</code> → bool, anything else → text.
+            </p>
+        </section>
+
+        <section class="panel">
+            <h2>Received messages <span id="uptime" class="badge">uptime: —</span></h2>
+            <ul id="log"></ul>
+        </section>
+
+        <section class="panel">
+            <h2>
+                Frame monitor
+                <label class="tiny"><input type="checkbox" id="monitor"> show all traffic</label>
+            </h2>
+            <ul id="frames" class="mono"></ul>
+        </section>
+
+        <div id="status" class="disconnected">● DISCONNECTED</div>
+    </main>
+
+    <script src="../../pardalote-js/pardalote.js"></script>
+    <script src="sketch.js"></script>
+</body>
+</html>

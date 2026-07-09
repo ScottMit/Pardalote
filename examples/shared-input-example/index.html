@@ -25,9 +25,11 @@
         <div id="status" class="disconnected">● DISCONNECTED</div>
     </main>
 
-    <!-- Pin alias scripts — let the JS use 'A0' as the pin name -->
+    <!-- Load ONE pin-alias file for your board. They declare the same
+         global consts (SDA, A0, …), so loading two throws a redeclaration
+         SyntaxError. (String pin names like 'A0' also resolve from the
+         board's HELLO handshake, so a pin file isn't strictly required.) -->
     <script src="../../pardalote-js/pardalote.js"></script>
-    <script src="../../pardalote-js/pardalote-pins-uno-r4-wifi.js"></script>
     <script src="../../pardalote-js/pardalote-pins-esp32-wrover-dev.js"></script>
     <script src="sketch.js"></script>
 </body>

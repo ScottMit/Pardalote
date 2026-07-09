@@ -52,5 +52,5 @@ Controls:
 - **Soft limits** (`setLimits(-6400, 6400)`) are enforced on the Arduino — the
   board clamps every target, so the browser (or an LLM driving it) can't send
   the motor past the set range.
-- **`done`** fires when a position move completes. `await arduino.x.moveToAsync(n)`
+- **`done`** fires when a position move completes. `await arduino.x.moveTo(n).whenDone()`
   resolves at the same moment — handy for sequencing moves.

@@ -12,7 +12,7 @@
 
 #include <Pardalote.h>
 
-const int POT = A0;
+const int POT = A0; // ESP IO 36
 
 void setup() {
     Pardalote.begin();

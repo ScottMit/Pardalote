@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shared servo — Pardalote examples</title>
+<meta name="description" content="The Arduino sketch creates the servo and the browser receives it automatically — then both sides drive the same horn.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../css/site.css">
+</head>
+<body data-nav="examples">
+
+<nav class="site-nav speckled">
+  <a class="logo" href="../index.html">
+    <img src="../assets/logo.svg" width="30" height="30" alt="">
+    Pardalote
+  </a>
+  <div class="links">
+    <a data-nav="home" href="../index.html">Home</a>
+    <a data-nav="download" href="../download.html">Download</a>
+    <a data-nav="examples" href="index.html">Examples</a>
+    <a data-nav="reference" href="../reference/index.html">Reference</a>
+    <a href="https://github.com/ScottMit/Pardalote">GitHub</a>
+  </div>
+</nav>
+
+<div class="page-head speckled">
+  <div class="wrap">
+    <div class="crumb"><a href="index.html">Examples</a> / Shared servo</div>
+    <h1>Shared servo</h1>
+    <p>The Arduino sketch creates the servo and the browser receives it automatically — then both sides drive the same horn.</p>
+  </div>
+</div>
+
+<div class="wrap md-layout">
+  <div class="md-body">
+    <div class="tags" style="margin-bottom:.5rem;"><span class="tag lvl-mid">Intermediate</span><span class="tag">Multi-user</span><span class="tag">Motion</span><span class="tag">p5.js</span></div>
+    <div class="ex-meta-row">
+      <a class="btn btn-dark" href="https://github.com/ScottMit/Pardalote/tree/main/examples/shared-servo-example">View the code on GitHub</a>
+    </div>
+    <div class="screenshot-slot">Screenshot / video of this example — coming soon</div>
+<h1 id="shared-servo--created-by-the-sketch">Shared Servo — created by the sketch</h1>
+<p>A servo the <strong>Arduino sketch creates</strong> and the browser receives automatically. One line on the board:</p>
+<pre><code><span class="n">pan</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">PardaloteServo</span><span class="p">.</span><span class="n">attach</span><span class="p">(</span><span class="s">&quot;pan&quot;</span><span class="p">,</span><span class="w"> </span><span class="mi">9</span><span class="p">);</span><span class="w"></span>
+</code></pre>
+<p>and <code>arduino.pan</code> exists in every connected browser — a full <code>Servo</code> instance, identical to one created with <code>arduino.add('pan', new Servo())</code>. No JS-side setup.</p>
+
+  </div>
+    <div class="ex-code-cols">
+      <div class="code-ex scroll">
+        <div class="bar">shared-servo.ino — the Arduino side</div>
+        <pre><code><span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;Pardalote.h&gt;</span><span class="cp"></span>
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;PardaloteServo.h&gt;</span><span class="cp"></span>
+
+<span class="k">const</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">SERVO_PIN</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">9</span><span class="p">;</span><span class="w"></span>
+
+<span class="kt">int</span><span class="w"> </span><span class="n">pan</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">-1</span><span class="p">;</span><span class="w">                     </span><span class="c1">// logical id, assigned by attach()</span>
+<span class="kt">unsigned</span><span class="w"> </span><span class="kt">long</span><span class="w"> </span><span class="n">lastMove</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"></span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">setup</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">begin</span><span class="p">();</span><span class="w"></span>
+
+<span class="w">    </span><span class="c1">// Create the servo and make it visible to every browser as</span>
+<span class="w">    </span><span class="c1">// arduino.pan. Returns the logical id for the calls below.</span>
+<span class="w">    </span><span class="n">pan</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">PardaloteServo</span><span class="p">.</span><span class="n">attach</span><span class="p">(</span><span class="s">&quot;pan&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">SERVO_PIN</span><span class="p">);</span><span class="w"></span>
+
+<span class="w">    </span><span class="n">PardaloteServo</span><span class="p">.</span><span class="n">write</span><span class="p">(</span><span class="n">pan</span><span class="p">,</span><span class="w"> </span><span class="mi">90</span><span class="p">);</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">loop</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">run</span><span class="p">();</span><span class="w"></span>
+
+<span class="w">    </span><span class="c1">// Every 4 s, glide to a new pose (1 s, board-interpolated).</span>
+<span class="w">    </span><span class="c1">// The browser&#39;s arduino.pan.angle follows automatically.</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">millis</span><span class="p">()</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">lastMove</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mi">4000</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="n">lastMove</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">millis</span><span class="p">();</span><span class="w"></span>
+<span class="w">        </span><span class="kt">int</span><span class="w"> </span><span class="n">target</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">random</span><span class="p">(</span><span class="mi">20</span><span class="p">,</span><span class="w"> </span><span class="mi">161</span><span class="p">);</span><span class="w"></span>
+<span class="w">        </span><span class="n">PardaloteServo</span><span class="p">.</span><span class="n">writeTimed</span><span class="p">(</span><span class="n">pan</span><span class="p">,</span><span class="w"> </span><span class="n">target</span><span class="p">,</span><span class="w"> </span><span class="mi">1000</span><span class="p">);</span><span class="w"></span>
+<span class="w">    </span><span class="p">}</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</code></pre>
+      </div>
+      <div class="code-ex scroll">
+        <div class="bar">sketch.js — the browser side</div>
+        <pre><code><span class="kd">let</span> <span class="nx">ArduinoIP</span> <span class="o">=</span> <span class="s1">&#39;10.1.1.186&#39;</span><span class="p">;</span>   <span class="c1">// Change this to your Arduino&#39;s IP</span>
+
+<span class="kd">let</span> <span class="nx">arduino</span><span class="p">;</span>
+<span class="kd">let</span> <span class="nx">haveServo</span> <span class="o">=</span> <span class="kc">false</span><span class="p">;</span>
+
+<span class="kd">function</span> <span class="nx">setup</span><span class="p">()</span> <span class="p">{</span>
+    <span class="nx">createCanvas</span><span class="p">(</span><span class="mf">600</span><span class="p">,</span> <span class="mf">400</span><span class="p">);</span>
+
+    <span class="nx">arduino</span> <span class="o">=</span> <span class="ow">new</span> <span class="nx">Arduino</span><span class="p">();</span>
+    <span class="nx">arduino</span><span class="p">.</span><span class="nx">connect</span><span class="p">(</span><span class="nx">ArduinoIP</span><span class="p">);</span>
+
+    <span class="c1">// No arduino.add() here — the sketch calls</span>
+    <span class="c1">// PardaloteServo.attach(&quot;pan&quot;, 9), so arduino.pan simply exists</span>
+    <span class="c1">// by the time &#39;ready&#39; fires.</span>
+    <span class="nx">arduino</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;ready&#39;</span><span class="p">,</span> <span class="p">()</span> <span class="p">=&gt;</span> <span class="p">{</span>
+        <span class="nx">haveServo</span> <span class="o">=</span> <span class="o">!!</span><span class="nx">arduino</span><span class="p">.</span><span class="nx">pan</span><span class="p">;</span>
+        <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="nx">haveServo</span><span class="p">)</span> <span class="nx">console</span><span class="p">.</span><span class="nx">warn</span><span class="p">(</span><span class="s1">&#39;The sketch did not create a &quot;pan&quot; servo&#39;</span><span class="p">);</span>
+    <span class="p">});</span>
+
+    <span class="c1">// Optional: fires the moment the board announces a sketch-created</span>
+    <span class="c1">// object (before &#39;ready&#39;).</span>
+    <span class="nx">arduino</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;share&#39;</span><span class="p">,</span> <span class="p">({</span> <span class="nx">name</span> <span class="p">})</span> <span class="p">=&gt;</span> <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="sb">`Board created arduino.</span><span class="si">${</span><span class="nx">name</span><span class="si">}</span><span class="sb">`</span><span class="p">));</span>
+<span class="p">}</span>
+
+<span class="kd">function</span> <span class="nx">draw</span><span class="p">()</span> <span class="p">{</span>
+    <span class="nx">background</span><span class="p">(</span><span class="mf">50</span><span class="p">);</span>
+
+    <span class="nx">fill</span><span class="p">(</span><span class="mf">255</span><span class="p">);</span>
+    <span class="nx">textSize</span><span class="p">(</span><span class="mf">16</span><span class="p">);</span>
+    <span class="nx">text</span><span class="p">(</span><span class="s1">&#39;Shared Servo — created by the Arduino sketch&#39;</span><span class="p">,</span> <span class="mf">20</span><span class="p">,</span> <span class="mf">30</span><span class="p">);</span>
+    <span class="nx">text</span><span class="p">(</span><span class="s1">&#39;The sketch nods the servo every 4 s.&#39;</span><span class="p">,</span> <span class="mf">20</span><span class="p">,</span> <span class="mf">60</span><span class="p">);</span>
+    <span class="nx">text</span><span class="p">(</span><span class="s1">&#39;Press the mouse to take over; release to hand it back.&#39;</span><span class="p">,</span> <span class="mf">20</span><span class="p">,</span> <span class="mf">90</span><span class="p">);</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="nx">haveServo</span><span class="p">)</span> <span class="p">{</span>
+        <span class="nx">text</span><span class="p">(</span><span class="s1">&#39;Waiting for the board…&#39;</span><span class="p">,</span> <span class="mf">20</span><span class="p">,</span> <span class="mf">140</span><span class="p">);</span>
+        <span class="k">return</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="c1">// Take over while the mouse is pressed — a plain Servo write, the</span>
+    <span class="c1">// same call you&#39;d make on a browser-created servo.</span>
+    <span class="k">if</span> <span class="p">(</span><span class="nx">mouseIsPressed</span><span class="p">)</span> <span class="p">{</span>
+        <span class="nx">arduino</span><span class="p">.</span><span class="nx">pan</span><span class="p">.</span><span class="nx">write</span><span class="p">(</span><span class="nx">map</span><span class="p">(</span><span class="nx">constrain</span><span class="p">(</span><span class="nx">mouseX</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="nx">width</span><span class="p">),</span> <span class="mf">0</span><span class="p">,</span> <span class="nx">width</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="mf">180</span><span class="p">));</span>
+    <span class="p">}</span>
+
+    <span class="c1">// arduino.pan.angle tracks BOTH sides&#39; writes: browser writes set it,</span>
+    <span class="c1">// and sketch writes are auto-echoed into it.</span>
+    <span class="nx">drawServo</span><span class="p">(</span><span class="nx">arduino</span><span class="p">.</span><span class="nx">pan</span><span class="p">.</span><span class="nx">angle</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="kd">function</span> <span class="nx">drawServo</span><span class="p">(</span><span class="nx">angle</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nx">push</span><span class="p">();</span>
+    <span class="nx">translate</span><span class="p">(</span><span class="nx">width</span> <span class="o">/</span> <span class="mf">2</span><span class="p">,</span> <span class="mf">280</span><span class="p">);</span>
+    <span class="nx">stroke</span><span class="p">(</span><span class="mf">120</span><span class="p">);</span> <span class="nx">strokeWeight</span><span class="p">(</span><span class="mf">4</span><span class="p">);</span> <span class="nx">noFill</span><span class="p">();</span>
+    <span class="nx">arc</span><span class="p">(</span><span class="mf">0</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="mf">220</span><span class="p">,</span> <span class="mf">220</span><span class="p">,</span> <span class="nx">PI</span><span class="p">,</span> <span class="nx">TWO_PI</span><span class="p">);</span>
+    <span class="nx">stroke</span><span class="p">(</span><span class="mf">255</span><span class="p">,</span> <span class="mf">180</span><span class="p">,</span> <span class="mf">0</span><span class="p">);</span> <span class="nx">strokeWeight</span><span class="p">(</span><span class="mf">6</span><span class="p">);</span>
+    <span class="kd">const</span> <span class="nx">a</span> <span class="o">=</span> <span class="nx">radians</span><span class="p">(</span><span class="mf">180</span> <span class="o">-</span> <span class="nx">angle</span><span class="p">);</span>
+    <span class="nx">line</span><span class="p">(</span><span class="mf">0</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="mf">110</span> <span class="o">*</span> <span class="nx">cos</span><span class="p">(</span><span class="nx">a</span><span class="p">),</span> <span class="o">-</span><span class="mf">110</span> <span class="o">*</span> <span class="nx">sin</span><span class="p">(</span><span class="nx">a</span><span class="p">));</span>
+    <span class="nx">noStroke</span><span class="p">();</span> <span class="nx">fill</span><span class="p">(</span><span class="mf">255</span><span class="p">);</span>
+    <span class="nx">textAlign</span><span class="p">(</span><span class="nx">CENTER</span><span class="p">);</span>
+    <span class="nx">text</span><span class="p">(</span><span class="sb">`</span><span class="si">${</span><span class="nx">round</span><span class="p">(</span><span class="nx">angle</span><span class="p">)</span><span class="si">}</span><span class="sb">°`</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="mf">40</span><span class="p">);</span>
+    <span class="nx">textAlign</span><span class="p">(</span><span class="nx">LEFT</span><span class="p">);</span>
+    <span class="nx">pop</span><span class="p">();</span>
+<span class="p">}</span>
+</code></pre>
+      </div>
+    </div>
+  <div class="md-body">
+<h2 id="what-this-example-demonstrates">What this example demonstrates</h2>
+<ul>
+<li><strong>The sketch creates the servo</strong> — <code>PardaloteServo.attach(&quot;pan&quot;, pin)</code> attaches it on the board and announces it to browsers in the same act. Browsers that connect later get it too.</li>
+<li><strong>The browser object is the real thing</strong> — <code>arduino.pan.write()</code>, <code>writeTimed()</code>, <code>whenDone()</code>, groups, limits: everything a browser-created servo has.</li>
+<li><strong>Both sides drive it, both stay in sync</strong> — the sketch nods the servo every 4 s (<code>PardaloteServo.writeTimed(pan, …)</code>), the browser grabs it with the mouse. Sketch writes are auto-echoed, so <code>arduino.pan.angle</code> always tracks whoever wrote last.</li>
+</ul>
+<p>This is the actuator counterpart of <code>Pardalote.share(pin, mode)</code> — except a servo has no life outside Pardalote, so there's no separate &quot;share&quot; step: creating it <em>is</em> sharing it. A servo that should stay private to the sketch shouldn't go through Pardalote at all — use the plain <code>Servo</code>/<code>ESP32Servo</code> library, the way unshared pins just use <code>pinMode()</code>.</p>
+<h2 id="hardware">Hardware</h2>
+<ul>
+<li>Arduino UNO R4 WiFi or ESP32 development board</li>
+<li>Hobby servo: signal on <strong>pin 9</strong>, plus 5 V and GND (power a real servo from a supply, not the board's 5 V pin)</li>
+</ul>
+<h2 id="run-it">Run it</h2>
+<ol>
+<li>Open <code>shared-servo.ino</code> in Arduino IDE, select your board, upload.</li>
+<li>Find the Arduino's IP from the LED matrix (UNO R4) or Serial Monitor (ESP32).</li>
+<li>Edit <code>ArduinoIP</code> in <code>sketch.js</code> to match.</li>
+<li>Open <code>index.html</code> in a browser.</li>
+<li>Watch the sketch move the servo; press the mouse to take over.</li>
+</ol>
+<h2 id="whats-happening-under-the-hood">What's happening under the hood</h2>
+<p>On attach, the board broadcasts a <code>SHARE</code> frame (<code>[logicalId]</code> + the name) followed by the servo's attach state and angle. The JS core intercepts <code>SHARE</code>, constructs a <code>Servo</code>, and binds it as <code>arduino.pan</code>; the state frames then sync it through the normal announce machinery. The same sequence replays for every browser that connects later, so the object is always there before <code>'ready'</code> fires.</p>
+<pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;share&#39;</span><span class="p">,</span> <span class="p">({</span> <span class="nx">name</span><span class="p">,</span> <span class="nx">extension</span> <span class="p">})</span> <span class="p">=&gt;</span> <span class="p">{</span> <span class="p">...</span> <span class="p">});</span>  <span class="c1">// optional: the moment it appears</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;ready&#39;</span><span class="p">,</span> <span class="p">()</span> <span class="p">=&gt;</span> <span class="p">{</span> <span class="nx">arduino</span><span class="p">.</span><span class="nx">pan</span><span class="p">.</span><span class="nx">write</span><span class="p">(</span><span class="mf">90</span><span class="p">);</span> <span class="p">});</span>  <span class="c1">// it&#39;s simply there</span>
+</code></pre>
+
+  </div>
+</div>
+
+<footer class="site-footer speckled">
+  <div class="wrap">
+    <span>Pardalote — created by Scott Mitchell for design education and creative technology.</span>
+    <span><a href="../reference/index.html">Reference</a> · <a href="https://github.com/ScottMit/Pardalote">GitHub</a> · GPL-3.0</span>
+  </div>
+</footer>
+
+<script src="../js/site.js"></script>
+</body>
+</html>
