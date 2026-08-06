@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pin capabilities — Pardalote reference</title>
+<meta name="description" content="What each pin can actually do on the supported boards — analog in, digital in/out, PWM — and the gotchas that come from the silicon, not from Pardalote.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../css/site.css">
+</head>
+<body data-nav="reference">
+
+<nav class="site-nav">
+  <a class="logo" href="../index.html">
+    <img src="../assets/logo.svg" width="26" height="26" alt="">
+    Pardalote
+  </a>
+  <div class="links">
+    <a data-nav="home" href="../index.html">Home</a>
+    <a data-nav="download" href="../download.html">Download</a>
+    <a data-nav="examples" href="../examples/index.html">Examples</a>
+    <a data-nav="reference" href="index.html">Reference</a>
+    <a href="https://github.com/ScottMit/Pardalote">GitHub</a>
+  </div>
+</nav>
+
+<div class="wrap">
+  <div class="ref-layout">
+<aside class="ref-nav">
+  <button class="ref-nav-toggle" aria-expanded="false" aria-controls="ref-nav-links">Contents</button>
+  <div class="ref-nav-links" id="ref-nav-links">
+  <h4><a href="index.html">Getting started</a></h4>
+  <a href="index.html">Overview</a>
+  <a href="installation.html">Installation</a>
+  <a href="wifi.html">WiFi configuration</a>
+  <a href="ai-coding.html">Coding with AI</a>
+  <h4><a href="connecting.html">Core — JavaScript</a></h4>
+  <a href="connecting.html#connect">connect()</a>
+  <a href="connecting.html#on">on()</a>
+  <a href="connecting.html#disconnect">disconnect()</a>
+  <a href="connecting.html#getstatus">getStatus()</a>
+  <a href="pins.html#pinmode">pinMode()</a>
+  <a href="pins.html#digitalwrite">digitalWrite()</a>
+  <a href="pins.html#analogwrite">analogWrite()</a>
+  <a href="pins.html#setwritethrottle--setwritethreshold">setWriteThrottle() / setWriteThreshold()</a>
+  <a href="pins.html#analogread">analogRead()</a>
+  <a href="pins.html#digitalread">digitalRead()</a>
+  <a href="pins.html#setreadinterval--setreadthreshold">setReadInterval() / setReadThreshold()</a>
+  <a href="pins.html#pin--the-listening-handle">pin() — the listening handle</a>
+  <a href="pins.html#end--endall">end() / endAll()</a>
+  <a href="pins.html#pin-aliases">Pin aliases</a>
+  <h4><a href="arduino.html">Core — Arduino</a></h4>
+  <a href="arduino.html#pardalotebegin">Pardalote.begin()</a>
+  <a href="arduino.html#pardaloterun">Pardalote.run()</a>
+  <a href="arduino.html#pardaloteshare">Pardalote.share()</a>
+  <a href="arduino.html#pardalotesend">Pardalote.send()</a>
+  <a href="arduino.html#when-not-to-share">When not to share</a>
+  <h4><a href="messaging.html">Core — Messaging</a></h4>
+  <a href="messaging.html#javascript-to-arduino">JavaScript to Arduino</a>
+  <a href="messaging.html#arduino-to-javascript">Arduino to JavaScript</a>
+  <a href="messaging.html#retain-and-broadcast">Retain and broadcast</a>
+  <a href="messaging.html#inspecting-all-traffic">Inspecting all traffic</a>
+  <h4><a href="extensions.html">Extensions</a></h4>
+  <a href="extensions.html">Overview</a>
+  <a href="extensions.html#creating-extension-objects-in-the-firmware">Creating extension objects in the firmware</a>
+  <a href="extensions.html#reading-and-writing-actuators-from-the-sketch">Reading and writing actuators from the sketch</a>
+  <a href="servo.html">Servo</a>
+  <a href="stepper.html">Stepper</a>
+  <a href="bus-servo.html">Bus servo</a>
+  <a href="groups.html">Groups</a>
+  <a href="neopixel.html">NeoPixel</a>
+  <a href="ultrasonic.html">Ultrasonic</a>
+  <a href="encoder.html">Rotary encoder</a>
+  <a href="imu.html">IMU</a>
+  <a href="camera.html">Camera</a>
+  <h4><a href="protocol.html">Under the hood</a></h4>
+  <a href="protocol.html">Protocol</a>
+  <a href="pin-capabilities.html">Pin capabilities</a>
+  <a href="troubleshooting.html">Troubleshooting</a>
+  </div>
+</aside>
+    <main class="ref-main">
+      <h1>Pin capabilities</h1>
+      <p class="lede">What each pin can actually do on the supported boards — analog in, digital in/out, PWM — and the gotchas that come from the silicon, not from Pardalote.</p>
+<p>Not every pin does everything. A pin's capabilities come from the chip and the board, not from Pardalote, so <code>analogRead()</code> on the wrong pin returns <code>0</code> and <code>analogWrite()</code> on an input-only pin does nothing — even though the call itself is valid. These tables say which pins to reach for.</p>
+<p>The legend for every table: <strong>✓</strong> works, <strong>—</strong> not available. &quot;Analog in&quot; means <code>analogRead()</code> / <code>ANALOG_INPUT_MODE</code>; &quot;PWM&quot; means <code>analogWrite()</code>.</p>
+<blockquote>
+<p><strong>Bench status.</strong> The <strong>ESP32-WROVER</strong> and <strong>UNO R4 WiFi</strong> tables are confirmed on real hardware (Scott's rig, 2026-07). The <strong>FireBeetle 2 ESP32-C5</strong> table is derived from the datasheet and the Pardalote pin-alias file — correct by the docs, but not yet bench-verified pin by pin.</p>
+</blockquote>
+<h2 id="concepts-that-explain-the-tables">Concepts that explain the tables</h2>
+<p><strong>Input-only pins.</strong> On the classic ESP32, GPIO 34–39 can only read — no <code>digitalWrite</code>, no <code>analogWrite</code>, and crucially <strong>no internal pull-up or pull-down</strong>, so a floating input-only pin needs an external resistor. This is why those pins show read ✓ but output —.</p>
+<p><strong>ADC2 dies while WiFi is on.</strong> The original ESP32 has two ADC units. <strong>ADC1</strong> works whenever; <strong>ADC2</strong> is borrowed by the WiFi radio and reads <code>0</code> the entire time WiFi is connected. Pardalote is <em>always</em> on WiFi, so on the WROVER every ADC2 pin is effectively analog-dead — that's expected, not a fault. Only the ADC1 pins give real readings. The UNO R4 and the ESP32-C5 don't have this split on their exposed analog pins, so their analog pins stay readable with WiFi up.</p>
+<p><strong>PWM is a shared resource, not a pin property.</strong> On the ESP32 the LEDC peripheral can route PWM to almost any output-capable pin, so &quot;PWM&quot; tracks &quot;can this pin output at all.&quot; On the ESP32-C5 there are only <strong>6 LEDC channels</strong>, so at most six pins can PWM at once. On the UNO R4 WiFi, PWM is fixed to the six timer-backed header pins marked <code>~</code> (3, 5, 6, 9, 10, 11).</p>
+<p><strong>Strapping and reserved pins.</strong> A few pins are read by the chip at boot to decide boot mode (strapping pins: WROVER 0, 2, 5, 12, 15) and can misbehave if you hold them at the wrong level during reset. Others are physically unavailable because they're wired to flash or PSRAM (WROVER GPIO 6–11 for flash, 16–17 for PSRAM) — those aren't broken out for general use and aren't listed below.</p>
+<h2 id="esp32-wrover-dev">ESP32-WROVER-DEV</h2>
+<p>Include <code>pardalote-pins-esp32-wrover-dev.js</code>. <code>arduino.analogMax</code> = <strong>4095</strong>. Confirmed on hardware.</p>
+<table>
+<thead>
+<tr>
+<th>GPIO</th>
+<th>Alias</th>
+<th style="text-align:center">Analog in</th>
+<th style="text-align:center">Digital in</th>
+<th style="text-align:center">Digital out</th>
+<th style="text-align:center">PWM</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td>A11</td>
+<td style="text-align:center">—</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td>ADC2 (dead on WiFi); strapping (boot button)</td>
+</tr>
+<tr>
+<td>2</td>
+<td>A12</td>
+<td style="text-align:center">—</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td>ADC2 (dead on WiFi); strapping; onboard LED (<code>LED_BUILTIN</code>)</td>
+</tr>
+<tr>
+<td>4</td>
+<td>A10</td>
+<td style="text-align:center">—</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td>ADC2 (dead on WiFi)</td>
+</tr>
+<tr>
+<td>5</td>
+<td>SS</td>
+<td style="text-align:center">—</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td>No ADC; strapping</td>
+</tr>
+<tr>
+<td>12</td>
+<td>A15</td>
+<td style="text-align:center">—</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td>ADC2 (dead on WiFi); strapping (must be LOW at boot)</td>
+</tr>
+<tr>
+<td>13</td>
+<td>A14</td>
+<td style="text-align:center">—</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td>ADC2 (dead on WiFi)</td>
+</tr>
+<tr>
+<td>14</td>
+<td>A16</td>
+<td style="text-align:center">—</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td>ADC2 (dead on WiFi)</td>
+</tr>
+<tr>
+<td>15</td>
+<td>A13</td>
+<td style="text-align:center">—</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td>ADC2 (dead on WiFi); strapping</td>
+</tr>
+<tr>
+<td>18</td>
+<td>SCK</td>
+<td style="text-align:center">—</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td>No ADC</td>
+</tr>
+<tr>
+<td>19</td>
+<td>MISO</td>
+<td style="text-align:center">—</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td>No ADC</td>
+</tr>
+<tr>
+<td>21</td>
+<td>SDA</td>
+<td style="text-align:center">—</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td>No ADC; default I2C SDA</td>
+</tr>
+<tr>
+<td>22</td>
+<td>SCL</td>
+<td style="text-align:center">—</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td>No ADC; default I2C SCL</td>
+</tr>
+<tr>
+<td>23</td>
+<td>MOSI</td>
+<td style="text-align:center">—</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td>No ADC</td>
+</tr>
+<tr>
+<td>25</td>
+<td>A18</td>
+<td style="text-align:center">—</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td>ADC2 (dead on WiFi); true DAC out (<code>DAC1</code>)</td>
+</tr>
+<tr>
+<td>26</td>
+<td>A19</td>
+<td style="text-align:center">—</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td>ADC2 (dead on WiFi); true DAC out (<code>DAC2</code>)</td>
+</tr>
+<tr>
+<td>27</td>
+<td>A17</td>
+<td style="text-align:center">—</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td>ADC2 (dead on WiFi)</td>
+</tr>
+<tr>
+<td>32</td>
+<td>A4</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td>ADC1 — analog works on WiFi</td>
+</tr>
+<tr>
+<td>33</td>
+<td>A5</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td>ADC1 — analog works on WiFi</td>
+</tr>
+<tr>
+<td>34</td>
+<td>A6</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">—</td>
+<td style="text-align:center">—</td>
+<td>Input-only; no pull-up/pull-down</td>
+</tr>
+<tr>
+<td>35</td>
+<td>A7</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">—</td>
+<td style="text-align:center">—</td>
+<td>Input-only; no pull-up/pull-down</td>
+</tr>
+<tr>
+<td>36</td>
+<td>A0</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">—</td>
+<td style="text-align:center">—</td>
+<td>Input-only; no pull-up/pull-down (SVP)</td>
+</tr>
+<tr>
+<td>39</td>
+<td>A3</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">—</td>
+<td style="text-align:center">—</td>
+<td>Input-only; no pull-up/pull-down (SVN)</td>
+</tr>
+</tbody>
+</table>
+<p>The one thing worth memorising: <strong>the only pins that read analog under WiFi are 32, 33, 34, 35, 36, 39</strong> (the ADC1 set). Everything labelled &quot;ADC2&quot; reads <code>0</code> while connected. GPIO 1/3 (UART to USB), 6–11 (flash) and 16–17 (PSRAM) are not broken out.</p>
+<h2 id="arduino-uno-r4-wifi">Arduino UNO R4 WiFi</h2>
+<p>Include <code>pardalote-pins-uno-r4-wifi.js</code>. <code>arduino.analogMax</code> = <strong>1023</strong> (10-bit default; the RA4M1 ADC can do 12/14-bit). Confirmed on hardware. No input-only pins, and no ADC/WiFi conflict.</p>
+<table>
+<thead>
+<tr>
+<th>Pin</th>
+<th>Alias</th>
+<th style="text-align:center">Analog in</th>
+<th style="text-align:center">Digital in</th>
+<th style="text-align:center">Digital out</th>
+<th style="text-align:center">PWM</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td>D0</td>
+<td style="text-align:center">—</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">—</td>
+<td>Serial1 RX</td>
+</tr>
+<tr>
+<td>1</td>
+<td>D1</td>
+<td style="text-align:center">—</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">—</td>
+<td>Serial1 TX</td>
+</tr>
+<tr>
+<td>2</td>
+<td>D2</td>
+<td style="text-align:center">—</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">—</td>
+<td></td>
+</tr>
+<tr>
+<td>3</td>
+<td>D3</td>
+<td style="text-align:center">—</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td><code>~</code> PWM</td>
+</tr>
+<tr>
+<td>4</td>
+<td>D4</td>
+<td style="text-align:center">—</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">—</td>
+<td></td>
+</tr>
+<tr>
+<td>5</td>
+<td>D5</td>
+<td style="text-align:center">—</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td><code>~</code> PWM</td>
+</tr>
+<tr>
+<td>6</td>
+<td>D6</td>
+<td style="text-align:center">—</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td><code>~</code> PWM</td>
+</tr>
+<tr>
+<td>7</td>
+<td>D7</td>
+<td style="text-align:center">—</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">—</td>
+<td></td>
+</tr>
+<tr>
+<td>8</td>
+<td>D8</td>
+<td style="text-align:center">—</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">—</td>
+<td></td>
+</tr>
+<tr>
+<td>9</td>
+<td>D9</td>
+<td style="text-align:center">—</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td><code>~</code> PWM</td>
+</tr>
+<tr>
+<td>10</td>
+<td>D10</td>
+<td style="text-align:center">—</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td><code>~</code> PWM</td>
+</tr>
+<tr>
+<td>11</td>
+<td>D11</td>
+<td style="text-align:center">—</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td><code>~</code> PWM</td>
+</tr>
+<tr>
+<td>12</td>
+<td>D12</td>
+<td style="text-align:center">—</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">—</td>
+<td></td>
+</tr>
+<tr>
+<td>13</td>
+<td>D13</td>
+<td style="text-align:center">—</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">—</td>
+<td>Onboard LED (<code>LED_BUILTIN</code>)</td>
+</tr>
+<tr>
+<td>14</td>
+<td>A0</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">—</td>
+<td>Also the board's true DAC output</td>
+</tr>
+<tr>
+<td>15</td>
+<td>A1</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">—</td>
+<td>Op-amp + input (if enabled)</td>
+</tr>
+<tr>
+<td>16</td>
+<td>A2</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">—</td>
+<td>Op-amp − input (if enabled)</td>
+</tr>
+<tr>
+<td>17</td>
+<td>A3</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">—</td>
+<td>Op-amp output (if enabled)</td>
+</tr>
+<tr>
+<td>18</td>
+<td>A4</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">—</td>
+<td>I2C SDA — avoid analog while I2C is in use</td>
+</tr>
+<tr>
+<td>19</td>
+<td>A5</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">—</td>
+<td>I2C SCL — avoid analog while I2C is in use</td>
+</tr>
+</tbody>
+</table>
+<h2 id="firebeetle-2-esp32-c5">FireBeetle 2 ESP32-C5</h2>
+<p>Include <code>pardalote-pins-firebeetle2-esp32-c5.js</code>. <code>arduino.analogMax</code> = <strong>4095</strong>. Datasheet-derived — not yet bench-verified. A single 12-bit SAR ADC (no ADC2/WiFi split), and a 6-channel LED PWM controller (at most six PWM outputs at once).</p>
+<table>
+<thead>
+<tr>
+<th>GPIO</th>
+<th>Alias</th>
+<th style="text-align:center">Analog in</th>
+<th style="text-align:center">Digital in</th>
+<th style="text-align:center">Digital out</th>
+<th style="text-align:center">PWM</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>2</td>
+<td>A1</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td>ADC — readable on WiFi</td>
+</tr>
+<tr>
+<td>3</td>
+<td>A2</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td>ADC — readable on WiFi</td>
+</tr>
+<tr>
+<td>4</td>
+<td>A3</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td>ADC — readable on WiFi</td>
+</tr>
+<tr>
+<td>5</td>
+<td>A4</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td>ADC — readable on WiFi</td>
+</tr>
+<tr>
+<td>6</td>
+<td>D12</td>
+<td style="text-align:center">—</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td></td>
+</tr>
+<tr>
+<td>7</td>
+<td>D11</td>
+<td style="text-align:center">—</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td></td>
+</tr>
+<tr>
+<td>8</td>
+<td>D2</td>
+<td style="text-align:center">—</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td></td>
+</tr>
+<tr>
+<td>9</td>
+<td>SDA</td>
+<td style="text-align:center">—</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td>Default I2C SDA</td>
+</tr>
+<tr>
+<td>10</td>
+<td>SCL</td>
+<td style="text-align:center">—</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td>Default I2C SCL</td>
+</tr>
+<tr>
+<td>11</td>
+<td>TX</td>
+<td style="text-align:center">—</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td>UART TX</td>
+</tr>
+<tr>
+<td>12</td>
+<td>RX</td>
+<td style="text-align:center">—</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td>UART RX</td>
+</tr>
+<tr>
+<td>15</td>
+<td>D13</td>
+<td style="text-align:center">—</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td>Onboard LED (<code>LED_BUILTIN</code>)</td>
+</tr>
+<tr>
+<td>23</td>
+<td>SCK</td>
+<td style="text-align:center">—</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td>SPI clock</td>
+</tr>
+<tr>
+<td>24</td>
+<td>MOSI</td>
+<td style="text-align:center">—</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td>SPI MOSI</td>
+</tr>
+<tr>
+<td>25</td>
+<td>MISO</td>
+<td style="text-align:center">—</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td>SPI MISO</td>
+</tr>
+<tr>
+<td>26</td>
+<td>D3</td>
+<td style="text-align:center">—</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td></td>
+</tr>
+<tr>
+<td>27</td>
+<td>D6</td>
+<td style="text-align:center">—</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td>Also <code>SS</code></td>
+</tr>
+<tr>
+<td>28</td>
+<td>D9</td>
+<td style="text-align:center">—</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td style="text-align:center">✓</td>
+<td>BOOT button (strapping)</td>
+</tr>
+</tbody>
+</table>
+<p>Board-level pins to know: <strong>GPIO 0</strong> switches the on-board <code>3V3_C</code> power rail (default off, drive HIGH to enable), and <strong>IO1</strong> senses the battery voltage — both are wired to on-board functions rather than free header I/O.</p>
+<h2 id="picking-a-pin-quickly">Picking a pin quickly</h2>
+<p>For an <strong>analog sensor</strong> with WiFi running, use an ADC1 pin — WROVER 32/33/34/35/36/39, or any exposed analog pin on the UNO R4 (A0–A5) and the C5 (A1–A4). For a <strong>button</strong>, any pin with digital-in ✓; prefer one with an internal pull-up (i.e. <em>not</em> WROVER 34–39) so you can wire the switch to GND with no external resistor. For <strong>PWM</strong> (LED dimming, plain servo pins), any pin with PWM ✓ — on the C5, remember only six can run at once. Avoid the strapping pins for anything that's driven at boot.</p>
+<p>See also: <a href="pins.html">Pins and reading</a> · <a href="protocol.html">Protocol</a> · <a href="troubleshooting.html">Troubleshooting</a></p>
+
+    </main>
+  </div>
+</div>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <span>Pardalote — created by Scott Mitchell for design education and creative technology.</span>
+    <span><a href="index.html">Reference</a> · <a href="https://github.com/ScottMit/Pardalote">GitHub</a> · GPL-3.0</span>
+  </div>
+</footer>
+
+<script src="../js/site.js"></script>
+</body>
+</html>

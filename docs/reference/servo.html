@@ -10,9 +10,9 @@
 </head>
 <body data-nav="reference">
 
-<nav class="site-nav speckled">
+<nav class="site-nav">
   <a class="logo" href="../index.html">
-    <img src="../assets/logo.svg" width="30" height="30" alt="">
+    <img src="../assets/logo.svg" width="26" height="26" alt="">
     Pardalote
   </a>
   <div class="links">
@@ -27,45 +27,68 @@
 <div class="wrap">
   <div class="ref-layout">
 <aside class="ref-nav">
-  <h4>Getting started</h4>
+  <button class="ref-nav-toggle" aria-expanded="false" aria-controls="ref-nav-links">Contents</button>
+  <div class="ref-nav-links" id="ref-nav-links">
+  <h4><a href="index.html">Getting started</a></h4>
   <a href="index.html">Overview</a>
   <a href="installation.html">Installation</a>
   <a href="wifi.html">WiFi configuration</a>
-  <h4>Core — JavaScript</h4>
-  <a href="connecting.html#connect">connect() / events</a>
+  <a href="ai-coding.html">Coding with AI</a>
+  <h4><a href="connecting.html">Core — JavaScript</a></h4>
+  <a href="connecting.html#connect">connect()</a>
+  <a href="connecting.html#on">on()</a>
+  <a href="connecting.html#disconnect">disconnect()</a>
+  <a href="connecting.html#getstatus">getStatus()</a>
   <a href="pins.html#pinmode">pinMode()</a>
-  <a href="pins.html#digitalwrite">digitalWrite() / analogWrite()</a>
-  <a href="pins.html#analogread">analogRead() / digitalRead()</a>
-  <a href="pins.html#onchange">onChange()</a>
+  <a href="pins.html#digitalwrite">digitalWrite()</a>
+  <a href="pins.html#analogwrite">analogWrite()</a>
+  <a href="pins.html#setwritethrottle--setwritethreshold">setWriteThrottle() / setWriteThreshold()</a>
+  <a href="pins.html#analogread">analogRead()</a>
+  <a href="pins.html#digitalread">digitalRead()</a>
+  <a href="pins.html#setreadinterval--setreadthreshold">setReadInterval() / setReadThreshold()</a>
+  <a href="pins.html#pin--the-listening-handle">pin() — the listening handle</a>
+  <a href="pins.html#end--endall">end() / endAll()</a>
   <a href="pins.html#pin-aliases">Pin aliases</a>
-  <h4>Core — Arduino</h4>
-  <a href="arduino.html#pardalotebegin">Pardalote.begin() / run()</a>
-  <a href="arduino.html#pardaloteshare">share() / send()</a>
-  <a href="arduino.html#the-actuator-objects">Reading actuators</a>
-  <h4>Extensions</h4>
+  <h4><a href="arduino.html">Core — Arduino</a></h4>
+  <a href="arduino.html#pardalotebegin">Pardalote.begin()</a>
+  <a href="arduino.html#pardaloterun">Pardalote.run()</a>
+  <a href="arduino.html#pardaloteshare">Pardalote.share()</a>
+  <a href="arduino.html#pardalotesend">Pardalote.send()</a>
+  <a href="arduino.html#when-not-to-share">When not to share</a>
+  <h4><a href="messaging.html">Core — Messaging</a></h4>
+  <a href="messaging.html#javascript-to-arduino">JavaScript to Arduino</a>
+  <a href="messaging.html#arduino-to-javascript">Arduino to JavaScript</a>
+  <a href="messaging.html#retain-and-broadcast">Retain and broadcast</a>
+  <a href="messaging.html#inspecting-all-traffic">Inspecting all traffic</a>
+  <h4><a href="extensions.html">Extensions</a></h4>
   <a href="extensions.html">Overview</a>
+  <a href="extensions.html#creating-extension-objects-in-the-firmware">Creating extension objects in the firmware</a>
+  <a href="extensions.html#reading-and-writing-actuators-from-the-sketch">Reading and writing actuators from the sketch</a>
   <a href="servo.html">Servo</a>
   <a href="stepper.html">Stepper</a>
   <a href="bus-servo.html">Bus servo</a>
   <a href="groups.html">Groups</a>
   <a href="neopixel.html">NeoPixel</a>
   <a href="ultrasonic.html">Ultrasonic</a>
-  <a href="mpu.html">MPU / IMU</a>
+  <a href="encoder.html">Rotary encoder</a>
+  <a href="imu.html">IMU</a>
   <a href="camera.html">Camera</a>
-  <h4>Under the hood</h4>
+  <h4><a href="protocol.html">Under the hood</a></h4>
   <a href="protocol.html">Protocol</a>
+  <a href="pin-capabilities.html">Pin capabilities</a>
   <a href="troubleshooting.html">Troubleshooting</a>
+  </div>
 </aside>
     <main class="ref-main">
       <h1>Servo</h1>
       <p class="lede">Drive up to 8 PWM hobby servos from the browser — with smooth sweeps, timed moves, and angle read-back.</p>
 <p>Requires <code>&lt;PardaloteServo.h&gt;</code> in the sketch (plus the <code>ESP32Servo</code> library on ESP32). Register instances before connecting; examples assume:</p>
-<pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;pan&#39;</span><span class="p">,</span> <span class="ow">new</span> <span class="nx">Servo</span><span class="p">());</span>
-</code></pre>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;pan&#39;</span><span class="p">,</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">Servo</span><span class="p">());</span>
+</code></pre></div>
 <p>Alternatively, the <strong>sketch</strong> can create the servo — <code>PardaloteServo.attach(&quot;pan&quot;, 9)</code> on the Arduino — and <code>arduino.pan</code> appears automatically, no <code>add()</code> needed: a full <code>Servo</code> instance, identical to the above, present before <code>'ready'</code> fires. See <a href="arduino.html#creating-actuators-from-the-sketch">The Arduino sketch</a>.</p>
 <h2 id="attach">attach()</h2>
 <p>Attaches the servo to a pin. Call inside <code>on('ready')</code>.</p>
-<div class="sig">arduino.pan.<span class="fn">attach</span>(pin, [minPulse], [maxPulse])</div>
+<div class="sig sig-js">arduino.pan.<span class="fn">attach</span>(pin, [minPulse], [maxPulse])</div>
 <table>
 <thead>
 <tr>
@@ -92,15 +115,15 @@
 </tr>
 </tbody>
 </table>
-<div class="code-ex"><div class="bar">Example — attach a servo</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">pan</span><span class="p">.</span><span class="nx">attach</span><span class="p">(</span><span class="mf">9</span><span class="p">);</span>
-<span class="nx">arduino</span><span class="p">.</span><span class="nx">pan</span><span class="p">.</span><span class="nx">attach</span><span class="p">(</span><span class="mf">9</span><span class="p">,</span> <span class="mf">544</span><span class="p">,</span> <span class="mf">2400</span><span class="p">);</span>   <span class="c1">// custom pulse range</span>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><div class="bar">Example — attach a servo</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">pan</span><span class="p">.</span><span class="nx">attach</span><span class="p">(</span><span class="mf">9</span><span class="p">);</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">pan</span><span class="p">.</span><span class="nx">attach</span><span class="p">(</span><span class="mf">9</span><span class="p">,</span><span class="w"> </span><span class="mf">544</span><span class="p">,</span><span class="w"> </span><span class="mf">2400</span><span class="p">);</span><span class="w">   </span><span class="c1">// custom pulse range</span>
 </code></pre></div>
 <h2 id="detach">detach()</h2>
 <p>Releases the pin.</p>
-<div class="sig">arduino.pan.<span class="fn">detach</span>()</div>
+<div class="sig sig-js">arduino.pan.<span class="fn">detach</span>()</div>
 <h2 id="write">write()</h2>
 <p>Moves the servo to an angle. Cancels any in-progress sweep or timed move.</p>
-<div class="sig">arduino.pan.<span class="fn">write</span>(angle)</div>
+<div class="sig sig-js">arduino.pan.<span class="fn">write</span>(angle)</div>
 <table>
 <thead>
 <tr>
@@ -119,7 +142,7 @@
 </table>
 <h2 id="writemicroseconds">writeMicroseconds()</h2>
 <p>Fine-grained control via raw pulse width.</p>
-<div class="sig">arduino.pan.<span class="fn">writeMicroseconds</span>(us)</div>
+<div class="sig sig-js">arduino.pan.<span class="fn">writeMicroseconds</span>(us)</div>
 <table>
 <thead>
 <tr>
@@ -138,11 +161,11 @@
 </table>
 <h2 id="center--min--max">center() / min() / max()</h2>
 <p>Shorthand moves.</p>
-<div class="sig">arduino.pan.<span class="fn">center</span>() · arduino.pan.<span class="fn">min</span>() · arduino.pan.<span class="fn">max</span>()</div>
+<div class="sig sig-js">arduino.pan.<span class="fn">center</span>() · arduino.pan.<span class="fn">min</span>() · arduino.pan.<span class="fn">max</span>()</div>
 <p>Move to 90°, 0°, and 180° respectively.</p>
 <h2 id="read">read()</h2>
-<p>Reads the servo's angle. Same poll-and-cache pattern as <code>analogRead()</code>: the first call starts a poll, later calls return the cached value.</p>
-<div class="sig">arduino.pan.<span class="fn">read</span>([interval])</div>
+<p>Reads the servo's angle. Same poll-and-cache pattern as <code>analogRead()</code>: the first call starts a poll, later calls return the cached value. The board runs the poll (per-browser interval and threshold) and only transmits changes of threshold+ degrees.</p>
+<div class="sig sig-js">arduino.pan.<span class="fn">read</span>([interval], [threshold])</div>
 <table>
 <thead>
 <tr>
@@ -157,6 +180,11 @@
 <td>number</td>
 <td>Optional. Poll interval in ms. Pass <code>END</code> to stop.</td>
 </tr>
+<tr>
+<td><code>threshold</code></td>
+<td>number</td>
+<td>Optional. Minimum change worth transmitting, in degrees (<code>0</code> = default: <code>1</code>). Also settable via <code>setReadInterval(ms)</code> / <code>setReadThreshold(degrees)</code>.</td>
+</tr>
 </tbody>
 </table>
 <p><strong>Returns</strong> the cached angle in degrees.</p>
@@ -168,7 +196,7 @@
 <p>If you just want &quot;what did I tell the servo to do?&quot; — use the <code>angle</code> property (locally cached, updated on every <code>write()</code>).</p>
 <h2 id="sweep">sweep()</h2>
 <p>Sweeps between two angles over a duration, streaming intermediate writes. Returns a promise. Any <code>write()</code> cancels it.</p>
-<div class="sig">await arduino.pan.<span class="fn">sweep</span>(from, to, duration, [steps])</div>
+<div class="sig sig-js">await arduino.pan.<span class="fn">sweep</span>(from, to, duration, [steps])</div>
 <table>
 <thead>
 <tr>
@@ -200,11 +228,11 @@
 </tr>
 </tbody>
 </table>
-<div class="code-ex"><div class="bar">Example — smooth sweep</div><pre><code><span class="k">await</span> <span class="nx">arduino</span><span class="p">.</span><span class="nx">pan</span><span class="p">.</span><span class="nx">sweep</span><span class="p">(</span><span class="mf">0</span><span class="p">,</span> <span class="mf">180</span><span class="p">,</span> <span class="mf">2000</span><span class="p">);</span>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><div class="bar">Example — smooth sweep</div><pre><code><span class="k">await</span><span class="w"> </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">pan</span><span class="p">.</span><span class="nx">sweep</span><span class="p">(</span><span class="mf">0</span><span class="p">,</span><span class="w"> </span><span class="mf">180</span><span class="p">,</span><span class="w"> </span><span class="mf">2000</span><span class="p">);</span>
 </code></pre></div>
 <h2 id="writetimed">writeTimed()</h2>
 <p>Moves to an angle over a set time — the Arduino interpolates on-board (smooth, no WiFi streaming) and fires <code>done</code> on arrival. The modern replacement for <code>sweep()</code>, and what lets PWM servos <strong>arrive together</strong> inside a <a href="groups.html">group</a>.</p>
-<div class="sig">arduino.pan.<span class="fn">writeTimed</span>(angle, duration)</div>
+<div class="sig sig-js">arduino.pan.<span class="fn">writeTimed</span>(angle, duration)</div>
 <table>
 <thead>
 <tr>
@@ -226,22 +254,66 @@
 </tr>
 </tbody>
 </table>
-<div class="code-ex"><div class="bar">Example — timed move with a done event</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">pan</span><span class="p">.</span><span class="nx">writeTimed</span><span class="p">(</span><span class="mf">120</span><span class="p">,</span> <span class="mf">1500</span><span class="p">);</span>   <span class="c1">// move to 120° over 1.5 s</span>
-<span class="nx">arduino</span><span class="p">.</span><span class="nx">pan</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;done&#39;</span><span class="p">,</span> <span class="p">({</span> <span class="nx">angle</span> <span class="p">})</span> <span class="p">=&gt;</span> <span class="p">{</span> <span class="cm">/* arrived */</span> <span class="p">});</span>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><div class="bar">Example — timed move with a done event</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">pan</span><span class="p">.</span><span class="nx">writeTimed</span><span class="p">(</span><span class="mf">120</span><span class="p">,</span><span class="w"> </span><span class="mf">1500</span><span class="p">);</span><span class="w">   </span><span class="c1">// move to 120° over 1.5 s</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">pan</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;done&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">({</span><span class="w"> </span><span class="nx">angle</span><span class="w"> </span><span class="p">})</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="cm">/* arrived */</span><span class="w"> </span><span class="p">});</span>
 </code></pre></div>
 <p>An immediate <code>write()</code> cancels an in-progress timed move.</p>
+<h2 id="gesture">gesture()</h2>
+<p>Plays an authored <strong>segment schedule</strong> — an ordered list of eased moves the Arduino runs back-to-back on its own clock (on-board, no WiFi streaming). Where <code>writeTimed()</code> is one eased move, a gesture is many: the primitive for <em>expressive</em> motion — anticipation, overshoot, holds, follow-through. Fires <code>done</code> (resolves <code>whenDone()</code>) when the last segment lands.</p>
+<div class="sig sig-js">arduino.pan.<span class="fn">gesture</span>(segments, [opts])</div>
+<p>Each segment is an object with a duration, a curve, and a displacement expressed <strong>either</strong> relatively (<code>by</code>) <strong>or</strong> absolutely (<code>to</code>):</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>dur</code></td>
+<td>number</td>
+<td>Segment duration in ms.</td>
+</tr>
+<tr>
+<td><code>curve</code></td>
+<td>string</td>
+<td>Easing: <code>'linear'</code>, <code>'easeIn'</code>, <code>'easeOut'</code>, <code>'easeInOut'</code>, or <code>'back'</code> (overshoot). Default <code>'linear'</code>.</td>
+</tr>
+<tr>
+<td><code>by</code></td>
+<td>number</td>
+<td><strong>Relative</strong> displacement in degrees — the default, portable frame.</td>
+</tr>
+<tr>
+<td><code>to</code></td>
+<td>number</td>
+<td><strong>Absolute</strong> target angle — use in place of <code>by</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>The reference frame is inferred (<code>to</code> → absolute, <code>by</code> → relative) or forced with <code>opts.absolute</code>. Relative is the default: the board captures the start angle at each segment, so a gesture needs no absolute position truth. Up to <strong>16</strong> segments (extras dropped with a warning); a <code>back</code> overshoot is re-clamped to the servo range / <code>setLimits()</code>.</p>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><div class="bar">Example — a nod with follow-through</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">pan</span><span class="p">.</span><span class="nx">gesture</span><span class="p">([</span>
+<span class="w">    </span><span class="p">{</span><span class="w"> </span><span class="nx">by</span><span class="o">:</span><span class="w">  </span><span class="mf">25</span><span class="p">,</span><span class="w"> </span><span class="nx">dur</span><span class="o">:</span><span class="w"> </span><span class="mf">250</span><span class="p">,</span><span class="w"> </span><span class="nx">curve</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;easeOut&#39;</span><span class="w">   </span><span class="p">},</span>
+<span class="w">    </span><span class="p">{</span><span class="w"> </span><span class="nx">by</span><span class="o">:</span><span class="w"> </span><span class="o">-</span><span class="mf">25</span><span class="p">,</span><span class="w"> </span><span class="nx">dur</span><span class="o">:</span><span class="w"> </span><span class="mf">400</span><span class="p">,</span><span class="w"> </span><span class="nx">curve</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;easeInOut&#39;</span><span class="w"> </span><span class="p">},</span>
+<span class="w">    </span><span class="p">{</span><span class="w"> </span><span class="nx">by</span><span class="o">:</span><span class="w">   </span><span class="mf">6</span><span class="p">,</span><span class="w"> </span><span class="nx">dur</span><span class="o">:</span><span class="w"> </span><span class="mf">180</span><span class="p">,</span><span class="w"> </span><span class="nx">curve</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;back&#39;</span><span class="w">      </span><span class="p">},</span><span class="w">   </span><span class="c1">// small overshoot settle</span>
+<span class="p">]);</span>
+<span class="k">await</span><span class="w"> </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">pan</span><span class="p">.</span><span class="nx">gesture</span><span class="p">([</span><span class="w"> </span><span class="cm">/* … */</span><span class="w"> </span><span class="p">]).</span><span class="nx">whenDone</span><span class="p">();</span>
+</code></pre></div>
+<p>To play coordinated gestures across several actuators at once, see <a href="groups.html#gesture">group.gesture()</a>.</p>
 <h2 id="whendone">whenDone()</h2>
 <p>Promise for the most recent timed move — resolves <code>true</code> on the servo's <code>done</code> (or immediately if no move is pending), <code>false</code> on the safety timeout (default <code>max(duration × 2, 10000)</code> ms; pass <code>{ timeout }</code> or a bare number to override, <code>0</code> to wait forever). The same method exists on steppers, bus servos, and groups.</p>
-<div class="sig">await arduino.pan.<span class="fn">whenDone</span>([{ timeout }])</div>
-<div class="code-ex"><div class="bar">Example — sequence timed moves</div><pre><code><span class="k">await</span> <span class="nx">arduino</span><span class="p">.</span><span class="nx">pan</span><span class="p">.</span><span class="nx">writeTimed</span><span class="p">(</span><span class="mf">120</span><span class="p">,</span> <span class="mf">1500</span><span class="p">).</span><span class="nx">whenDone</span><span class="p">();</span>
-<span class="k">await</span> <span class="nx">arduino</span><span class="p">.</span><span class="nx">pan</span><span class="p">.</span><span class="nx">writeTimed</span><span class="p">(</span><span class="mf">60</span><span class="p">,</span>  <span class="mf">1500</span><span class="p">).</span><span class="nx">whenDone</span><span class="p">();</span>
+<div class="sig sig-js">await arduino.pan.<span class="fn">whenDone</span>([{ timeout }])</div>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><div class="bar">Example — sequence timed moves</div><pre><code><span class="k">await</span><span class="w"> </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">pan</span><span class="p">.</span><span class="nx">writeTimed</span><span class="p">(</span><span class="mf">120</span><span class="p">,</span><span class="w"> </span><span class="mf">1500</span><span class="p">).</span><span class="nx">whenDone</span><span class="p">();</span>
+<span class="k">await</span><span class="w"> </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">pan</span><span class="p">.</span><span class="nx">writeTimed</span><span class="p">(</span><span class="mf">60</span><span class="p">,</span><span class="w">  </span><span class="mf">1500</span><span class="p">).</span><span class="nx">whenDone</span><span class="p">();</span>
 </code></pre></div>
 <h2 id="stop">stop()</h2>
 <p>Cancels a timed move and holds the current angle.</p>
-<div class="sig">arduino.pan.<span class="fn">stop</span>()</div>
+<div class="sig sig-js">arduino.pan.<span class="fn">stop</span>()</div>
 <h2 id="setlimits--clearlimits">setLimits() / clearLimits()</h2>
 <p>Soft angle limits, enforced <strong>on the Arduino</strong> — every commanded angle (browser write, sketch write, timed or group move) is clamped to the range before it reaches the servo. Same shape as <code>setLimits</code> on the stepper and bus servo.</p>
-<div class="sig">arduino.pan.<span class="fn">setLimits</span>(min, max) · arduino.pan.<span class="fn">clearLimits</span>()</div>
+<div class="sig sig-js">arduino.pan.<span class="fn">setLimits</span>(min, max) · arduino.pan.<span class="fn">clearLimits</span>()</div>
 <table>
 <thead>
 <tr>
@@ -260,12 +332,18 @@
 </table>
 <h2 id="sethome--home">setHome() / home()</h2>
 <p><code>setHome(angle)</code> declares the home angle — no-arg means &quot;the current angle is home&quot;. <code>home()</code> snaps there; <code>home(duration)</code> glides there over <code>duration</code> ms. Default home is <code>90</code> (centre). Same pair as the stepper and bus servo.</p>
-<div class="sig">arduino.pan.<span class="fn">setHome</span>([angle]) · arduino.pan.<span class="fn">home</span>([duration])</div>
-<div class="code-ex"><div class="bar">Example — ease home</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">pan</span><span class="p">.</span><span class="nx">setHome</span><span class="p">(</span><span class="mf">45</span><span class="p">);</span>
-<span class="k">await</span> <span class="nx">arduino</span><span class="p">.</span><span class="nx">pan</span><span class="p">.</span><span class="nx">home</span><span class="p">(</span><span class="mf">1000</span><span class="p">).</span><span class="nx">whenDone</span><span class="p">();</span>
+<div class="sig sig-js">arduino.pan.<span class="fn">setHome</span>([angle]) · arduino.pan.<span class="fn">home</span>([duration])</div>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><div class="bar">Example — ease home</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">pan</span><span class="p">.</span><span class="nx">setHome</span><span class="p">(</span><span class="mf">45</span><span class="p">);</span>
+<span class="k">await</span><span class="w"> </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">pan</span><span class="p">.</span><span class="nx">home</span><span class="p">(</span><span class="mf">1000</span><span class="p">).</span><span class="nx">whenDone</span><span class="p">();</span>
+</code></pre></div>
+<h2 id="attached">attached()</h2>
+<p>Asks the <strong>board</strong> whether this servo is attached. Resolves <code>true</code>/<code>false</code> (<code>false</code> after a 2 s timeout — dead link or unresponsive board). Query → promise, like <code>busServo.ping()</code>; for the cached mirror, read <code>arduino.pan.isAttached</code>.</p>
+<div class="sig sig-js">await arduino.pan.<span class="fn">attached</span>()</div>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><div class="bar">Example — preflight check</div><pre><code><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="k">await</span><span class="w"> </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">pan</span><span class="p">.</span><span class="nx">attached</span><span class="p">())</span><span class="w"> </span><span class="nx">beginSequence</span><span class="p">();</span>
+<span class="k">else</span><span class="w"> </span><span class="nx">showError</span><span class="p">(</span><span class="s1">&#39;pan servo not responding&#39;</span><span class="p">);</span>
 </code></pre></div>
 <h2 id="events">Events</h2>
-<div class="sig">arduino.pan.<span class="fn">on</span>(event, handler)</div>
+<div class="sig sig-js">arduino.pan.<span class="fn">on</span>(event, handler)</div>
 <table>
 <thead>
 <tr>
@@ -276,9 +354,9 @@
 </thead>
 <tbody>
 <tr>
-<td><code>'read'</code></td>
+<td><code>'change'</code></td>
 <td><code>{ angle }</code></td>
-<td>A poll result arrives.</td>
+<td>The angle changed by at least the threshold.</td>
 </tr>
 <tr>
 <td><code>'write'</code></td>
@@ -286,21 +364,22 @@
 <td>A write is issued.</td>
 </tr>
 <tr>
-<td><code>'attached'</code></td>
-<td><code>{ attached }</code></td>
-<td>Attach state changes.</td>
+<td><code>'gesture'</code></td>
+<td><code>{ segments, absolute, duration }</code></td>
+<td>A gesture starts playing.</td>
 </tr>
 <tr>
 <td><code>'done'</code></td>
 <td><code>{ angle }</code></td>
-<td>A timed move reaches its target.</td>
+<td>A timed move or gesture reaches its target.</td>
 </tr>
 </tbody>
 </table>
-<p>Shorthand: <code>onRead(fn)</code>, <code>onWrite(fn)</code>, <code>onAttached(fn)</code>, <code>onDone(fn)</code>.</p>
-<h2 id="setthrottle--setthreshold">setThrottle() / setThreshold()</h2>
+<p>Shorthand: <code>onChange(fn)</code>, <code>onWrite(fn)</code>, <code>onDone(fn)</code>.</p>
+<h2 id="setwritethrottle--setwritethreshold">setWriteThrottle() / setWriteThreshold()</h2>
 <p>Rate-limits outgoing writes — useful when driving the servo from mouse movement or a draw loop.</p>
-<div class="sig">arduino.pan.<span class="fn">setThrottle</span>(ms) · arduino.pan.<span class="fn">setThreshold</span>(degrees)</div>
+<div class="sig sig-js">arduino.pan.<span class="fn">setWriteThrottle</span>(ms) · arduino.pan.<span class="fn">setWriteThreshold</span>(degrees)</div>
+<p>The write family paces what you <strong>send</strong> (min ms between writes; skip deltas under <code>degrees</code>); the <code>setRead*</code> family gates what you <strong>hear</strong>.</p>
 <table>
 <thead>
 <tr>
@@ -337,15 +416,15 @@
 </tr>
 </tbody>
 </table>
-<div class="sig">arduino.pan.<span class="fn">getState</span>()</div>
+<div class="sig sig-js">arduino.pan.<span class="fn">getState</span>()</div>
 <p><strong>Returns</strong> a snapshot of all servo state.</p>
-<p>See also: <a href="groups.html">Groups</a> · <a href="bus-servo.html">Bus servo</a> · <a href="../examples/servo-example.html">Servo example</a></p>
+<p>See also: <a href="groups.html">Groups</a> · <a href="bus-servo.html">Bus servo</a> · <a href="../examples/servo-control.html">Servo example</a> · <a href="../examples/expressive-gesture.html">Expressive gesture example</a></p>
 
     </main>
   </div>
 </div>
 
-<footer class="site-footer speckled">
+<footer class="site-footer">
   <div class="wrap">
     <span>Pardalote — created by Scott Mitchell for design education and creative technology.</span>
     <span><a href="index.html">Reference</a> · <a href="https://github.com/ScottMit/Pardalote">GitHub</a> · GPL-3.0</span>

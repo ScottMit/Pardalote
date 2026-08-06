@@ -1,7 +1,7 @@
 // ==============================================================
 // PardaloteCamera.h
 // Pardalote Camera Extension
-// Version v1.0
+// Part of Pardalote — version in library.properties
 // by Scott Mitchell
 // GPL-3.0 License
 //

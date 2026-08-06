@@ -1,7 +1,7 @@
 // ==============================================================
 // defs.h
 // Pardalote Protocol Constants
-// Version v1.0
+// Part of Pardalote — version in library.properties
 // by Scott Mitchell
 // GPL-3.0 License
 // ==============================================================
@@ -12,8 +12,17 @@
 // -------------------------------------------------------------------
 // Protocol Version
 // -------------------------------------------------------------------
+// Wire-compatibility contract between any JS build and any firmware
+// build. MAJOR changes when old clients can no longer talk (forces a
+// MAJOR product release); MINOR marks backward-compatible additions.
+// Independent of the product version below.
 #define PROTOCOL_VERSION_MAJOR 1
 #define PROTOCOL_VERSION_MINOR 0
+
+// Product version — the release humans see. Canonical copies live in
+// library.properties (Arduino) and package.json (JS); this string lets
+// a sketch print what it's running.
+#define PARDALOTE_VERSION "1.0.0"
 
 // -------------------------------------------------------------------
 // ADC Resolution
@@ -22,7 +31,7 @@
 //   #define ADC_RESOLUTION_BITS 14   // e.g. after analogReadResolution(14)
 // -------------------------------------------------------------------
 #ifndef ADC_RESOLUTION_BITS
-  #if defined(PLATFORM_UNO_R4)
+  #if defined(PLATFORM_UNO_R4) || defined(PLATFORM_UNO_R4_MINIMA)
     #define ADC_RESOLUTION_BITS 10   // Arduino compat default (hardware is 14-bit)
   #elif defined(PLATFORM_ESP32)
     #define ADC_RESOLUTION_BITS 12   // ESP32 default
@@ -32,22 +41,64 @@
 #endif
 
 // -------------------------------------------------------------------
-// Core Commands (CMD byte, 0x00–0x0A)
-// Note: extension CMD values (0x0A+) are scoped to their device ID
-// and are dispatched separately — there is no conflict.
+// Core Commands (CMD byte, 0x00–0x0B). The range 0x00–0x0F is RESERVED
+// for the core — extension commands start at 0x10 (see the rule at the
+// Extension Device IDs section).
 // -------------------------------------------------------------------
-#define CMD_HELLO         0x00  // Arduino → JS on connect: [major, minor, adcBits] + board string
+#define CMD_HELLO         0x00  // Arduino → JS on connect: [major, minor, adcBits, bootId] + board string
+                                // bootId (param 3): random 31-bit token generated once
+                                // per boot — JS compares it across reconnects to tell "board
+                                // rebooted" (drop board-originated state) from "network blip"
+                                // (keep everything). Older firmware omits it; JS treats absent as 0.
 #define CMD_ANNOUNCE      0x01  // Arduino → JS per extension: [version, maxInstances]
-#define CMD_PIN_MODE      0x02  // JS → Arduino: set pin mode; Arduino → JS: announce pin config
+#define CMD_PIN_MODE      0x02  // JS → Arduino: set pin mode [mode]; Arduino → JS: announce pin
+                                // config [mode] or [mode, interval, threshold] when the board
+                                // itself polls the pin (share() with an interval)
 #define CMD_DIGITAL_WRITE 0x03  // JS → Arduino: write value; Arduino → JS: announce output state
-#define CMD_DIGITAL_READ  0x04
+#define CMD_DIGITAL_READ  0x04  // JS → Arduino: [interval?, threshold?] read/register (threshold;
+                                // 0 = board default); Arduino → JS: [value]
 #define CMD_ANALOG_WRITE  0x05
-#define CMD_ANALOG_READ   0x06
-#define CMD_END           0x07  // Stop a periodic read
+#define CMD_ANALOG_READ   0x06  // params as CMD_DIGITAL_READ; analog default threshold = ADC
+                                // noise floor (analogMax >> 8, min 1)
+#define CMD_END           0x07  // Stop a periodic read (per requesting client)
 #define CMD_PING          0x08  // JS → Arduino: heartbeat request
 #define CMD_PONG          0x09  // Arduino → JS: heartbeat response
 #define CMD_SYNC_COMPLETE 0x0A  // Arduino → JS: all announce frames sent; JS fires 'ready'
 #define CMD_MESSAGE       0x0B  // Both ways: user-defined key/value message (see Message Channel below)
+#define CMD_AUTH          0x0C  // Connection key (WebSocket transport only — the serial transport
+                                // implies physical possession and skips auth entirely).
+                                // JS → Arduino: no params + payload: UTF-8 key. Sent as the FIRST
+                                //   frame after the socket opens when connect() was given a key.
+                                // Arduino → JS: [reason] then the board closes the socket —
+                                //   1 = board requires a key and none arrived in time,
+                                //   2 = wrong key.
+                                // Success sends no AUTH reply: the normal HELLO is the acceptance.
+                                // This is an accident-prevention latch, not security: the key
+                                // crosses the network in cleartext (ws://, no TLS).
+// Next free core cmd: 0x0D.
+
+// -------------------------------------------------------------------
+// WebSocket client capacity — shared by the core (per-client pin read
+// gating) and extensions (per-client sensor read gating). The serial
+// transport has exactly one client, permanently client 0 — the same
+// per-client machinery serves it as a degenerate case.
+// -------------------------------------------------------------------
+#define PARDALOTE_MAX_CLIENTS 4
+
+// -------------------------------------------------------------------
+// Transport selection — Pardalote.begin(PARDALOTE_SERIAL) speaks the
+// same binary protocol over USB serial instead of WiFi + WebSocket
+// (COBS-framed with a CRC8 — see internal/serial_transport.h). WiFi is
+// the default on WiFi-capable boards (no runtime failover to serial);
+// on boards with no radio (UNO R4 Minima) every begin() form starts
+// serial, the only transport the hardware can have. The value is an
+// API token, not a wire constant.
+// -------------------------------------------------------------------
+#define PARDALOTE_SERIAL 1
+
+// Longest connection key begin("key") accepts (excl. NUL). Longer keys
+// are truncated with a Serial warning.
+#define PARDALOTE_KEY_MAX 32
 
 // -------------------------------------------------------------------
 // Pin tracking
@@ -63,27 +114,49 @@
 #define MODE_OUTPUT         1
 #define MODE_INPUT_PULLUP   2
 #define MODE_INPUT_PULLDOWN 3   // ESP32 only
-#define MODE_ANALOG_INPUT   8
+#define ANALOG_INPUT_MODE   8
+
+// The four MODE_* values above are internal wire codes: a sketch passes
+// Arduino's own INPUT / OUTPUT / INPUT_PULLUP / INPUT_PULLDOWN to share() and
+// the library maps them to these. ANALOG_INPUT_MODE is the exception — it's the
+// one pin mode a sketch names directly, because Arduino has no equivalent
+// ("analog input, auto-polled to the browser"). It is deliberately suffixed
+// _MODE rather than a bare ANALOG_INPUT: pin-mode names are an unscoped, crowded
+// #define space shared by every core (ESP32 defines ANALOG; some Pycom builds
+// define ANALOG_INPUT as 0x0), and the _MODE suffix keeps us clear of them
+// without needing a fragile #ifndef guard. The JS side uses the same name
+// (const ANALOG_INPUT_MODE = 8); this value is the wire constant and must match
+// on both sides.
 
 // -------------------------------------------------------------------
+// RULE: extension CMD values MUST be >= 0x10. 0x00–0x0F is reserved for
+// core commands — CMD_MESSAGE (0x0B) is routed by its cmd byte ALONE
+// (message flags in the target high byte can exceed RESERVED_START), so
+// an extension cmd that collides with a core cmd routed this way is
+// silently misdispatched on both sides of the wire.
+//
 // Extension Device IDs (TARGET >= 200)
 // -------------------------------------------------------------------
 #define RESERVED_START        200
 #define DEVICE_NEO_PIXEL      200
 #define DEVICE_SERVO          201
 #define DEVICE_ULTRASONIC     202
-// DEVICE_MPU 203, DEVICE_CAMERA 204 and DEVICE_STEPPER 205 are defined
+// DEVICE_IMU 203, DEVICE_CAMERA 204 and DEVICE_STEPPER 205 are defined
 // alongside their command blocks lower in this file. Next free ID: 206.
 
 // -------------------------------------------------------------------
-// NeoPixel Commands (0x0A–0x13)
+// NeoPixel Commands (0x5C–0x61)
 // -------------------------------------------------------------------
-#define CMD_NEO_INIT       0x0A  // params: [instanceId, pin, numPixels, type]
-#define CMD_NEO_SET_PIXEL  0x0B  // params: [instanceId, index, r, g, b (, w)]
-#define CMD_NEO_FILL       0x0C  // params: [instanceId, color, first, count]
-#define CMD_NEO_CLEAR      0x0D  // params: [instanceId]
-#define CMD_NEO_BRIGHTNESS 0x0E  // params: [instanceId, value]
-#define CMD_NEO_SHOW       0x0F  // params: [instanceId]
+// Numbered after the encoder block. NeoPixel historically sat at
+// 0x0A–0x0F, INSIDE the core range — and CMD_MESSAGE (0x0B) is routed by
+// cmd alone, before target dispatch, so it silently swallowed every
+// CMD_NEO_SET_PIXEL frame. Hence the >= 0x10 rule above.
+#define CMD_NEO_INIT       0x5C  // params: [instanceId, pin, numPixels, type]
+#define CMD_NEO_SET_PIXEL  0x5D  // params: [instanceId, index, r, g, b (, w)]
+#define CMD_NEO_FILL       0x5E  // params: [instanceId, color, first, count]
+#define CMD_NEO_CLEAR      0x5F  // params: [instanceId]
+#define CMD_NEO_BRIGHTNESS 0x60  // params: [instanceId, value]
+#define CMD_NEO_SHOW       0x61  // params: [instanceId]
 
 // -------------------------------------------------------------------
 // Servo Commands (0x14–0x1D)
@@ -107,6 +180,60 @@
                                       // Ar→JS (announce): same shape, replays limit state.
 
 // -------------------------------------------------------------------
+// Expressive-motion gesture band (0x58–0x5A) — one code per actuator
+// type. A gesture is a per-channel SEGMENT SCHEDULE the board plays
+// LOCALLY (no per-segment round-trips): push it once, the board advances
+// segment→segment on its own millis() clock, so multi-channel gestures
+// stay phase-locked and arrive-together survives. Completion reuses the
+// type's existing DONE frame (CMD_SERVO_DONE etc.) → whenDone().
+//
+// Payload = one or more channel blocks, back to back:
+//   channel: [ logicalId u8, flags u8, segCount u8, segment × segCount ]
+//   segment: [ curve u8, dur u16 (ms, big-endian), value i32 (big-endian) ]
+// flags: bit0 = reference frame (0 relative-delta / 1 absolute-target),
+//        bit1 = loop (reserved — playback not yet implemented).
+// `value` is a per-segment DELTA (relative) or TARGET (absolute), in the
+// actuator's native unit. `from` is captured on-board at each segment
+// start (dynamic capture), so relative gestures need no absolute truth.
+// -------------------------------------------------------------------
+#define CMD_SERVO_GESTURE       0x58  // JS→Ar (global): payload = servo channel blocks (see above)
+#define CMD_STEPPER_GESTURE     0x59  // JS→Ar (global): stepper channel blocks — MODE_EASED segment player
+#define CMD_BUSSERVO_GESTURE    0x5A  // JS→Ar (global): bus-servo channel blocks — feedback-sequenced segments
+
+// Gesture channel flags (defs.h ↔ pardalote.js must agree).
+#define GESTURE_FLAG_ABSOLUTE   0x01  // value is an absolute target, not a relative delta
+#define GESTURE_FLAG_LOOP       0x02  // repeat the schedule (reserved)
+
+// Shared easing curve ids — the ONE numbered table used by every surface
+// (this firmware, the standalone follower's PROGMEM gestures, and
+// pardalote.js). Keep the formulas identical across surfaces; see
+// pardaloteEase() below and curveShape() in pardalote.js. Curated set — 0x05+
+// (elastic, bounce, …) reserved for later.
+#define CURVE_LINEAR       0   // t
+#define CURVE_EASE_IN      1   // t^2                 — accelerate from rest
+#define CURVE_EASE_OUT     2   // 1-(1-t)^2           — decelerate into rest
+#define CURVE_EASE_IN_OUT  3   // smoothstep t^2(3-2t)
+#define CURVE_BACK         4   // overshoot past the target, then settle
+
+// The one on-device easing implementation — used by every extension's
+// segment player (servo, stepper, …) and MUST match curveShape() in
+// pardalote.js. `t` in [0,1]; CURVE_BACK returns slightly >1 mid-flight
+// (the overshoot), which position players re-clamp and velocity players
+// render as a brief reverse near the end.
+static inline float pardaloteEase(uint8_t curve, float t) {
+    switch (curve) {
+        case CURVE_EASE_IN:     return t * t;
+        case CURVE_EASE_OUT:    return t * (2.0f - t);              // 1-(1-t)^2
+        case CURVE_EASE_IN_OUT: return t * t * (3.0f - 2.0f * t);   // smoothstep
+        case CURVE_BACK: {                                          // easeOutBack, s = 1.70158
+            float k = t - 1.0f;
+            return 1.0f + 2.70158f * k * k * k + 1.70158f * k * k;
+        }
+        default:                return t;                           // CURVE_LINEAR
+    }
+}
+
+// -------------------------------------------------------------------
 // Ultrasonic Commands (0x1E–0x27)
 // -------------------------------------------------------------------
 #define CMD_ULTRASONIC_ATTACH      0x1E  // params: [instanceId, trigPin, echoPin]
@@ -121,11 +248,11 @@
 #define UNIT_INCH 1
 
 // -------------------------------------------------------------------
-// MPU (6-DOF IMU) Device ID and Commands (0x28–0x2F)
+// IMU (6-DOF) Device ID and Commands (0x28–0x2F)
 // Designed for MPU-6050; adaptable to other I2C IMUs by swapping the
-// I2C register reads in PardaloteMPU.h (see comments there).
+// I2C register reads in PardaloteIMU.h (see comments there).
 // -------------------------------------------------------------------
-#define DEVICE_MPU  203
+#define DEVICE_IMU  203
 
 // -------------------------------------------------------------------
 // Camera Device ID and Commands (0x30–0x32)
@@ -138,18 +265,18 @@
 #define CMD_CAMERA_SET_RES     0x31  // JS→Ar: [id, framesize]  (framesize_t enum value)
 #define CMD_CAMERA_SET_QUALITY 0x32  // JS→Ar: [id, quality]    0 = best, 63 = worst
 
-#define CMD_MPU_ATTACH          0x28  // JS→Ar: [id, addr, sda?, scl?] + model name string in payload
+#define CMD_IMU_ATTACH          0x28  // JS→Ar: [id, addr, sda?, scl?] + model name string in payload
                                       // Ar→JS (announce): [id, addr] + model name string in payload
-#define CMD_MPU_DETACH          0x29  // JS→Ar: [id]
-#define CMD_MPU_READ            0x2A  // JS→Ar: [id]
+#define CMD_IMU_DETACH          0x29  // JS→Ar: [id]
+#define CMD_IMU_READ            0x2A  // JS→Ar: [id]
                                       // Ar→JS: [id, ax, ay, az, gx, gy, gz, temp]  (floats, g and °/s)
-#define CMD_MPU_SET_ACCEL_RANGE 0x2B  // JS→Ar: [id, range]  0=±2g, 1=±4g, 2=±8g, 3=±16g
-#define CMD_MPU_SET_GYRO_RANGE  0x2C  // JS→Ar: [id, range]  0=±250, 1=±500, 2=±1000, 3=±2000 °/s
-#define CMD_MPU_CALIBRATE       0x2D  // JS→Ar: [id, samples?]
+#define CMD_IMU_SET_ACCEL_RANGE 0x2B  // JS→Ar: [id, range]  0=±2g, 1=±4g, 2=±8g, 3=±16g
+#define CMD_IMU_SET_GYRO_RANGE  0x2C  // JS→Ar: [id, range]  0=±250, 1=±500, 2=±1000, 3=±2000 °/s
+#define CMD_IMU_CALIBRATE       0x2D  // JS→Ar: [id, samples?]
                                       // Ar→JS: [id, ax, ay, az, gx, gy, gz]  offset floats
 // Model name strings (e.g. "6050", "LSM6DSOX") are sent in the payload of
-// CMD_MPU_ATTACH and matched against SENSORS[i].name in PardaloteMPU.h.
-// See mpu.js MPU_MODELS for the JS-side list — row order in either table
+// CMD_IMU_ATTACH and matched against SENSORS[i].name in PardaloteIMU.h.
+// See imu.js IMU_MODELS for the JS-side list — row order in either table
 // is irrelevant; the two are coupled by name only.
 
 // -------------------------------------------------------------------
@@ -302,6 +429,19 @@
 #define CMD_BUSSERVO_DONE        0x51  // Ar→JS (unsolicited): [id, position] — servo settled at its goal.
                                        // The board polls the servo's Moving flag after a write and emits this
                                        // when it stops, so bus servos get a done like steppers/servos.
+// Uses 0x62 — the next globally-free command code (NeoPixel ends at 0x61); the
+// bus-servo 0x41–0x4E block is full, and dispatch is by (deviceId, cmd) anyway.
+#define CMD_BUSSERVO_READ_LIMITS 0x62  // JS→Ar: [id]  read the servo's EEPROM min/max ANGLE-LIMIT registers
+                                       // (SMS_STS/SCSCL_MIN/MAX_ANGLE_LIMIT). Ar→JS: [id, min, max] (counts;
+                                       // −1 = servo didn't answer). The board reads + caches these at attach
+                                       // and replays the cache in announce(); this command forces a fresh read.
+                                       // Unlike CMD_BUSSERVO_SET_LIMITS (board-RAM soft limits) these are the
+                                       // servo's OWN firmware limits — read-only here, never written.
+#define CMD_BUSSERVO_PRESENT     0x63  // Ar→JS: [id, servoId, present] — did the servo answer the attach-time
+                                       // ping? present 1 = found, 0 = no response. The board pings at attach,
+                                       // caches the result, and replays it in announce() (so late/reconnecting
+                                       // browsers learn it too). Gives JS the parity with the serial monitor's
+                                       // "[found] / [NO RESPONSE]" line. (0x64 is the next globally-free code.)
 
 // Series (param 2 of CMD_BUSSERVO_ATTACH)
 #define BUSSERVO_SERIES_ST  0   // STS / SMS series — 0–4095 counts (STS3215 etc.)
@@ -345,5 +485,25 @@
 
 // Longest message key (excl. NUL). Keys are length-prefixed with a u8.
 #define MAX_MESSAGE_KEY  24
+
+// -------------------------------------------------------------------
+// Rotary Encoder Extension (PardaloteEncoder.h)
+//
+// Quadrature encoders (KY-040 knobs, motor shaft encoders). Counted in
+// interrupt handlers — a 4x state-table decoder that rejects invalid
+// transitions, so mechanical bounce never miscounts and edge rates far
+// beyond the loop rate are handled. Position is ABSOLUTE (raw
+// quadrature steps; a KY-040 detent = 4 steps), so intermediate values
+// are disposable: transmission uses the analog model — per-client
+// interval as a rate limit + threshold, latest value wins.
+// -------------------------------------------------------------------
+#define DEVICE_ENCODER  207
+
+#define CMD_ENCODER_ATTACH        0x58  // JS→Ar: [id, pinA, pinB]
+#define CMD_ENCODER_DETACH        0x59  // JS→Ar: [id]
+#define CMD_ENCODER_READ          0x5A  // JS→Ar: [id, interval?, threshold?] read/register (0 = defaults;
+                                        //   interval < 0 = END, unregister). Ar→JS: [id, position]
+#define CMD_ENCODER_SET_POSITION  0x5B  // JS→Ar: [id, value] — re-zero/set the count; board echoes a
+                                        //   READ to all clients so every mirror adopts the new frame
 
 #endif

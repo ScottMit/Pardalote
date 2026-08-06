@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Leader → Follower — Pardalote examples</title>
+<meta name="description" content="Teleoperate a robot arm by hand: move a leader arm and a second follower arm mirrors it live, joint for joint — the LeRobot leader/follower rig, in the browser across two boards.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../css/site.css">
+</head>
+<body data-nav="examples">
+
+<nav class="site-nav">
+  <a class="logo" href="../index.html">
+    <img src="../assets/logo.svg" width="26" height="26" alt="">
+    Pardalote
+  </a>
+  <div class="links">
+    <a data-nav="home" href="../index.html">Home</a>
+    <a data-nav="download" href="../download.html">Download</a>
+    <a data-nav="examples" href="index.html">Examples</a>
+    <a data-nav="reference" href="../reference/index.html">Reference</a>
+    <a href="https://github.com/ScottMit/Pardalote">GitHub</a>
+  </div>
+</nav>
+
+<div class="page-head">
+  <div class="wrap">
+    <div class="crumb"><a href="index.html">Examples</a> / Leader → Follower</div>
+    <h1>Leader → Follower</h1>
+    <p>Teleoperate a robot arm by hand: move a leader arm and a second follower arm mirrors it live, joint for joint — the LeRobot leader/follower rig, in the browser across two boards.</p>
+  </div>
+</div>
+
+<div class="wrap md-layout">
+  <div class="md-body">
+    <div class="tags" style="margin-bottom:.5rem;"><span class="tag lvl-adv">Advanced</span><span class="tag">Motion</span><span class="tag">Tool</span></div>
+    <div class="ex-meta-row">
+      <a class="btn btn-dark" href="https://github.com/ScottMit/Pardalote/tree/main/examples/leader-follower">View the code on GitHub</a>
+    </div>
+    <div class="screenshot-slot">Screenshot / video of this example — coming soon</div>
+<h1 id="leader--follower">Leader → Follower</h1>
+<p>Teleoperate a robot arm by hand. Move a <strong>leader</strong> arm and a second <strong>follower</strong>
+arm mirrors it live, joint for joint — the leader/follower setup from the
+LeRobot project, running entirely in the browser. Two boards, two arms, one
+web page.</p>
+<p>The leader is free (torque off), so you back-drive it by hand; the browser
+streams its six joint positions to the follower, which holds and follows.</p>
+
+  </div>
+
+  <div class="md-body">
+<h2 id="hardware">Hardware</h2>
+<ul>
+<li><strong>Two</strong> WiFi Arduinos — UNO R4 WiFi or ESP32, one per arm.</li>
+<li><strong>Two identical arms</strong>, each with six Feetech <strong>STS3215</strong> bus servos on a
+serial-bus driver board, servo IDs <strong>1–6</strong>. (The STS3215 is the servo in the
+LeRobot SO-100 / SO-101 arms.)</li>
+<li>A servo power supply per arm (6–7.4 V) — not the board's 5 V rail.</li>
+</ul>
+<p>Bus wiring is the same as the <a href="https://github.com/ScottMit/Pardalote/blob/main/examples/leader-follower/bus-servos.html">Bus servos</a> example: UNO R4 →
+Serial1 (D0/D1); ESP32 → set the pins with the <strong>bus</strong> RX/TX fields on the page.</p>
+<h2 id="arduino">Arduino</h2>
+<p>Both boards run the <strong>same</strong> bus-servo firmware — upload <strong>File → Examples →
+Pardalote → bus-servos</strong> to each, and note the IP each reports. Nothing arm-
+specific lives on the board; the leader/follower logic is all in the browser.</p>
+<h2 id="browser">Browser</h2>
+<p>This is a <strong>tool</strong> — no code editing. Open <code>index.html</code> and:</p>
+<ol>
+<li>Enter each board's address in the <strong>Leader</strong> and <strong>Follower</strong> rows (WiFi IP,
+or switch a row to <strong>USB</strong>) and press <strong>Connect</strong> on each — the button turns
+green when it's up.</li>
+<li>Line up a joint on both arms and toggle its <strong>sync</strong> button to match their
+origins (this cancels any difference in how the servos were installed).</li>
+<li>Press <strong>start relay</strong>. Move the leader by hand; the follower mirrors it.</li>
+</ol>
+<table>
+<thead>
+<tr>
+<th>Control</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>sync</strong> (per joint)</td>
+<td>capture both arms' current positions as a matched origin</td>
+</tr>
+<tr>
+<td><strong>flip</strong> (per joint)</td>
+<td>mirror that joint — leader forward → follower backward</td>
+</tr>
+<tr>
+<td><strong>set limits</strong></td>
+<td>free the follower, hand-move it to record safe soft limits, press again to lock</td>
+</tr>
+<tr>
+<td><strong>free follower</strong></td>
+<td>release the follower's torque to pose it by hand</td>
+</tr>
+<tr>
+<td><strong>start relay</strong></td>
+<td>stream leader → follower</td>
+</tr>
+</tbody>
+</table>
+<p>Every setting is remembered per browser, so a return visit reconnects with one
+click.</p>
+<h2 id="how-it-works">How it works</h2>
+<p><strong>Two boards means two <code>Arduino</code> instances</strong> — one connection each:</p>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><pre><code><span class="kd">const</span><span class="w"> </span><span class="nx">leader</span><span class="w">   </span><span class="o">=</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">Arduino</span><span class="p">();</span>
+<span class="kd">const</span><span class="w"> </span><span class="nx">follower</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">Arduino</span><span class="p">();</span>
+<span class="nx">leader</span><span class="p">.</span><span class="nx">connect</span><span class="p">(</span><span class="s1">&#39;192.168.1.41&#39;</span><span class="p">);</span>
+<span class="nx">follower</span><span class="p">.</span><span class="nx">connect</span><span class="p">(</span><span class="s1">&#39;192.168.1.42&#39;</span><span class="p">);</span>
+</code></pre></div>
+<p><strong>Six bus servos per arm.</strong> Each arm gets six <code>BusServo</code>s, attached to IDs 1–6.
+The leader is freed and polled so we get live positions; the follower is held:</p>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><pre><code><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kd">let</span><span class="w"> </span><span class="nx">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">1</span><span class="p">;</span><span class="w"> </span><span class="nx">i</span><span class="w"> </span><span class="o">&lt;=</span><span class="w"> </span><span class="mf">6</span><span class="p">;</span><span class="w"> </span><span class="nx">i</span><span class="o">++</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">leader</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;L&#39;</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="nx">i</span><span class="p">,</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">BusServo</span><span class="p">());</span>
+<span class="w">    </span><span class="nx">follower</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;F&#39;</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="nx">i</span><span class="p">,</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">BusServo</span><span class="p">());</span>
+<span class="p">}</span>
+
+<span class="nx">leader</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;ready&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kd">let</span><span class="w"> </span><span class="nx">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">1</span><span class="p">;</span><span class="w"> </span><span class="nx">i</span><span class="w"> </span><span class="o">&lt;=</span><span class="w"> </span><span class="mf">6</span><span class="p">;</span><span class="w"> </span><span class="nx">i</span><span class="o">++</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="kd">const</span><span class="w"> </span><span class="nx">s</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">leader</span><span class="p">[</span><span class="s1">&#39;L&#39;</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="nx">i</span><span class="p">];</span>
+<span class="w">        </span><span class="nx">s</span><span class="p">.</span><span class="nx">attach</span><span class="p">(</span><span class="nx">i</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;ST&#39;</span><span class="p">);</span>
+<span class="w">        </span><span class="nx">s</span><span class="p">.</span><span class="nx">disableTorque</span><span class="p">();</span><span class="w">   </span><span class="c1">// back-drivable — move it by hand</span>
+<span class="w">        </span><span class="nx">s</span><span class="p">.</span><span class="nx">read</span><span class="p">(</span><span class="mf">50</span><span class="p">);</span><span class="w">          </span><span class="c1">// stream its position ~20×/sec</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">});</span>
+</code></pre></div>
+<p><strong>The follower moves as a group.</strong> A <a href="https://github.com/ScottMit/Pardalote/blob/main/examples/leader-follower/../reference/groups.html">group</a> writes all
+six joints in one Feetech SyncWrite packet (one WebSocket message), so they move
+together instead of trickling in one at a time:</p>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><pre><code><span class="kd">const</span><span class="w"> </span><span class="nx">arm</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">follower</span><span class="p">.</span><span class="nx">group</span><span class="p">(</span><span class="s1">&#39;arm&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="mf">1</span><span class="o">:</span><span class="w"> </span><span class="nx">follower</span><span class="p">.</span><span class="nx">F1</span><span class="p">,</span><span class="w"> </span><span class="mf">2</span><span class="o">:</span><span class="w"> </span><span class="nx">follower</span><span class="p">.</span><span class="nx">F2</span><span class="p">,</span><span class="w"> </span><span class="mf">3</span><span class="o">:</span><span class="w"> </span><span class="nx">follower</span><span class="p">.</span><span class="nx">F3</span><span class="p">,</span>
+<span class="w">    </span><span class="mf">4</span><span class="o">:</span><span class="w"> </span><span class="nx">follower</span><span class="p">.</span><span class="nx">F4</span><span class="p">,</span><span class="w"> </span><span class="mf">5</span><span class="o">:</span><span class="w"> </span><span class="nx">follower</span><span class="p">.</span><span class="nx">F5</span><span class="p">,</span><span class="w"> </span><span class="mf">6</span><span class="o">:</span><span class="w"> </span><span class="nx">follower</span><span class="p">.</span><span class="nx">F6</span><span class="p">,</span>
+<span class="p">});</span>
+</code></pre></div>
+<p><strong>The relay</strong> copies the leader's live positions to the follower on a timer:</p>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><pre><code><span class="nx">setInterval</span><span class="p">(()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">vals</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{};</span>
+<span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kd">let</span><span class="w"> </span><span class="nx">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">1</span><span class="p">;</span><span class="w"> </span><span class="nx">i</span><span class="w"> </span><span class="o">&lt;=</span><span class="w"> </span><span class="mf">6</span><span class="p">;</span><span class="w"> </span><span class="nx">i</span><span class="o">++</span><span class="p">)</span><span class="w"> </span><span class="nx">vals</span><span class="p">[</span><span class="nx">i</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">leader</span><span class="p">[</span><span class="s1">&#39;L&#39;</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="nx">i</span><span class="p">].</span><span class="nx">position</span><span class="p">;</span>
+<span class="w">    </span><span class="nx">arm</span><span class="p">.</span><span class="nx">write</span><span class="p">(</span><span class="nx">vals</span><span class="p">);</span><span class="w">   </span><span class="c1">// one coordinated move</span>
+<span class="p">},</span><span class="w"> </span><span class="mf">50</span><span class="p">);</span>
+</code></pre></div>
+<p><strong>Sync and flip</strong> are just a per-joint remap. Each joint remembers a <em>leader
+origin</em> and a <em>follower origin</em> (captured when you toggle <strong>sync</strong>, or the servo
+centre otherwise), and the follower target is the leader's movement <em>relative</em> to
+that origin — optionally mirrored:</p>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><pre><code><span class="kd">const</span><span class="w"> </span><span class="nx">delta</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="nx">leaderPos</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="nx">leaderOrigin</span><span class="p">;</span>
+<span class="kd">const</span><span class="w"> </span><span class="nx">target</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">followerOrigin</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="p">(</span><span class="nx">flip</span><span class="w"> </span><span class="o">?</span><span class="w"> </span><span class="o">-</span><span class="nx">delta</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="nx">delta</span><span class="p">);</span>
+</code></pre></div>
+<p>Because the target is relative to a matched origin, the arms don't need to be
+built or mounted identically — you line them up once, sync, and the offset
+cancels out.</p>
+<h2 id="notes">Notes</h2>
+<ul>
+<li><strong>Positions are raw encoder counts</strong> (0–4095 for ST servos, centre 2048), not
+degrees.</li>
+<li><strong>Soft limits are enforced on the follower's board.</strong> &quot;set limits&quot; records the
+hand-moved range and applies it with <code>setLimits()</code>, so a relayed move can't
+drive the follower past it.</li>
+<li>The leader only ever reads; the follower only ever writes — so there's no
+fighting between hand-posing and the relay.</li>
+</ul>
+
+  </div>
+</div>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <span>Pardalote — created by Scott Mitchell for design education and creative technology.</span>
+    <span><a href="../reference/index.html">Reference</a> · <a href="https://github.com/ScottMit/Pardalote">GitHub</a> · GPL-3.0</span>
+  </div>
+</footer>
+
+<script src="../js/site.js"></script>
+</body>
+</html>

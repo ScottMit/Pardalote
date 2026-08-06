@@ -10,9 +10,9 @@
 </head>
 <body data-nav="reference">
 
-<nav class="site-nav speckled">
+<nav class="site-nav">
   <a class="logo" href="../index.html">
-    <img src="../assets/logo.svg" width="30" height="30" alt="">
+    <img src="../assets/logo.svg" width="26" height="26" alt="">
     Pardalote
   </a>
   <div class="links">
@@ -27,34 +27,57 @@
 <div class="wrap">
   <div class="ref-layout">
 <aside class="ref-nav">
-  <h4>Getting started</h4>
+  <button class="ref-nav-toggle" aria-expanded="false" aria-controls="ref-nav-links">Contents</button>
+  <div class="ref-nav-links" id="ref-nav-links">
+  <h4><a href="index.html">Getting started</a></h4>
   <a href="index.html">Overview</a>
   <a href="installation.html">Installation</a>
   <a href="wifi.html">WiFi configuration</a>
-  <h4>Core — JavaScript</h4>
-  <a href="connecting.html#connect">connect() / events</a>
+  <a href="ai-coding.html">Coding with AI</a>
+  <h4><a href="connecting.html">Core — JavaScript</a></h4>
+  <a href="connecting.html#connect">connect()</a>
+  <a href="connecting.html#on">on()</a>
+  <a href="connecting.html#disconnect">disconnect()</a>
+  <a href="connecting.html#getstatus">getStatus()</a>
   <a href="pins.html#pinmode">pinMode()</a>
-  <a href="pins.html#digitalwrite">digitalWrite() / analogWrite()</a>
-  <a href="pins.html#analogread">analogRead() / digitalRead()</a>
-  <a href="pins.html#onchange">onChange()</a>
+  <a href="pins.html#digitalwrite">digitalWrite()</a>
+  <a href="pins.html#analogwrite">analogWrite()</a>
+  <a href="pins.html#setwritethrottle--setwritethreshold">setWriteThrottle() / setWriteThreshold()</a>
+  <a href="pins.html#analogread">analogRead()</a>
+  <a href="pins.html#digitalread">digitalRead()</a>
+  <a href="pins.html#setreadinterval--setreadthreshold">setReadInterval() / setReadThreshold()</a>
+  <a href="pins.html#pin--the-listening-handle">pin() — the listening handle</a>
+  <a href="pins.html#end--endall">end() / endAll()</a>
   <a href="pins.html#pin-aliases">Pin aliases</a>
-  <h4>Core — Arduino</h4>
-  <a href="arduino.html#pardalotebegin">Pardalote.begin() / run()</a>
-  <a href="arduino.html#pardaloteshare">share() / send()</a>
-  <a href="arduino.html#the-actuator-objects">Reading actuators</a>
-  <h4>Extensions</h4>
+  <h4><a href="arduino.html">Core — Arduino</a></h4>
+  <a href="arduino.html#pardalotebegin">Pardalote.begin()</a>
+  <a href="arduino.html#pardaloterun">Pardalote.run()</a>
+  <a href="arduino.html#pardaloteshare">Pardalote.share()</a>
+  <a href="arduino.html#pardalotesend">Pardalote.send()</a>
+  <a href="arduino.html#when-not-to-share">When not to share</a>
+  <h4><a href="messaging.html">Core — Messaging</a></h4>
+  <a href="messaging.html#javascript-to-arduino">JavaScript to Arduino</a>
+  <a href="messaging.html#arduino-to-javascript">Arduino to JavaScript</a>
+  <a href="messaging.html#retain-and-broadcast">Retain and broadcast</a>
+  <a href="messaging.html#inspecting-all-traffic">Inspecting all traffic</a>
+  <h4><a href="extensions.html">Extensions</a></h4>
   <a href="extensions.html">Overview</a>
+  <a href="extensions.html#creating-extension-objects-in-the-firmware">Creating extension objects in the firmware</a>
+  <a href="extensions.html#reading-and-writing-actuators-from-the-sketch">Reading and writing actuators from the sketch</a>
   <a href="servo.html">Servo</a>
   <a href="stepper.html">Stepper</a>
   <a href="bus-servo.html">Bus servo</a>
   <a href="groups.html">Groups</a>
   <a href="neopixel.html">NeoPixel</a>
   <a href="ultrasonic.html">Ultrasonic</a>
-  <a href="mpu.html">MPU / IMU</a>
+  <a href="encoder.html">Rotary encoder</a>
+  <a href="imu.html">IMU</a>
   <a href="camera.html">Camera</a>
-  <h4>Under the hood</h4>
+  <h4><a href="protocol.html">Under the hood</a></h4>
   <a href="protocol.html">Protocol</a>
+  <a href="pin-capabilities.html">Pin capabilities</a>
   <a href="troubleshooting.html">Troubleshooting</a>
+  </div>
 </aside>
     <main class="ref-main">
       <h1>Bus servo</h1>
@@ -62,11 +85,11 @@
 <p>Requires the Feetech/Waveshare <code>SCServo</code> library and <code>&lt;PardaloteBusServo.h&gt;</code> in the sketch. Supports Feetech <strong>ST / SMS</strong> series (0–4095 counts, e.g. the <strong>STS3215</strong> used in the LeRobot SO-100/SO-101 arms) and <strong>SC / SCS</strong> series (0–1023 counts).</p>
 <p>Unlike PWM servos, every bus servo shares <strong>one UART</strong> and is addressed by a hardware <strong>servo ID (1–253)</strong>, and <strong>positions are raw encoder counts, not degrees</strong>. Wiring is via a Waveshare Serial Bus Servo Driver board (or equivalent) on a hardware serial port: UNO R4 WiFi → <code>Serial1</code> (D0/D1), ESP32 → <code>Serial1</code>/<code>Serial2</code>.</p>
 <p>Give the servos their own power supply (6–7.4 V typical) — not the board's 5 V rail. Examples assume:</p>
-<div class="code-ex"><div class="bar">sketch.js — register a bus servo</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;shoulder&#39;</span><span class="p">,</span> <span class="ow">new</span> <span class="nx">BusServo</span><span class="p">());</span>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><div class="bar">sketch.js — register a bus servo</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;shoulder&#39;</span><span class="p">,</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">BusServo</span><span class="p">());</span>
 </code></pre></div>
 <h2 id="configurebus">configureBus()</h2>
 <p>Optional bus configuration — defaults to <code>Serial1</code> at 1 Mbps, brought up lazily on first <code>attach()</code>. Call once from any instance; it affects all bus servos.</p>
-<div class="sig">arduino.shoulder.<span class="fn">configureBus</span>(options)</div>
+<div class="sig sig-js">arduino.shoulder.<span class="fn">configureBus</span>(options)</div>
 <table>
 <thead>
 <tr>
@@ -93,12 +116,12 @@
 </tr>
 </tbody>
 </table>
-<div class="code-ex"><div class="bar">Example — configure the bus</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">shoulder</span><span class="p">.</span><span class="nx">configureBus</span><span class="p">({</span> <span class="nx">serial</span><span class="o">:</span> <span class="mf">1</span><span class="p">,</span> <span class="nx">baud</span><span class="o">:</span> <span class="mf">1000000</span> <span class="p">});</span>
-<span class="nx">arduino</span><span class="p">.</span><span class="nx">shoulder</span><span class="p">.</span><span class="nx">configureBus</span><span class="p">({</span> <span class="nx">rxPin</span><span class="o">:</span> <span class="mf">18</span><span class="p">,</span> <span class="nx">txPin</span><span class="o">:</span> <span class="mf">19</span> <span class="p">});</span>   <span class="c1">// ESP32 custom pins</span>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><div class="bar">Example — configure the bus</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">shoulder</span><span class="p">.</span><span class="nx">configureBus</span><span class="p">({</span><span class="w"> </span><span class="nx">serial</span><span class="o">:</span><span class="w"> </span><span class="mf">1</span><span class="p">,</span><span class="w"> </span><span class="nx">baud</span><span class="o">:</span><span class="w"> </span><span class="mf">1000000</span><span class="w"> </span><span class="p">});</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">shoulder</span><span class="p">.</span><span class="nx">configureBus</span><span class="p">({</span><span class="w"> </span><span class="nx">rxPin</span><span class="o">:</span><span class="w"> </span><span class="mf">18</span><span class="p">,</span><span class="w"> </span><span class="nx">txPin</span><span class="o">:</span><span class="w"> </span><span class="mf">19</span><span class="w"> </span><span class="p">});</span><span class="w">   </span><span class="c1">// ESP32 custom pins</span>
 </code></pre></div>
 <h2 id="attach">attach()</h2>
 <p>Binds this instance to a servo ID on the bus. Call inside <code>on('ready')</code>.</p>
-<div class="sig">arduino.shoulder.<span class="fn">attach</span>(id, [series])</div>
+<div class="sig sig-js">arduino.shoulder.<span class="fn">attach</span>(id, [series])</div>
 <table>
 <thead>
 <tr>
@@ -120,15 +143,15 @@
 </tr>
 </tbody>
 </table>
-<div class="code-ex"><div class="bar">Example — attach by servo ID</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">shoulder</span><span class="p">.</span><span class="nx">attach</span><span class="p">(</span><span class="mf">1</span><span class="p">);</span>
-<span class="nx">arduino</span><span class="p">.</span><span class="nx">wrist</span><span class="p">.</span><span class="nx">attach</span><span class="p">(</span><span class="mf">3</span><span class="p">,</span> <span class="s1">&#39;SC&#39;</span><span class="p">);</span>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><div class="bar">Example — attach by servo ID</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">shoulder</span><span class="p">.</span><span class="nx">attach</span><span class="p">(</span><span class="mf">1</span><span class="p">);</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">wrist</span><span class="p">.</span><span class="nx">attach</span><span class="p">(</span><span class="mf">3</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;SC&#39;</span><span class="p">);</span>
 </code></pre></div>
 <h2 id="detach">detach()</h2>
 <p>Releases torque and unbinds the instance.</p>
-<div class="sig">arduino.shoulder.<span class="fn">detach</span>()</div>
+<div class="sig sig-js">arduino.shoulder.<span class="fn">detach</span>()</div>
 <h2 id="write">write()</h2>
 <p>Moves to a position in raw counts, with optional per-move speed and acceleration.</p>
-<div class="sig">arduino.shoulder.<span class="fn">write</span>(counts, [options])</div>
+<div class="sig sig-js">arduino.shoulder.<span class="fn">write</span>(counts, [options])</div>
 <table>
 <thead>
 <tr>
@@ -150,21 +173,21 @@
 </tr>
 </tbody>
 </table>
-<div class="code-ex"><div class="bar">Example — position moves</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">shoulder</span><span class="p">.</span><span class="nx">write</span><span class="p">(</span><span class="mf">2048</span><span class="p">);</span>                        <span class="c1">// centre</span>
-<span class="nx">arduino</span><span class="p">.</span><span class="nx">shoulder</span><span class="p">.</span><span class="nx">write</span><span class="p">(</span><span class="mf">3000</span><span class="p">,</span> <span class="p">{</span> <span class="nx">speed</span><span class="o">:</span> <span class="mf">3000</span><span class="p">,</span> <span class="nx">acc</span><span class="o">:</span> <span class="mf">50</span> <span class="p">});</span>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><div class="bar">Example — position moves</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">shoulder</span><span class="p">.</span><span class="nx">write</span><span class="p">(</span><span class="mf">2048</span><span class="p">);</span><span class="w">                        </span><span class="c1">// centre</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">shoulder</span><span class="p">.</span><span class="nx">write</span><span class="p">(</span><span class="mf">3000</span><span class="p">,</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">speed</span><span class="o">:</span><span class="w"> </span><span class="mf">3000</span><span class="p">,</span><span class="w"> </span><span class="nx">acc</span><span class="o">:</span><span class="w"> </span><span class="mf">50</span><span class="w"> </span><span class="p">});</span>
 </code></pre></div>
 <h2 id="writedegrees">writeDegrees()</h2>
 <p>Degree convenience wrapper — accurate for ST (4096/360°), nominal for SC.</p>
-<div class="sig">arduino.shoulder.<span class="fn">writeDegrees</span>(degrees)</div>
+<div class="sig sig-js">arduino.shoulder.<span class="fn">writeDegrees</span>(degrees)</div>
 <h2 id="center">center()</h2>
 <p>Moves to the middle of the range (<code>resolution / 2</code>, i.e. 2048 for ST).</p>
-<div class="sig">arduino.shoulder.<span class="fn">center</span>()</div>
+<div class="sig sig-js">arduino.shoulder.<span class="fn">center</span>()</div>
 <h2 id="setmovedefaults">setMoveDefaults()</h2>
-<p>Sets the default speed and acceleration used by plain <code>write()</code>, group <code>set()</code> and <code>moveTo()</code>.</p>
-<div class="sig">arduino.shoulder.<span class="fn">setMoveDefaults</span>(speed, acc)</div>
+<p>Sets the default speed and acceleration used by plain <code>write()</code> and group <code>write()</code> / <code>writeTimed()</code>.</p>
+<div class="sig sig-js">arduino.shoulder.<span class="fn">setMoveDefaults</span>(speed, acc)</div>
 <h2 id="writetimed">writeTimed()</h2>
 <p>Reaches a position in about a set time — the speed is picked from the move distance. What lets bus servos <strong>arrive together</strong> in a <a href="groups.html">group</a>.</p>
-<div class="sig">arduino.shoulder.<span class="fn">writeTimed</span>(counts, duration)</div>
+<div class="sig sig-js">arduino.shoulder.<span class="fn">writeTimed</span>(counts, duration)</div>
 <table>
 <thead>
 <tr>
@@ -186,18 +209,62 @@
 </tr>
 </tbody>
 </table>
+<h2 id="gesture">gesture()</h2>
+<p>Plays an authored <strong>segment schedule</strong> — an ordered list of moves the board runs back-to-back, advancing to the next when the servo reports it has arrived (its own <code>Moving</code> flag, not a timer). Values are in <strong>counts</strong>. Because a bus servo runs its own motion, each segment is one move at a distance/duration-matched speed, so the <code>curve</code> is accepted (for schema parity across actuators) but <strong>not rendered inside a segment</strong> — unlike a PWM servo. Expression comes from how you break the move into segments, and from lane overlap in a <a href="groups.html#gesture">group</a>. Fires <code>done</code> when the last segment lands.</p>
+<div class="sig sig-js">arduino.shoulder.<span class="fn">gesture</span>(segments, [opts])</div>
+<p>Each segment carries a duration and a displacement expressed <strong>either</strong> relatively (<code>by</code>) <strong>or</strong> absolutely (<code>to</code>):</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>dur</code></td>
+<td>number</td>
+<td>Segment duration in ms — sizes the segment's speed.</td>
+</tr>
+<tr>
+<td><code>by</code></td>
+<td>number</td>
+<td><strong>Relative</strong> displacement in counts — the default frame.</td>
+</tr>
+<tr>
+<td><code>to</code></td>
+<td>number</td>
+<td><strong>Absolute</strong> target in counts — use in place of <code>by</code>.</td>
+</tr>
+<tr>
+<td><code>curve</code></td>
+<td>string</td>
+<td>Accepted for parity; not rendered within a bus-servo segment.</td>
+</tr>
+</tbody>
+</table>
+<p>Relative by default (the board reads the live start position, then chains from each target). Absolute targets are clamped to the series range / <code>setLimits()</code>. Up to <strong>12</strong> segments. If a segment's implied speed exceeds the servo's maximum it simply takes longer and the next fires on true arrival, so the timeline self-corrects.</p>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><div class="bar">Example — reach out, ease back, small settle</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">shoulder</span><span class="p">.</span><span class="nx">gesture</span><span class="p">([</span>
+<span class="w">    </span><span class="p">{</span><span class="w"> </span><span class="nx">by</span><span class="o">:</span><span class="w">  </span><span class="mf">600</span><span class="p">,</span><span class="w"> </span><span class="nx">dur</span><span class="o">:</span><span class="w"> </span><span class="mf">400</span><span class="w"> </span><span class="p">},</span>
+<span class="w">    </span><span class="p">{</span><span class="w"> </span><span class="nx">by</span><span class="o">:</span><span class="w"> </span><span class="o">-</span><span class="mf">600</span><span class="p">,</span><span class="w"> </span><span class="nx">dur</span><span class="o">:</span><span class="w"> </span><span class="mf">600</span><span class="w"> </span><span class="p">},</span>
+<span class="w">    </span><span class="p">{</span><span class="w"> </span><span class="nx">by</span><span class="o">:</span><span class="w">   </span><span class="mf">80</span><span class="p">,</span><span class="w"> </span><span class="nx">dur</span><span class="o">:</span><span class="w"> </span><span class="mf">200</span><span class="w"> </span><span class="p">},</span>
+<span class="p">]);</span>
+<span class="k">await</span><span class="w"> </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">shoulder</span><span class="p">.</span><span class="nx">gesture</span><span class="p">([</span><span class="w"> </span><span class="cm">/* … */</span><span class="w"> </span><span class="p">]).</span><span class="nx">whenDone</span><span class="p">();</span>
+</code></pre></div>
+<p>A direct <code>write()</code>, <code>runSpeed()</code>, or <code>setMode()</code> cancels a running gesture. To coordinate several actuators at once, see <a href="groups.html#gesture">group.gesture()</a>.</p>
 <h2 id="whendone">whenDone()</h2>
 <p>Promise for the most recent move — resolves <code>true</code> when the board reports the servo settled (its own <code>Moving</code> flag — real arrival, not a timer), <code>false</code> on the safety timeout (default <code>max(duration × 2, 10000)</code> ms; pass <code>{ timeout }</code> or a bare number to override, <code>0</code> to wait forever). The same method exists on servos, steppers, and groups.</p>
-<div class="sig">await arduino.shoulder.<span class="fn">whenDone</span>([{ timeout }])</div>
-<div class="code-ex"><div class="bar">Example — sequence moves</div><pre><code><span class="k">await</span> <span class="nx">arduino</span><span class="p">.</span><span class="nx">shoulder</span><span class="p">.</span><span class="nx">writeTimed</span><span class="p">(</span><span class="mf">3000</span><span class="p">,</span> <span class="mf">1500</span><span class="p">).</span><span class="nx">whenDone</span><span class="p">();</span>
-<span class="k">await</span> <span class="nx">arduino</span><span class="p">.</span><span class="nx">shoulder</span><span class="p">.</span><span class="nx">writeTimed</span><span class="p">(</span><span class="mf">1000</span><span class="p">,</span> <span class="mf">1500</span><span class="p">).</span><span class="nx">whenDone</span><span class="p">();</span>
+<div class="sig sig-js">await arduino.shoulder.<span class="fn">whenDone</span>([{ timeout }])</div>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><div class="bar">Example — sequence moves</div><pre><code><span class="k">await</span><span class="w"> </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">shoulder</span><span class="p">.</span><span class="nx">writeTimed</span><span class="p">(</span><span class="mf">3000</span><span class="p">,</span><span class="w"> </span><span class="mf">1500</span><span class="p">).</span><span class="nx">whenDone</span><span class="p">();</span>
+<span class="k">await</span><span class="w"> </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">shoulder</span><span class="p">.</span><span class="nx">writeTimed</span><span class="p">(</span><span class="mf">1000</span><span class="p">,</span><span class="w"> </span><span class="mf">1500</span><span class="p">).</span><span class="nx">whenDone</span><span class="p">();</span>
 </code></pre></div>
 <h2 id="stop">stop()</h2>
 <p>Halts the servo — holds the last-read position.</p>
-<div class="sig">arduino.shoulder.<span class="fn">stop</span>()</div>
+<div class="sig sig-js">arduino.shoulder.<span class="fn">stop</span>()</div>
 <h2 id="setmode--runspeed">setMode() / runSpeed()</h2>
 <p>Wheel mode for continuous rotation — the same verb as the stepper's <code>runSpeed()</code>.</p>
-<div class="sig">arduino.shoulder.<span class="fn">setMode</span>(mode) · arduino.shoulder.<span class="fn">runSpeed</span>(speed)</div>
+<div class="sig sig-js">arduino.shoulder.<span class="fn">setMode</span>(mode) · arduino.shoulder.<span class="fn">runSpeed</span>(speed)</div>
 <table>
 <thead>
 <tr>
@@ -219,17 +286,17 @@
 </tr>
 </tbody>
 </table>
-<div class="code-ex"><div class="bar">Example — wheel mode</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">wheel</span><span class="p">.</span><span class="nx">setMode</span><span class="p">(</span><span class="s1">&#39;wheel&#39;</span><span class="p">);</span>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><div class="bar">Example — wheel mode</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">wheel</span><span class="p">.</span><span class="nx">setMode</span><span class="p">(</span><span class="s1">&#39;wheel&#39;</span><span class="p">);</span>
 <span class="nx">arduino</span><span class="p">.</span><span class="nx">wheel</span><span class="p">.</span><span class="nx">runSpeed</span><span class="p">(</span><span class="mf">2000</span><span class="p">);</span>
 <span class="nx">arduino</span><span class="p">.</span><span class="nx">wheel</span><span class="p">.</span><span class="nx">runSpeed</span><span class="p">(</span><span class="mf">0</span><span class="p">);</span>
 <span class="nx">arduino</span><span class="p">.</span><span class="nx">wheel</span><span class="p">.</span><span class="nx">setMode</span><span class="p">(</span><span class="s1">&#39;position&#39;</span><span class="p">);</span>
 </code></pre></div>
 <h2 id="enabletorque--disabletorque">enableTorque() / disableTorque()</h2>
 <p>Hold position, or go limp. Disabling torque lets you move a joint by hand while <code>read()</code> streams the position — the basis of the teach-a-trajectory workflow in projects like LeRobot.</p>
-<div class="sig">arduino.shoulder.<span class="fn">enableTorque</span>() · arduino.shoulder.<span class="fn">disableTorque</span>()</div>
+<div class="sig sig-js">arduino.shoulder.<span class="fn">enableTorque</span>() · arduino.shoulder.<span class="fn">disableTorque</span>()</div>
 <h2 id="read">read()</h2>
-<p>Starts polling feedback. One bus transaction per poll returns position, velocity, load, voltage, temperature, and (ST) current.</p>
-<div class="sig">arduino.shoulder.<span class="fn">read</span>([interval])</div>
+<p>Starts polling feedback. ONE bus transaction per poll tick — however many browsers are connected — returns position, velocity, load, voltage, temperature, and (ST) current. The board runs the poll (per-browser interval and threshold) and only transmits changes of threshold+ counts (gated on position).</p>
+<div class="sig sig-js">arduino.shoulder.<span class="fn">read</span>([interval], [threshold])</div>
 <table>
 <thead>
 <tr>
@@ -244,11 +311,16 @@
 <td>number</td>
 <td>Optional. Poll interval in ms. Pass <code>END</code> to stop.</td>
 </tr>
+<tr>
+<td><code>threshold</code></td>
+<td>number</td>
+<td>Optional. Minimum position change worth transmitting, in counts (<code>0</code> = default: <code>2</code> — the encoder noise floor). Also settable via <code>setReadInterval(ms)</code> / <code>setReadThreshold(counts)</code>.</td>
+</tr>
 </tbody>
 </table>
 <h2 id="setlimits--clearlimits">setLimits() / clearLimits()</h2>
 <p>Soft position limits, enforced <strong>on the Arduino</strong> — every commanded position (browser write, sketch write, or group SyncWrite) is clamped to the range before it reaches the servo. Software-only by design: the servo's own EEPROM limit registers are never written. Same shape as <code>setLimits</code> on the stepper and PWM servo.</p>
-<div class="sig">arduino.shoulder.<span class="fn">setLimits</span>(min, max) · arduino.shoulder.<span class="fn">clearLimits</span>()</div>
+<div class="sig sig-js">arduino.shoulder.<span class="fn">setLimits</span>(min, max) · arduino.shoulder.<span class="fn">clearLimits</span>()</div>
 <table>
 <thead>
 <tr>
@@ -265,21 +337,30 @@
 </tr>
 </tbody>
 </table>
+<h2 id="readfirmwarelimits">readFirmwareLimits()</h2>
+<p>The <strong>servo's own</strong> angle limits, stored in its EEPROM — separate from the software <code>setLimits()</code> above. The board reads them <strong>once when the servo attaches</strong> and caches them, so the cached value is usually already available as the <code>firmwareLimits</code> property (see below); it also replays on reconnect. Call <code>readFirmwareLimits()</code> only to force a fresh read — e.g. after changing the limits on the servo itself with the vendor tool.</p>
+<p>Read-only here: Pardalote never writes these registers. By Feetech convention, <code>min</code> and <code>max</code> both <code>0</code> means the limits are <strong>disabled</strong> (multi-turn / continuous), reported as <code>enabled: false</code>.</p>
+<div class="sig sig-js">await arduino.shoulder.<span class="fn">readFirmwareLimits</span>()</div>
+<p><strong>Returns</strong> <code>{ min, max, enabled }</code> (counts), or <code>null</code> if the servo didn't answer (unpowered or absent). <code>enabled</code> is <code>false</code> when the servo reports <code>min === 0 &amp;&amp; max === 0</code>.</p>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><div class="bar">Example — read once, then use the cached value</div><pre><code><span class="k">await</span><span class="w"> </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">shoulder</span><span class="p">.</span><span class="nx">readFirmwareLimits</span><span class="p">();</span>
+<span class="kd">const</span><span class="w"> </span><span class="nx">fw</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">shoulder</span><span class="p">.</span><span class="nx">firmwareLimits</span><span class="p">;</span><span class="w">   </span><span class="c1">// cheap cached read, no bus traffic</span>
+<span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nx">fw</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nx">fw</span><span class="p">.</span><span class="nx">enabled</span><span class="p">)</span><span class="w"> </span><span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="sb">`firmware limits: </span><span class="si">${</span><span class="nx">fw</span><span class="p">.</span><span class="nx">min</span><span class="si">}</span><span class="sb">–</span><span class="si">${</span><span class="nx">fw</span><span class="p">.</span><span class="nx">max</span><span class="si">}</span><span class="sb">`</span><span class="p">);</span>
+</code></pre></div>
 <h2 id="sethome--home">setHome() / home()</h2>
 <p><code>setHome(position)</code> declares the home position — no-arg means &quot;the current position is home&quot;, which pairs naturally with torque-off hand-posing (pose the joint, <code>read()</code>, <code>setHome()</code>). <code>home()</code> moves there; <code>home(duration)</code> moves there smoothly. Default home is the centre of range (2048 ST / 512 SC). Same pair as the stepper and PWM servo.</p>
-<div class="sig">arduino.shoulder.<span class="fn">setHome</span>([position]) · arduino.shoulder.<span class="fn">home</span>([duration])</div>
-<div class="code-ex"><div class="bar">Example — pose by hand, then make it home</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">shoulder</span><span class="p">.</span><span class="nx">disableTorque</span><span class="p">();</span>
+<div class="sig sig-js">arduino.shoulder.<span class="fn">setHome</span>([position]) · arduino.shoulder.<span class="fn">home</span>([duration])</div>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><div class="bar">Example — pose by hand, then make it home</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">shoulder</span><span class="p">.</span><span class="nx">disableTorque</span><span class="p">();</span>
 <span class="c1">// ...move the joint by hand...</span>
 <span class="nx">arduino</span><span class="p">.</span><span class="nx">shoulder</span><span class="p">.</span><span class="nx">read</span><span class="p">();</span>
 <span class="nx">arduino</span><span class="p">.</span><span class="nx">shoulder</span><span class="p">.</span><span class="nx">setHome</span><span class="p">().</span><span class="nx">enableTorque</span><span class="p">();</span>
-<span class="k">await</span> <span class="nx">arduino</span><span class="p">.</span><span class="nx">shoulder</span><span class="p">.</span><span class="nx">home</span><span class="p">(</span><span class="mf">1000</span><span class="p">).</span><span class="nx">whenDone</span><span class="p">();</span>
+<span class="k">await</span><span class="w"> </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">shoulder</span><span class="p">.</span><span class="nx">home</span><span class="p">(</span><span class="mf">1000</span><span class="p">).</span><span class="nx">whenDone</span><span class="p">();</span>
 </code></pre></div>
 <h2 id="calibrate">calibrate()</h2>
 <p>Declares the servo's current physical position as centre. Move the joint to its zero pose by hand (torque off) first.</p>
-<div class="sig">arduino.shoulder.<span class="fn">calibrate</span>()</div>
+<div class="sig sig-js">arduino.shoulder.<span class="fn">calibrate</span>()</div>
 <h2 id="scan--ping--setid">scan() / ping() / setId()</h2>
 <p>Bus utilities. Servos ship as ID 1 — to renumber, put a <strong>single</strong> servo on the bus and call <code>setId()</code>, one servo at a time.</p>
-<div class="sig">await arduino.shoulder.<span class="fn">scan</span>(from, to) · await arduino.shoulder.<span class="fn">ping</span>(id) · arduino.shoulder.<span class="fn">setId</span>(newId)</div>
+<div class="sig sig-js">await arduino.shoulder.<span class="fn">scan</span>(from, to) · await arduino.shoulder.<span class="fn">ping</span>(id) · arduino.shoulder.<span class="fn">setId</span>(newId)</div>
 <table>
 <thead>
 <tr>
@@ -317,7 +398,11 @@
 </tr>
 <tr>
 <td><code>arduino.shoulder.target</code></td>
-<td>Commanded goal — set immediately by <code>write()</code>.</td>
+<td>Last commanded goal — set immediately by <code>write()</code>.</td>
+</tr>
+<tr>
+<td><code>arduino.shoulder.hasTarget</code></td>
+<td><code>true</code> while <code>target</code> is a live goal; <code>false</code> when the servo has no active target (freed, in wheel mode, or never commanded). Check this before trusting <code>target</code>.</td>
 </tr>
 <tr>
 <td><code>arduino.shoulder.positionDegrees</code></td>
@@ -343,33 +428,65 @@
 <td><code>arduino.shoulder.current</code></td>
 <td>Raw units (ST only).</td>
 </tr>
+<tr>
+<td><code>arduino.shoulder.firmwareLimits</code></td>
+<td>The servo's own EEPROM angle limits: <code>{ min, max, enabled }</code> or <code>null</code> (not yet read / no answer). Cached from the attach-time read — see <code>readFirmwareLimits()</code>.</td>
+</tr>
+<tr>
+<td><code>arduino.shoulder.present</code></td>
+<td>Is the servo answering? <code>true</code> = found, <code>false</code> = no response (check wiring / ID / baud), <code>null</code> = not yet attached. Seeded by the attach-time ping (the browser equivalent of the serial monitor's <code>[found]</code> / <code>[NO RESPONSE]</code> line), then kept <strong>live from <code>read()</code> feedback</strong> — a servo powered up or unplugged mid-session updates it. See the <code>'presence'</code> event.</td>
+</tr>
 </tbody>
 </table>
 <p><code>target</code> vs <code>position</code>: <code>write(n)</code> sets <code>target</code> immediately (where you told it to go); <code>position</code> is real encoder feedback and only tracks toward <code>target</code> while you're polling. Unlike the stepper, bus-servo <code>target</code> is browser-side only — the servo has no board-replayed goal, so it isn't restored after a board reset.</p>
+<p><code>hasTarget</code> guards <code>target</code>: a position <code>write()</code> or <code>gesture()</code> makes it <code>true</code>; <strong>disabling torque clears it</strong> (a freed servo isn't holding a goal — you're hand-posing it), as does entering wheel mode. <code>target</code> keeps its last number for reference, but <code>hasTarget</code> tells you whether that number is still meaningful. Re-enabling torque does <em>not</em> set a new target — the servo holds where it is, and <code>hasTarget</code> stays <code>false</code> until you command a position again.</p>
 <h2 id="events">Events</h2>
 <table>
 <thead>
 <tr>
 <th>Event</th>
 <th>Payload</th>
+<th>Fires when</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>'read'</code></td>
+<td><code>'change'</code></td>
 <td><code>{ position, velocity, load, voltage, temperature }</code></td>
+<td>A polled reading changed by at least the threshold.</td>
+</tr>
+<tr>
+<td><code>'write'</code></td>
+<td><code>{ position }</code></td>
+<td>A move is issued (including a gesture start — <code>position</code> is the predicted rest).</td>
+</tr>
+<tr>
+<td><code>'done'</code></td>
+<td><code>{ position }</code></td>
+<td>A move, timed move, or gesture settles (the servo's <code>Moving</code> flag cleared).</td>
+</tr>
+<tr>
+<td><code>'fwlimits'</code></td>
+<td><code>{ min, max, enabled }</code> or <code>null</code></td>
+<td>The servo's firmware angle limits arrived — at attach, on reconnect, or after <code>readFirmwareLimits()</code>.</td>
+</tr>
+<tr>
+<td><code>'presence'</code></td>
+<td><code>{ servoId, present }</code></td>
+<td>The servo's answering state changed. Fires on the attach-time ping, on reconnect, and whenever <code>read()</code> feedback shows the servo appearing or disappearing (<code>present: false</code> = no answer — wrong ID, wiring, baud, or unpowered). Needs <code>read()</code> polling active to track mid-session changes.</td>
 </tr>
 </tbody>
 </table>
-<div class="sig">arduino.shoulder.<span class="fn">getState</span>()</div>
-<p><strong>Returns</strong> <code>{ logicalId, servoId, series, attached, mode, torque, resolution, target, position, velocity, load, voltage, temperature, current, limits, interval }</code>.</p>
-<p>See also: <a href="groups.html">Groups</a> · <a href="../examples/busservo-example.html">Bus servo example</a> · <a href="troubleshooting.html">Troubleshooting</a></p>
+<p>Shorthand: <code>onChange(fn)</code>, <code>onWrite(fn)</code>, <code>onDone(fn)</code>, <code>onPresence(fn)</code>.</p>
+<div class="sig sig-js">arduino.shoulder.<span class="fn">getState</span>()</div>
+<p><strong>Returns</strong> <code>{ logicalId, servoId, series, attached, present, mode, torque, resolution, target, hasTarget, position, velocity, load, voltage, temperature, current, limits, firmwareLimits, home, interval }</code>.</p>
+<p>See also: <a href="groups.html">Groups</a> · <a href="../examples/bus-servos.html">Bus servo example</a> · <a href="troubleshooting.html">Troubleshooting</a></p>
 
     </main>
   </div>
 </div>
 
-<footer class="site-footer speckled">
+<footer class="site-footer">
   <div class="wrap">
     <span>Pardalote — created by Scott Mitchell for design education and creative technology.</span>
     <span><a href="index.html">Reference</a> · <a href="https://github.com/ScottMit/Pardalote">GitHub</a> · GPL-3.0</span>

@@ -1,7 +1,7 @@
 // ==============================================================
 // PardaloteBusServo.h
 // Pardalote Serial Bus Servo Extension
-// Version v1.0
+// Part of Pardalote — version in library.properties
 // by Scott Mitchell
 // GPL-3.0 License
 //
@@ -89,6 +89,20 @@ private:
     inline static int16_t _minPos[MAX_BUS_SERVOS]   = {};
     inline static int16_t _maxPos[MAX_BUS_SERVOS]   = {};
 
+    // The servo's OWN firmware angle-limit registers (EEPROM), read once at
+    // attach and cached (announce() replays the cache — no re-read per connect).
+    // Raw counts; -1 = unknown / servo didn't answer. min==max==0 is Feetech's
+    // "limits disabled / multi-turn" encoding — JS derives that, the board just
+    // caches the two raw values. Distinct from _minPos/_maxPos (board-RAM soft
+    // limits): these are read-only, never written back to the servo.
+    inline static int16_t _fwLimitMin[MAX_BUS_SERVOS] = {};
+    inline static int16_t _fwLimitMax[MAX_BUS_SERVOS] = {};
+
+    // Did the servo answer the attach-time ping? 1 = found, 0 = no response,
+    // -1 = unknown/detached. Cached so announce() can replay it to late clients
+    // without re-pinging (a blocking bus read). Mirrors the _fwLimit* cache.
+    inline static int8_t  _found[MAX_BUS_SERVOS] = {};
+
     // Sketch-created bus servos (PardaloteBusServo.attach("name", servoId)).
     // The name is what the browser binds (arduino.<name>); announce() replays a
     // CMD_SHARE frame for these so every connecting browser materialises the
@@ -108,6 +122,32 @@ private:
     static const uint32_t MOVE_STARTUP_MS = 40;     // let it start moving before first poll
     static const uint32_t MOVE_NO_RESP_MS = 1000;   // give up if the servo stops answering
     static const uint32_t MOVE_MAX_MS     = 30000;  // absolute ceiling on one move
+
+    // Periodic reads — per-client registration + gating.
+    // Gates on present position; default threshold 2 counts (magnetic
+    // encoder noise floor).
+    inline static ExtReadPoll _polls[MAX_BUS_SERVOS] = {};
+    static constexpr uint16_t DEFAULT_THRESHOLD = 2;
+
+    // Gesture segment schedule (CMD_BUSSERVO_GESTURE). A bus servo runs its
+    // OWN motion, so there is no per-tick curve to render: each segment is one
+    // position write at a distance/duration-matched speed, and the sequencer
+    // advances to the next segment when the servo's Moving flag SETTLES (the
+    // same feedback the DONE poller uses) — not on a timer, so a saturated
+    // segment just takes longer and the next still fires on true arrival. The
+    // per-segment `curve` byte is accepted but NOT rendered inside a segment
+    // (bus-servo expression comes from segment decomposition + lane overlap);
+    // `from` is captured live at gesture start, then chained from each target.
+    static const uint8_t MAX_BUS_SERVO_SEGMENTS = 12;
+    static const int     BUS_SEG_MAX_SPEED      = 4095;   // hardware/lib ceiling (authored dur wins)
+    struct BSeg { uint8_t curve; uint16_t dur; int32_t value; };
+    inline static BSeg     _bsegs[MAX_BUS_SERVOS][MAX_BUS_SERVO_SEGMENTS] = {};
+    inline static uint8_t  _bsegCount[MAX_BUS_SERVOS]  = {};   // 0 = no gesture running
+    inline static uint8_t  _bsegIndex[MAX_BUS_SERVOS]  = {};
+    inline static uint8_t  _bsegFlags[MAX_BUS_SERVOS]  = {};   // GESTURE_FLAG_*
+    inline static int32_t  _bsegFrom[MAX_BUS_SERVOS]   = {};   // start of the current segment
+    inline static int32_t  _bsegTarget[MAX_BUS_SERVOS] = {};   // end of the current segment (chained)
+    inline static uint16_t _bsegDurMs[MAX_BUS_SERVOS]  = {};   // authored duration — segment's time floor
 
     static bool validId(int id) { return id >= 0 && id < MAX_BUS_SERVOS; }
     static bool isSC(int id)    { return _series[id] == BUSSERVO_SERIES_SC; }
@@ -146,8 +186,11 @@ private:
 
     static void writeSpeed(int id, int speed, int acc) {
         uint8_t sid = _servoId[id];
-        if (isSC(id)) _sc.WriteSpe(sid, speed, acc);
-        else          _st.WriteSpe(sid, speed, acc);
+        // SC/SCS (SCSCL) has no constant-speed WriteSpe — continuous drive is
+        // PWMMode/WritePWM instead (different registers/units). Deferred until an
+        // SC servo is on the bench; STS/SMS is the supported continuous path.
+        if (isSC(id)) { Serial.println(F("BusServo: SC-series continuous mode not supported yet")); return; }
+        _st.WriteSpe(sid, speed, acc);
     }
 
     static void setTorque(int id, bool en) {
@@ -160,8 +203,9 @@ private:
     static void setMode(int id, uint8_t mode) {
         uint8_t sid = _servoId[id];
         if (mode == BUSSERVO_MODE_WHEEL) {
-            if (isSC(id)) _sc.WheelMode(sid);
-            else          _st.WheelMode(sid);
+            // SC/SCS (SCSCL) has no WheelMode — see writeSpeed(). Deferred.
+            if (isSC(id)) { Serial.println(F("BusServo: SC-series continuous mode not supported yet")); return; }
+            _st.WheelMode(sid);
         } else {
             // Return to position mode: mode register lives in EEPROM, so
             // unlock → write → lock. (WheelMode() set it to 1 for us.)
@@ -187,6 +231,36 @@ private:
         _lastRespMs[id]     = now;
         _lastMovePollMs[id] = 0;
     }
+
+    // Issue segment `idx` as one position write at a distance/duration-matched
+    // speed, then arm the settle poller. `from` is _bsegFrom[id] (captured at
+    // gesture start, chained from each target); target = from+delta (relative)
+    // or the value itself (absolute), clamped to soft limits / series range.
+    static void loadBusSegment(int id, uint8_t idx) {
+        const BSeg& seg = _bsegs[id][idx];
+        int32_t from    = _bsegFrom[id];
+        int32_t target  = (_bsegFlags[id] & GESTURE_FLAG_ABSOLUTE) ? seg.value : from + seg.value;
+        if (_limitSet[id]) target = constrain(target, (int32_t)_minPos[id], (int32_t)_maxPos[id]);
+        else               target = constrain(target, (int32_t)0, (int32_t)(isSC(id) ? 1023 : 4095));
+
+        uint16_t dur    = seg.dur ? seg.dur : 1;
+        float    durSec = dur / 1000.0f;
+        long     dist   = labs((long)target - (long)from);
+        int      speed  = (int)lroundf((float)dist / durSec);
+        if (speed < 1)               speed = 1;                 // Feetech: 0 = full speed
+        if (speed > BUS_SEG_MAX_SPEED) speed = BUS_SEG_MAX_SPEED;
+
+        _bsegIndex[id]  = idx;
+        _bsegTarget[id] = target;
+        _bsegDurMs[id]  = dur;
+        writePos(id, target, speed, 50);
+        beginAwaitDone(id);   // loop() polls the Moving flag → advance or DONE
+    }
+
+    // Drop any running gesture (a direct write / mode change / detach
+    // supersedes it). No-op when none is active. Does NOT emit DONE — the
+    // superseding command owns completion.
+    static void cancelBusGesture(int id) { if (validId(id)) _bsegCount[id] = 0; }
 
 public:
     // -------------------------------------------------------------------
@@ -272,6 +346,44 @@ public:
     }
     static int movingById(int id) {
         return (validId(id) && _attached[id]) ? readMoving(_servoId[id]) : -1;
+    }
+
+    // Read the servo's EEPROM min/max ANGLE-LIMIT registers into the cache
+    // (_fwLimitMin/Max). One or two blocking bus reads; each register is a
+    // word (readWord returns -1 on no answer, so a dead servo caches -1/-1).
+    // These are the servo's own firmware limits — read-only, never written.
+    static void readFwLimits(int id) {
+        if (!validId(id) || !_attached[id]) return;
+        ensureBus();
+        uint8_t sid = _servoId[id];
+        if (isSC(id)) {
+            _fwLimitMin[id] = (int16_t)_sc.readWord(sid, SCSCL_MIN_ANGLE_LIMIT_L);
+            _fwLimitMax[id] = (int16_t)_sc.readWord(sid, SCSCL_MAX_ANGLE_LIMIT_L);
+        } else {
+            _fwLimitMin[id] = (int16_t)_st.readWord(sid, SMS_STS_MIN_ANGLE_LIMIT_L);
+            _fwLimitMax[id] = (int16_t)_st.readWord(sid, SMS_STS_MAX_ANGLE_LIMIT_L);
+        }
+    }
+
+    // Send the cached firmware limits to one client: [id, min, max] (raw
+    // counts; -1 = unknown). JS interprets min==max==0 as "disabled".
+    static void sendFwLimits(uint8_t clientNum, int id) {
+        FrameBuilder fb;
+        fb.begin(CMD_BUSSERVO_READ_LIMITS, DEVICE_BUSSERVO);
+        fb.addInt(id);
+        fb.addInt(_fwLimitMin[id]);
+        fb.addInt(_fwLimitMax[id]);
+        Pardalote.sendFrame(clientNum, fb);
+    }
+
+    // Send the cached attach-time presence to one client: [id, servoId, present].
+    static void sendPresence(uint8_t clientNum, int id) {
+        FrameBuilder fb;
+        fb.begin(CMD_BUSSERVO_PRESENT, DEVICE_BUSSERVO);
+        fb.addInt(id);
+        fb.addInt(_servoId[id]);
+        fb.addInt(_found[id]);
+        Pardalote.sendFrame(clientNum, fb);
     }
 
     // Echo a sketch-issued write to the browser so it sets its cached target
@@ -442,7 +554,43 @@ public:
             } else {
                 _st.SyncWritePosEx(ids, n, positions, speeds, accs);
             }
-            for (int i = 0; i < n; i++) beginAwaitDone(logicalForServoId(ids[i]));
+            for (int i = 0; i < n; i++) {
+                int lid = logicalForServoId(ids[i]);
+                cancelBusGesture(lid);   // a direct sync-write supersedes any gesture on that servo
+                beginAwaitDone(lid);
+            }
+            return;
+        }
+
+        // Global bus-servo gesture — one or more channel blocks, each a segment
+        // schedule the board sequences locally (see defs.h layout).
+        if (cmd == CMD_BUSSERVO_GESTURE) {
+            ensureBus();
+            uint16_t off = 0;
+            while (off + 3 <= payloadLen) {
+                int     sid   = payload[off];
+                uint8_t flags = payload[off + 1];
+                uint8_t count = payload[off + 2];
+                off += 3;
+                if ((uint32_t)off + (uint32_t)count * 7 > payloadLen) break;   // malformed — stop
+                if (validId(sid) && _attached[sid] && count > 0) {
+                    uint8_t nseg = count > MAX_BUS_SERVO_SEGMENTS ? MAX_BUS_SERVO_SEGMENTS : count;
+                    for (uint8_t i = 0; i < nseg; i++) {
+                        const uint8_t* r = payload + off + i * 7;
+                        _bsegs[sid][i].curve = r[0];
+                        _bsegs[sid][i].dur   = (uint16_t)(((uint16_t)r[1] << 8) | r[2]);
+                        _bsegs[sid][i].value = (int32_t)(((uint32_t)r[3] << 24) | ((uint32_t)r[4] << 16) |
+                                                         ((uint32_t)r[5] <<  8) |  (uint32_t)r[6]);
+                    }
+                    _bsegCount[sid] = nseg;
+                    _bsegFlags[sid] = flags;
+                    int32_t from = readPos(_servoId[sid]);       // live start (relative anchor)
+                    if (from < 0) from = 0;
+                    _bsegFrom[sid] = from;
+                    loadBusSegment(sid, 0);
+                }
+                off += (uint16_t)count * 7;                       // skip the whole declared block
+            }
             return;
         }
 
@@ -461,6 +609,7 @@ public:
                 _servoId[id] = (uint8_t)paramInt(params, 1);
                 _series[id]  = (nparams > 2) ? (uint8_t)paramInt(params, 2) : BUSSERVO_SERIES_ST;
                 _attached[id] = true;
+                _bsegCount[id] = 0;   // no stale gesture from a previous binding on this id
 
                 // Sensible defaults: position mode, torque on.
                 setMode(id, BUSSERVO_MODE_POSITION);
@@ -471,6 +620,16 @@ public:
                 Serial.print(F(" → servo ID ")); Serial.print(_servoId[id]);
                 Serial.print(isSC(id) ? F(" (SC) ") : F(" (ST) "));
                 Serial.println(found != -1 ? F("[found]") : F("[NO RESPONSE — check wiring/ID/baud]"));
+
+                // Cache + report presence, so JS learns what Serial just printed.
+                _found[id] = (found != -1) ? 1 : 0;
+                sendPresence(clientNum, id);
+
+                // Read the servo's own firmware angle limits once, cache them,
+                // and tell the requesting browser. announce() replays the cache
+                // to later clients, so this EEPROM read happens only at attach.
+                readFwLimits(id);
+                sendFwLimits(clientNum, id);
                 break;
             }
 
@@ -479,13 +638,20 @@ public:
                     setTorque(id, false);
                     _attached[id]  = false;
                     _awaitDone[id] = false;
+                    _bsegCount[id] = 0;
                     _limitSet[id]  = false;
+                    _fwLimitMin[id] = -1;   // cache is per-binding — forget on detach
+                    _fwLimitMax[id] = -1;
+                    _found[id]      = -1;
+                    ExtReadPoll* p = extPollFind(_polls, MAX_BUS_SERVOS, id);
+                    if (p) p->instance = -1;   // stop any periodic read
                     Serial.print(F("BusServo ")); Serial.print(id); Serial.println(F(" detached"));
                 }
                 break;
 
             case CMD_BUSSERVO_WRITE: {
                 if (!_attached[id] || nparams < 2) return;
+                cancelBusGesture(id);   // direct write supersedes a running gesture
                 int pos   = (int)paramInt(params, 1);
                 int speed = (nparams > 2) ? (int)paramInt(params, 2) : 2400;
                 int acc   = (nparams > 3) ? (int)paramInt(params, 3) : 50;
@@ -497,6 +663,7 @@ public:
 
             case CMD_BUSSERVO_WRITE_SPEED: {
                 if (!_attached[id] || nparams < 2) return;
+                cancelBusGesture(id);   // wheel-mode spin supersedes a running gesture
                 int speed = (int)paramInt(params, 1);
                 int acc   = (nparams > 2) ? (int)paramInt(params, 2) : 50;
                 writeSpeed(id, speed, acc);
@@ -506,6 +673,7 @@ public:
 
             case CMD_BUSSERVO_SET_MODE:
                 if (!_attached[id] || nparams < 2) return;
+                cancelBusGesture(id);
                 setMode(id, (uint8_t)paramInt(params, 1));
                 break;
 
@@ -514,10 +682,47 @@ public:
                 setTorque(id, paramInt(params, 1) != 0);
                 break;
 
-            case CMD_BUSSERVO_READ:
+            // READ — params [id, interval?, threshold?]. Always
+            // answers the requester immediately. interval > 0 registers a
+            // board-side per-client periodic read (ONE bus transaction per
+            // poll tick, regardless of client count, gated on position);
+            // interval < 0 (JS END) removes this client's registration;
+            // absent/0 = one-shot.
+            case CMD_BUSSERVO_READ: {
+                long ms  = (nparams > 1) ? paramInt(params, 1) : 0;
+                long thr = (nparams > 2) ? paramInt(params, 2) : 0;
+
+                if (ms < 0) {   // END — unregister this client
+                    ExtReadPoll* p = extPollFind(_polls, MAX_BUS_SERVOS, id);
+                    if (p) p->removeClient(clientNum);
+                    break;
+                }
+
                 if (!_attached[id]) return;
-                sendRead(id);
+                FrameBuilder fb;
+                int32_t pos = buildRead(fb, id);
+                Pardalote.sendFrame(clientNum, fb);
+
+                if (ms > 0) {
+                    ExtReadPoll* p = extPollGet(_polls, MAX_BUS_SERVOS, id);
+                    if (!p) break;
+                    p->setClient(clientNum, (uint16_t)constrain(ms, 1, 65535),
+                                 thr > 0 ? (uint16_t)thr : DEFAULT_THRESHOLD);
+                    p->seed(clientNum, pos, millis());
+                }
                 break;
+            }
+
+            // READ_LIMITS — force a fresh EEPROM read of the servo's firmware
+            // angle limits, refresh the cache, and answer the requester.
+            // (The attach-time read + announce cover the normal path; this is
+            // the explicit readFirmwareLimits() refresh.)
+            case CMD_BUSSERVO_READ_LIMITS: {
+                if (!_attached[id]) return;
+                readFwLimits(id);
+                sendFwLimits(clientNum, id);
+                break;
+            }
 
             case CMD_BUSSERVO_SET_LIMITS: {
                 // Software limits — clamped in board RAM on every write path
@@ -585,8 +790,10 @@ public:
     // -------------------------------------------------------------------
     // Poll response — one FeedBack() bus transaction, then read the cached
     // present values (passing -1 reads from the latched feedback packet).
+    // buildRead() does the transaction and fills the frame; returns the
+    // present position (or -1) for threshold gating.
     // -------------------------------------------------------------------
-    static void sendRead(int id) {
+    static int32_t buildRead(FrameBuilder& fb, int id) {
         uint8_t sid = _servoId[id];
         int pos = -1, speed = 0, load = 0, voltage = 0, temp = 0, current = 0;
         bool sc = isSC(id);
@@ -607,7 +814,6 @@ public:
                 current = _st.ReadCurrent(-1);
             }
         }
-        FrameBuilder fb;
         fb.begin(CMD_BUSSERVO_READ, DEVICE_BUSSERVO);
         fb.addInt(id);
         fb.addInt(pos);
@@ -616,7 +822,7 @@ public:
         fb.addInt(voltage);
         fb.addInt(temp);
         fb.addInt(current);
-        Pardalote.broadcastFrame(fb);
+        return pos;
     }
 
     // -------------------------------------------------------------------
@@ -660,7 +866,27 @@ public:
             bool tooLong = (now - _awaitStartMs[id] > MOVE_MAX_MS);       // absolute ceiling
             if (!arrived && !lost && !tooLong) continue;
 
+            // Gesture segment that settled EARLY: hold the lane until its
+            // authored duration elapses. Keeps group lanes phase-locked and
+            // makes a zero-distance pad/hold actually wait (it would otherwise
+            // settle instantly). Error paths (lost/tooLong) skip the floor.
+            if (_bsegCount[id] > 0 && arrived && !lost && !tooLong &&
+                (now - _awaitStartMs[id] < _bsegDurMs[id])) continue;
+
             _awaitDone[id] = false;
+
+            // Gesture sequencing — a segment just settled. On real arrival with
+            // more segments, chain to the next (no DONE). On the last segment,
+            // or if the move was lost/timed out, finish and emit DONE below.
+            if (_bsegCount[id] > 0) {
+                if (arrived && _bsegIndex[id] + 1 < _bsegCount[id]) {
+                    _bsegFrom[id] = _bsegTarget[id];        // chain from the commanded target
+                    loadBusSegment(id, _bsegIndex[id] + 1); // re-arms _awaitDone
+                    continue;
+                }
+                _bsegCount[id] = 0;                          // gesture complete (or aborted)
+            }
+
             int pos = readPos(_servoId[id]);
             FrameBuilder fb;
             fb.begin(CMD_BUSSERVO_DONE, DEVICE_BUSSERVO);
@@ -668,6 +894,39 @@ public:
             fb.addInt(pos);
             Pardalote.broadcastFrame(fb);
         }
+
+        // Board-side periodic reads — ONE FeedBack() transaction per due
+        // registration, then per-client gating on position.
+        for (int i = 0; i < MAX_BUS_SERVOS; i++) {
+            ExtReadPoll& p = _polls[i];
+            if (!p.due(now)) continue;
+            if (!validId(p.instance) || !_attached[p.instance]) { p.instance = -1; continue; }
+            FrameBuilder fb;
+            const int32_t pos = buildRead(fb, p.instance);
+
+            // Live presence off the read result (pos == -1 means no answer):
+            // a servo that appears (e.g. driver board powered up after boot) or
+            // disappears mid-session updates the cache — so announce() stays
+            // accurate — and logs the change to Serial, matching the browser's
+            // 'presence' event. (JS tracks the browser side from this same pos.)
+            const int8_t nowFound = (pos != -1) ? 1 : 0;
+            const int id = p.instance;
+            if (nowFound != _found[id]) {
+                _found[id] = nowFound;
+                Serial.print(F("BusServo ")); Serial.print(id);
+                Serial.print(F(" servo ID ")); Serial.print(_servoId[id]);
+                Serial.println(nowFound ? F(" — now responding [found]")
+                                        : F(" — stopped responding [LOST]"));
+            }
+
+            for (uint8_t c = 0; c < PARDALOTE_MAX_CLIENTS; c++)
+                if (p.gate(c, pos, now)) Pardalote.sendFrame(c, fb);
+        }
+    }
+
+    // Client disconnect — drop its read registrations.
+    static void disconnect(uint8_t clientNum) {
+        extPollDropClient(_polls, MAX_BUS_SERVOS, clientNum);
     }
 
     // -------------------------------------------------------------------
@@ -713,6 +972,12 @@ public:
                 fl.addInt(i); fl.addInt(_minPos[i]); fl.addInt(_maxPos[i]); fl.addInt(1);
                 Pardalote.sendFrame(clientNum, fl);
             }
+
+            // Replay the cached firmware limits (read once at attach) — no
+            // EEPROM re-read per connecting client.
+            sendFwLimits(clientNum, i);
+            // Replay the cached attach-time presence too.
+            sendPresence(clientNum, i);
         }
     }
 };
@@ -786,6 +1051,6 @@ inline PardaloteBusServoAccess PardaloteBusServo;
 
 // Self-register — runs before setup().
 INSTALL_EXTENSION(DEVICE_BUSSERVO, BusServoExt::handle, BusServoExt::announce,
-                  nullptr, BusServoExt::loop)
+                  BusServoExt::disconnect, BusServoExt::loop)
 
 #endif

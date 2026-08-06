@@ -1,7 +1,7 @@
 // ==============================================================
 // Pardalote.h
 // Arduino-side library for the Pardalote project.
-// Version v1.0
+// Part of Pardalote — version in library.properties
 // by Scott Mitchell
 // GPL-3.0 License
 //
@@ -21,12 +21,15 @@
 #include <Arduino.h>
 
 #include "internal/platform.h"
-#include <WebSocketsServer.h>
 #include "internal/defs.h"
 #include "internal/protocol.h"
 #include "internal/frame_names.h"
 #include "internal/extensions.h"
-#include "internal/wifi_config.h"
+#include "internal/serial_transport.h"
+#ifndef PARDALOTE_NO_WIFI
+  #include <WebSocketsServer.h>
+  #include "internal/wifi_config.h"
+#endif
 
 // -------------------------------------------------------------------
 // Message channel — a user-defined key/value delivered to watch() /
@@ -83,7 +86,7 @@ typedef void (*PardaloteFrameHandler)(const FrameEvent&);
   #include "secrets.h"
 #endif
 
-#ifdef SECRET_SSID
+#if defined(SECRET_SSID) && !defined(PARDALOTE_NO_WIFI)
   namespace {
     struct _PardaloteSecretBinder {
         _PardaloteSecretBinder() {
@@ -106,8 +109,24 @@ class PardaloteClass {
 public:
     PardaloteClass();
 
-    // Call from setup() — connects WiFi, starts the WebSocket server.
+    // Call from setup(). Three forms:
+    //   begin()                  — WiFi + WebSocket server (the default)
+    //   begin("key")             — WiFi + WebSocket, browsers must present
+    //                              the key (arduino.connect(ip, { key })).
+    //                              An accident-prevention latch for shared
+    //                              networks/classrooms, NOT security — the
+    //                              key crosses the network in cleartext.
+    //   begin(PARDALOTE_SERIAL)  — USB serial transport instead of WiFi
+    //                              (arduino.connectSerial() in the browser).
+    //                              No key concept: the cable IS possession.
+    // WiFi is the default; serial is chosen explicitly — with one
+    // exception: on boards with no radio (UNO R4 Minima) every begin()
+    // form starts the serial transport, because it's the only transport
+    // the hardware can have. No runtime WiFi→serial failover exists on
+    // WiFi-capable boards.
     void begin();
+    void begin(const char* key);
+    void begin(int transport);
 
     // Call from loop() — services the WebSocket, runs periodic reads,
     // dispatches per-extension housekeeping.
@@ -137,7 +156,7 @@ public:
     //
     // share(pin, mode) — tell the browser "this pin exists, it's in this mode."
     //     Accepts Arduino's INPUT / OUTPUT / INPUT_PULLUP / INPUT_PULLDOWN, or
-    //     Pardalote's MODE_ANALOG_INPUT. For input modes the JS side will start
+    //     Pardalote's ANALOG_INPUT_MODE. For input modes the JS side will start
     //     polling automatically — so the browser gets values flowing without
     //     having to declare the pin itself.
     //
@@ -152,7 +171,12 @@ public:
     //
     // See examples/shared-control-example/ and examples/shared-input-example/.
     // -----------------------------------------------------------------------
-    void share(uint8_t pin, uint8_t mode);
+    // Optional interval (ms) starts board-driven periodic reads of the pin —
+    // values flow to every browser with no JS call needed. Optional
+    // threshold sets what counts as a meaningful change (0 = board default:
+    // 1 for digital pins, the ADC noise floor for analog).
+    void share(uint8_t pin, uint8_t mode,
+               uint16_t interval = 0, uint16_t threshold = 0);
     void send (uint8_t pin, int     value);
 
     // -----------------------------------------------------------------------
@@ -186,7 +210,7 @@ public:
 private:
     void _command(uint16_t deviceId, uint8_t cmd, const int32_t* params, uint8_t n);
 
-    static constexpr uint8_t  MAX_WS_CLIENTS  = 4;
+    static constexpr uint8_t  MAX_WS_CLIENTS  = PARDALOTE_MAX_CLIENTS;
     static constexpr uint32_t HELLO_DELAY_MS  = 50;
     static constexpr int      NUM_ACTIONS     = 20;
 
@@ -195,12 +219,62 @@ private:
     static constexpr int      NUM_RETAINED    = 8;    // retained keys re-announced on connect
     static constexpr int      RETAIN_VALUE_MAX = 48;  // bytes stored per retained TEXT/BLOB
 
+    // One watched-pin entry per pin. Looking and telling are decoupled
+    // (when looking is free, look always; rate-limit the telling):
+    //
+    //   DIGITAL — watched on every run() pass. A level change (outside a
+    //   short bounce lockout) is transmitted IMMEDIATELY to every client
+    //   whose threshold it clears — a client's interval does NOT delay
+    //   edges (buttons must not lose or lag their presses). Idle pins
+    //   transmit nothing.
+    //
+    //   ANALOG — sampled every ANALOG_SAMPLE_MS (an ADC read has real
+    //   cost; the loop also generates stepper pulses). Each client hears
+    //   about a change at most once per its interval — the interval is a
+    //   per-client minimum spacing between updates, nothing more. A
+    //   change on a dormant pin therefore goes out within one sample.
+    //
+    // threshold 0 on the wire = board default (1 digital, ADC noise
+    // floor analog — see defaultThreshold()).
+    //
+    // Registrations come from two places:
+    //   - a browser sends CMD_DIGITAL_READ / CMD_ANALOG_READ
+    //     [interval, threshold] → per-client entry, cleared when that
+    //     client disconnects or sends CMD_END;
+    //   - the sketch calls share(pin, mode, interval, threshold) →
+    //     boardOwned, survives disconnects, serves every client that
+    //     hasn't registered its own preference.
     struct Action {
-        int16_t       id;        // pin number; -1 = empty slot
-        uint8_t       cmd;       // CMD_DIGITAL_READ or CMD_ANALOG_READ
-        unsigned long lastUpdate;
-        unsigned long interval;  // ms
+        int16_t       id;             // pin number; -1 = empty slot
+        uint8_t       cmd;            // CMD_DIGITAL_READ or CMD_ANALOG_READ
+        unsigned long lastSample;     // analog: last ADC read
+        int32_t       lastLevel;      // digital: last accepted level (-1 = none yet)
+        unsigned long lockoutUntil;   // digital: bounce lockout deadline
+
+        // Sketch-side registration (share with an interval).
+        bool          boardOwned;
+        uint16_t      boardInterval;
+        uint16_t      boardThreshold; // resolved (never 0)
+
+        // Per-client registrations. Bit c set = client c registered.
+        uint8_t       clientMask;
+        uint8_t       seededMask;     // client has received its first value
+        uint16_t      interval[MAX_WS_CLIENTS];    // ms — min spacing between updates
+        uint16_t      threshold[MAX_WS_CLIENTS];   // resolved (never 0)
+        int32_t       lastSent[MAX_WS_CLIENTS];
+        unsigned long lastSendTime[MAX_WS_CLIENTS];
     };
+
+    // Digital bounce lockout: the first transition is accepted (and sent)
+    // instantly; further transitions are ignored for this long. A change
+    // still pending when the lockout expires is picked up then, so even a
+    // tap shorter than the lockout delivers both edges.
+    static constexpr uint16_t DEBOUNCE_MS = 15;
+
+    // Analog sampling cadence — decoupled from client intervals. Fast
+    // enough that a dormant pin's change feels instant; cheap enough
+    // (~20–100 µs per read) not to disturb stepper pulse generation.
+    static constexpr uint16_t ANALOG_SAMPLE_MS = 10;
 
     struct Watcher {
         char                    key[MAX_MESSAGE_KEY + 1];
@@ -218,8 +292,27 @@ private:
         uint16_t valueLen;                     // TEXT / BLOB length
     };
 
+#ifndef PARDALOTE_NO_WIFI
     WebSocketsServer _ws{81};
     WifiStore        _wifiStore;
+#endif
+
+    // Transport selection — set once in begin(). The serial transport's
+    // single client is permanently client 0; all the per-client machinery
+    // below serves it as a degenerate case (only bit 0 ever set).
+    enum : uint8_t { TRANSPORT_WIFI = 0, TRANSPORT_SERIAL = 1 };
+    uint8_t                  _transport = TRANSPORT_WIFI;
+    PardaloteSerialTransport _serialT;
+
+    // Connection key (WebSocket transport only; serial implies physical
+    // possession and skips auth). Empty _key = no auth required.
+    // Unauthed clients receive nothing (no HELLO, no announce, no
+    // broadcasts) and their frames are dropped, except CMD_AUTH.
+    static constexpr uint32_t AUTH_TIMEOUT_MS = 3000;
+    char     _key[PARDALOTE_KEY_MAX + 1] = {};
+    bool     _keyRequired = false;
+    bool     _authed[MAX_WS_CLIENTS]       = {};
+    uint32_t _authDeadline[MAX_WS_CLIENTS] = {};
 
     Action   _actions[NUM_ACTIONS];
     uint8_t  _corePinModes[MAX_PIN_NUMBER];
@@ -228,12 +321,19 @@ private:
     bool     _pendingHello[MAX_WS_CLIENTS] = {};
     uint32_t _helloAfter[MAX_WS_CLIENTS]   = {};
 
+    // Boot id — random 31-bit token generated once in begin(), sent in
+    // HELLO. Lets the browser distinguish "board rebooted (possibly new
+    // firmware)" from "same board-run, network blip" and drop stale
+    // board-originated state on reboot. Never 0 (0 = "unknown" JS-side).
+    uint32_t _bootId = 0;
+
     Watcher  _watchers[NUM_WATCHERS];
     uint8_t  _watcherCount = 0;
     Retained _retained[NUM_RETAINED];
     PardaloteMessageHandler _messageHandler = nullptr;
     PardaloteFrameHandler   _frameHandler   = nullptr;
 
+#ifndef PARDALOTE_NO_WIFI
     // WebSocket library wants a free/static function pointer — this
     // trampoline forwards to the global Pardalote instance.
     static void _wsEventTrampoline(uint8_t num, WStype_t type,
@@ -241,13 +341,47 @@ private:
 
     void _handleWsEvent(uint8_t num, WStype_t type,
                         uint8_t* payload, size_t length);
+    void _beginWifi(const char* key);
+#endif
+    void _beginCommon();
+    void _beginSerial();
+
+    // Serial transport sinks (free-function trampolines, same pattern as
+    // the WS event trampoline).
+    static void _serialMessageTrampoline(uint8_t* data, size_t len);
+    static void _serialConnectTrampoline();
+    static void _serialDisconnectTrampoline();
+    void _onClientConnected(uint8_t num);
+    void _onClientDisconnected(uint8_t num);
+
+    // Shared inbound path — one binary message (one frame, or a batch),
+    // from either transport.
+    void _handleBinary(uint8_t num, uint8_t* payload, size_t length);
+    void _handleAuthFrame(uint8_t num, const Frame& f);
+    void _rejectClient(uint8_t num, int32_t reason);
+    bool _clientReady(uint8_t c) const {
+        return (_connectedClients & (1 << c)) && _authed[c];
+    }
+
+    // Raw transport write — the ONLY place bytes leave the board.
+    void _sendRaw(uint8_t clientNum, uint8_t* buf, size_t len);
+
     void _handleCoreFrame(uint8_t clientNum, const Frame& f);
-    void _performRead(int pin, uint8_t cmd);
+    void _pollActions(unsigned long now);
+    void _sendReadTo(uint8_t clientNum, int pin, uint8_t cmd, int32_t val);
+    void _seedActions(uint8_t clientNum);
     void _sendHello(uint8_t clientNum);
     void _announcePins(uint8_t clientNum);
     void _sendSyncComplete(uint8_t clientNum);
     int  _getSlot(int id);
+    void _initAction(int slot, int pin, uint8_t cmd);
+    void _registerClientRead(uint8_t clientNum, int pin, uint8_t cmd,
+                             uint16_t interval, uint16_t threshold,
+                             int32_t seedVal);
     void _unregisterAction(int id);
+    void _unregisterClient(uint8_t clientNum);
+    void _offerToClients(Action& a, int32_t val, unsigned long now, bool respectSpacing);
+    static uint16_t _defaultThreshold(uint8_t cmd);
 
     // Message channel internals.
     void _emitMessage(uint8_t type, uint8_t flags, const char* key,

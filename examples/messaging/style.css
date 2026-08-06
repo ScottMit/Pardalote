@@ -1,0 +1,191 @@
+/* ==========================================================================
+   Pardalote example — house style
+   Matches the website ("Graph Line / Bauhaus"): white paper, graph-paper
+   wash, Poppins, 1.5px ink outlines, teal / amber / orange accents.
+   Base rules are shared with every Pardalote example (canonical copy:
+   examples/stepper-motor/style.css); this example adds panel/list rules.
+   ========================================================================== */
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
+
+:root {
+    --ink:      #2B2420;
+    --ink-soft: #4a463f;
+    --grey:     #6d6a5f;
+    --paper:    #FFFFFF;
+    --cream:    #F2E9D8;
+    --orange:   #D3542B;   /* primary accent / warnings   */
+    --teal:     #3FA9A0;   /* live / active               */
+    --green:    #3E9C54;   /* connected                   */
+    --amber:    #E8A33D;   /* highlights / secondary      */
+    --line:     #2B2420;   /* structural outlines         */
+    --hair:     #d9d2c2;   /* soft dividers               */
+    --grid:     #ededed;   /* graph-paper lines           */
+    --mono: "SF Mono", "Fira Code", ui-monospace, Consolas, monospace;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+
+body {
+    font-family: 'Poppins', -apple-system, system-ui, sans-serif;
+    color: var(--ink);
+    background-color: var(--paper);
+    background-image:
+        linear-gradient(var(--grid) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 40px 40px;
+    line-height: 1.5;
+}
+
+main {
+    max-width: 680px;
+    margin: 0 auto;
+    padding: 26px clamp(16px, 4vw, 40px) 44px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+/* ---- header ---- */
+.heading {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    margin-bottom: 2px;
+}
+.heading::after {
+    content: "";
+    display: block;
+    width: 44px;
+    height: 3px;
+    background: var(--amber);
+    margin-top: 6px;
+}
+#status {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--grey);
+    margin: 8px 0 14px;
+}
+
+/* ---- control rows ---- */
+.row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    font-size: 13px;
+    color: var(--ink-soft);
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+}
+.lbl {
+    width: 74px;
+    flex: none;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: var(--ink);
+}
+
+/* ---- controls ---- */
+button, select {
+    font-family: 'Poppins', system-ui, sans-serif;
+    font-size: 12.5px;
+    font-weight: 600;
+    padding: 5px 12px;
+    background: var(--paper);
+    color: var(--ink);
+    border: 1.5px solid var(--line);
+    border-radius: 0;
+    cursor: pointer;
+    transition: background .15s, color .15s, border-color .15s;
+}
+button:hover { background: var(--ink); color: #fff; }
+button.primary { background: var(--ink); color: #fff; }
+button.primary:hover { background: var(--green); border-color: var(--green); color: #fff; }
+/* connected state (Connect button, WiFi or USB) */
+button.connected { background: var(--green); border-color: var(--green); color: #fff; }
+button.connected:hover { background: var(--green); border-color: var(--green); color: #fff; }
+
+input[type=text], input[type=number] {
+    font-family: var(--mono);
+    font-size: 13px;
+    padding: 4px 7px;
+    background: var(--paper);
+    color: var(--ink);
+    border: 1.5px solid var(--line);
+    border-radius: 0;
+}
+input[type=range] { accent-color: var(--teal); }
+input[type=checkbox] { accent-color: var(--teal); }
+
+/* ==========================================================================
+   This example: hint, panels, message + frame lists
+   ========================================================================== */
+.hint  { font-size: 13px; line-height: 1.7; color: var(--grey); margin: 0 0 16px; max-width: 56ch; }
+.tiny  { font-size: 12px; font-weight: 400; color: var(--grey); margin: 6px 0 0; text-transform: none; letter-spacing: 0; }
+.tiny code { font-family: var(--mono); color: var(--orange); }
+
+.panel {
+    width: 100%;
+    background: var(--paper);
+    border: 1.5px solid var(--line);
+    padding: 16px 18px;
+    margin-top: 14px;
+}
+
+h2 {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: var(--ink);
+    margin: 0 0 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+h2 label { display: flex; align-items: center; gap: 5px; }
+
+form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0; }
+form input[type=text] { flex: 1; min-width: 120px; }
+label { font-size: 13px; font-weight: 400; color: var(--ink-soft); display: flex; align-items: center; gap: 5px; }
+
+ul { list-style: none; margin: 0; padding: 0; max-height: 240px; overflow-y: auto; }
+#log li, #frames li {
+    padding: 5px 2px;
+    border-bottom: 1px solid var(--hair);
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--ink-soft);
+}
+#log b { color: var(--ink); }
+.mono li { font-family: var(--mono); font-size: 12px; }
+#frames li.in  { color: var(--teal); }    /* board → browser */
+#frames li.out { color: var(--orange); }  /* browser → board */
+
+.badge {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--ink);
+    background: var(--cream);
+    border: 1px solid var(--hair);
+    padding: 2px 6px;
+}
+
+/* ---- code panel: the constructed arduino.send() call ---- */
+#code {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--ink);
+    background: var(--cream);
+    border: 1px solid var(--hair);
+    padding: 10px 12px;
+    margin: 0;
+    overflow-x: auto;
+    white-space: pre;
+}

@@ -41,19 +41,21 @@ How long the Arduino waits for an echo before giving up. Maximum range follows f
 
 ## read()
 
-Reads the distance. Same poll-and-cache pattern as `analogRead()`: the first call starts a poll, later calls return the cached value — safe to call every frame.
+Reads the distance. Same poll-and-cache pattern as `analogRead()`: the first call starts a poll, later calls return the cached value — safe to call every frame. The board runs the poll (one measurement per interval, however many browsers are connected) and only transmits readings that changed **meaningfully** — by at least the threshold.
 
-<div class="sig">arduino.sonar.<span class="fn">read</span>([interval], [unit])</div>
+<div class="sig">arduino.sonar.<span class="fn">read</span>([interval], [unit], [threshold])</div>
 
 | Parameter | Type | Description |
 |---|---|---|
 | `interval` | number | Optional. Poll interval in ms. Pass `END` to stop. |
 | `unit` | constant | Optional. `CM` or `INCH` — applies to all subsequent reads. |
+| `threshold` | number | Optional. Minimum change worth transmitting, in the sensor's units (`0` = default: `0.3` — the HC-SR04's noise floor). Per browser: other pages keep their own settings. |
 
 **Returns** the cached distance, or `-1` if the echo timed out (nothing in range).
 
 ```javascript Example — distance in a draw loop
-arduino.sonar.read(200, CM);   // start polling every 200 ms, in cm
+arduino.sonar.read(200, CM);        // start polling every 200 ms, in cm
+arduino.sonar.read(200, CM, 0.5);   // …only reporting changes of 0.5+ cm
 
 function draw() {
     let cm = arduino.sonar.read();          // cached — no extra traffic
@@ -63,15 +65,21 @@ function draw() {
 
 Point the sensor at flat, hard surfaces — fabric and foam absorb ultrasound and can read as "nothing there".
 
+## setReadInterval() / setReadThreshold()
+
+Set the poll settings directly — applied immediately if polling, stored for the next `read()` otherwise.
+
+<div class="sig">arduino.sonar.<span class="fn">setReadInterval</span>(ms) · arduino.sonar.<span class="fn">setReadThreshold</span>(units)</div>
+
 ## Events
 
 <div class="sig">arduino.sonar.<span class="fn">on</span>(event, handler)</div>
 
 | Event | Payload | Fires when |
 |---|---|---|
-| `'read'` | `{ distance, unit }` | A poll result arrives. `unit` is `CM` or `INCH`. |
+| `'change'` | `{ distance, unit }` | The distance changed by at least the threshold. `unit` is `CM` or `INCH`. |
 
-Shorthand: `onRead(fn)`.
+Shorthand: `onChange(fn)`.
 
 ## Properties and state
 
@@ -81,6 +89,6 @@ Shorthand: `onRead(fn)`.
 
 <div class="sig">arduino.sonar.<span class="fn">getState</span>()</div>
 
-**Returns** `{ trigPin, echoPin, attached, timeoutMs, distance, unit, interval }`.
+**Returns** `{ trigPin, echoPin, attached, timeoutMs, distance, unit, interval, threshold }`.
 
-See also: [Ultrasonic example](../examples/ultrasonic-sensor-example.html) · [Troubleshooting](troubleshooting.html)
+See also: [Ultrasonic example](../examples/ultrasonic-sensor.html) · [Troubleshooting](troubleshooting.html)

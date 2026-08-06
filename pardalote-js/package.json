@@ -1,10 +1,8 @@
 {
-  "name": "p5js_websockets",
+  "name": "pardalote",
   "version": "1.0.0",
-  "description": "",
-  "main": "sketch.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
+  "description": "Arduino to JavaScript communication over binary WebSockets \u2014 drive real hardware from p5.js with zero toolchain.",
+  "main": "pardalote.js",
+  "license": "GPL-3.0",
   "private": true
 }

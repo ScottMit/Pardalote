@@ -96,25 +96,25 @@ Reading back the local buffer.
 
 **Returns** a 32-bit packed colour / the pixel count.
 
-## setThreshold()
+## setWriteThreshold()
 
 Pixel changes below the colour distance threshold are ignored — useful for animation loops that might send identical values.
 
-<div class="sig">arduino.strip.<span class="fn">setThreshold</span>(distance)</div>
+<div class="sig">arduino.strip.<span class="fn">setWriteThreshold</span>(distance)</div>
 
 | Parameter | Type | Description |
 |---|---|---|
 | `distance` | number | Minimum colour distance to count as a change. Default `5`. |
 
-## setThrottle()
+## setWriteThrottle()
 
 Minimum time between `show()` flushes. Default 20 ms (~50 Hz max). Raise it if you see queue-buildup lag on a slow link; set `0` to disable debouncing.
 
-<div class="sig">arduino.strip.<span class="fn">setThrottle</span>(ms)</div>
+<div class="sig">arduino.strip.<span class="fn">setWriteThrottle</span>(ms)</div>
 
 ```javascript Example — tune the flush rate
-arduino.strip.setThrottle(50);  // gentler on the UNO R4's WiFi
-arduino.strip.setThrottle(0);   // every show() flushes
+arduino.strip.setWriteThrottle(50);  // gentler on the UNO R4's WiFi
+arduino.strip.setWriteThrottle(0);   // every show() flushes
 ```
 
 ## Type constants
@@ -135,4 +135,4 @@ arduino.strip.init(6, 30, NEO_GRB + NEO_KHZ800);
 
 **Returns** a snapshot of all strip state.
 
-See also: [NeoPixel example](../examples/neopixel-example.html) · [Troubleshooting](troubleshooting.html)
+See also: [NeoPixel example](../examples/neopixel.html) · [Troubleshooting](troubleshooting.html)

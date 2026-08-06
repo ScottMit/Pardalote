@@ -1,0 +1,131 @@
+/* ==========================================================================
+   Pardalote example — house style (IMU variant)
+   Matches the website ("Graph Line / Bauhaus"): white paper, Poppins,
+   1.5px ink outlines, teal / amber / orange accents. This example is a
+   full-window WEBGL canvas with a HUD overlay card.
+   ========================================================================== */
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
+
+:root {
+    --ink:      #2B2420;
+    --ink-soft: #4a463f;
+    --grey:     #6d6a5f;
+    --paper:    #FFFFFF;
+    --cream:    #F2E9D8;
+    --orange:   #D3542B;
+    --teal:     #3FA9A0;
+    --amber:    #E8A33D;
+    --line:     #2B2420;
+    --hair:     #d9d2c2;
+    --grid:     #ededed;
+    --mono: "SF Mono", "Fira Code", ui-monospace, Consolas, monospace;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+    background: var(--paper);
+    overflow: hidden;
+    font-family: 'Poppins', -apple-system, system-ui, sans-serif;
+}
+
+canvas { display: block; }
+
+/* ── HUD overlay — an outlined house card ────────────────────── */
+#hud {
+    position: fixed;
+    top: 20px;
+    left: 20px;
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--ink-soft);
+    background: var(--paper);
+    border: 1.5px solid var(--line);
+    padding: 16px 20px;
+    min-width: 250px;
+    line-height: 1.5;
+    pointer-events: none;   /* let clicks fall through to canvas */
+    user-select: none;
+}
+
+/* re-enable pointer events only where needed */
+#hud button { pointer-events: all; }
+
+#hud .heading {
+    font-family: 'Poppins', system-ui, sans-serif;
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--ink);
+    margin-bottom: 2px;
+}
+#hud .heading::after {
+    content: "";
+    display: block;
+    width: 36px;
+    height: 3px;
+    background: var(--amber);
+    margin: 5px 0 10px;
+}
+
+#status {
+    font-size: 11px;
+    letter-spacing: 1px;
+    margin-bottom: 14px;
+}
+#status.connected    { color: var(--teal); }
+#status.disconnected { color: var(--orange); }
+
+.section { margin-bottom: 10px; }
+
+.label {
+    font-size: 9px;
+    letter-spacing: 2px;
+    color: var(--grey);
+    margin-bottom: 3px;
+}
+
+#angles {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    column-gap: 12px;
+    row-gap: 4px;
+    align-items: baseline;
+    font-size: 16px;
+    color: var(--ink);
+    letter-spacing: 0.5px;
+}
+/* axis colours match the 3D axes: X orange, Y teal, Z amber */
+#angles .axis-x { color: var(--orange); letter-spacing: 1.5px; font-size: 11px; }
+#angles .axis-y { color: var(--teal);   letter-spacing: 1.5px; font-size: 11px; }
+#angles .axis-z { color: var(--amber);  letter-spacing: 1.5px; font-size: 11px; }
+#angles .angle-val {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+#angles .deg { color: var(--grey); font-size: 13px; }
+
+/* ── Calibrate button ────────────────────────────────────────── */
+#cal-btn {
+    display: block;
+    margin-top: 14px;
+    padding: 6px 14px;
+    background: var(--paper);
+    border: 1.5px solid var(--line);
+    border-radius: 0;
+    color: var(--ink);
+    font-family: 'Poppins', system-ui, sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+}
+#cal-btn:hover  { background: var(--ink); color: #fff; }
+#cal-btn:active { background: var(--orange); border-color: var(--orange); color: #fff; }
+
+#cal-msg {
+    margin-top: 8px;
+    font-size: 11px;
+    color: var(--grey);
+    min-height: 16px;
+}

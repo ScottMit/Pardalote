@@ -34,6 +34,7 @@ inline const char* pardaloteFrameName(uint16_t target, uint8_t cmd) {
             case CMD_PING:          return "PING";
             case CMD_PONG:          return "PONG";
             case CMD_SYNC_COMPLETE: return "SYNC_COMPLETE";
+            case CMD_AUTH:          return "AUTH";
             default:                return nullptr;
         }
     }
@@ -73,14 +74,14 @@ inline const char* pardaloteFrameName(uint16_t target, uint8_t cmd) {
                 case CMD_ULTRASONIC_SET_TIMEOUT: return "ULTRASONIC_SET_TIMEOUT";
             }
             break;
-        case DEVICE_MPU:
+        case DEVICE_IMU:
             switch (cmd) {
-                case CMD_MPU_ATTACH:          return "MPU_ATTACH";
-                case CMD_MPU_DETACH:          return "MPU_DETACH";
-                case CMD_MPU_READ:            return "MPU_READ";
-                case CMD_MPU_SET_ACCEL_RANGE: return "MPU_SET_ACCEL_RANGE";
-                case CMD_MPU_SET_GYRO_RANGE:  return "MPU_SET_GYRO_RANGE";
-                case CMD_MPU_CALIBRATE:       return "MPU_CALIBRATE";
+                case CMD_IMU_ATTACH:          return "IMU_ATTACH";
+                case CMD_IMU_DETACH:          return "IMU_DETACH";
+                case CMD_IMU_READ:            return "IMU_READ";
+                case CMD_IMU_SET_ACCEL_RANGE: return "IMU_SET_ACCEL_RANGE";
+                case CMD_IMU_SET_GYRO_RANGE:  return "IMU_SET_GYRO_RANGE";
+                case CMD_IMU_CALIBRATE:       return "IMU_CALIBRATE";
             }
             break;
         case DEVICE_CAMERA:
@@ -132,6 +133,17 @@ inline const char* pardaloteFrameName(uint16_t target, uint8_t cmd) {
                 case CMD_BUSSERVO_SCAN:        return "BUSSERVO_SCAN";
                 case CMD_BUSSERVO_SYNC_WRITE:  return "BUSSERVO_SYNC_WRITE";
                 case CMD_BUSSERVO_DONE:        return "BUSSERVO_DONE";
+                case CMD_BUSSERVO_READ_LIMITS: return "BUSSERVO_READ_LIMITS";
+                case CMD_BUSSERVO_PRESENT:     return "BUSSERVO_PRESENT";
+            }
+            break;
+
+        case DEVICE_ENCODER:
+            switch (cmd) {
+                case CMD_ENCODER_ATTACH:       return "ENCODER_ATTACH";
+                case CMD_ENCODER_DETACH:       return "ENCODER_DETACH";
+                case CMD_ENCODER_READ:         return "ENCODER_READ";
+                case CMD_ENCODER_SET_POSITION: return "ENCODER_SET_POSITION";
             }
             break;
     }

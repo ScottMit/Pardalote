@@ -151,4 +151,4 @@ function draw() {
 
 Only one browser can receive the MJPEG stream at a time. This is a fundamental limitation of the ESP32 camera driver — `esp_camera_fb_get()` is single-consumer by design. A second browser connecting will see a black screen and only receives the feed once the first disconnects. This behaviour is identical to Espressif's own CameraWebServer example.
 
-See also: [Camera example](../examples/camera-example.html)
+See also: [Camera example](../examples/camera-stream.html)

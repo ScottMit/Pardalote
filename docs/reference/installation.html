@@ -10,9 +10,9 @@
 </head>
 <body data-nav="reference">
 
-<nav class="site-nav speckled">
+<nav class="site-nav">
   <a class="logo" href="../index.html">
-    <img src="../assets/logo.svg" width="30" height="30" alt="">
+    <img src="../assets/logo.svg" width="26" height="26" alt="">
     Pardalote
   </a>
   <div class="links">
@@ -27,42 +27,65 @@
 <div class="wrap">
   <div class="ref-layout">
 <aside class="ref-nav">
-  <h4>Getting started</h4>
+  <button class="ref-nav-toggle" aria-expanded="false" aria-controls="ref-nav-links">Contents</button>
+  <div class="ref-nav-links" id="ref-nav-links">
+  <h4><a href="index.html">Getting started</a></h4>
   <a href="index.html">Overview</a>
   <a href="installation.html">Installation</a>
   <a href="wifi.html">WiFi configuration</a>
-  <h4>Core — JavaScript</h4>
-  <a href="connecting.html#connect">connect() / events</a>
+  <a href="ai-coding.html">Coding with AI</a>
+  <h4><a href="connecting.html">Core — JavaScript</a></h4>
+  <a href="connecting.html#connect">connect()</a>
+  <a href="connecting.html#on">on()</a>
+  <a href="connecting.html#disconnect">disconnect()</a>
+  <a href="connecting.html#getstatus">getStatus()</a>
   <a href="pins.html#pinmode">pinMode()</a>
-  <a href="pins.html#digitalwrite">digitalWrite() / analogWrite()</a>
-  <a href="pins.html#analogread">analogRead() / digitalRead()</a>
-  <a href="pins.html#onchange">onChange()</a>
+  <a href="pins.html#digitalwrite">digitalWrite()</a>
+  <a href="pins.html#analogwrite">analogWrite()</a>
+  <a href="pins.html#setwritethrottle--setwritethreshold">setWriteThrottle() / setWriteThreshold()</a>
+  <a href="pins.html#analogread">analogRead()</a>
+  <a href="pins.html#digitalread">digitalRead()</a>
+  <a href="pins.html#setreadinterval--setreadthreshold">setReadInterval() / setReadThreshold()</a>
+  <a href="pins.html#pin--the-listening-handle">pin() — the listening handle</a>
+  <a href="pins.html#end--endall">end() / endAll()</a>
   <a href="pins.html#pin-aliases">Pin aliases</a>
-  <h4>Core — Arduino</h4>
-  <a href="arduino.html#pardalotebegin">Pardalote.begin() / run()</a>
-  <a href="arduino.html#pardaloteshare">share() / send()</a>
-  <a href="arduino.html#the-actuator-objects">Reading actuators</a>
-  <h4>Extensions</h4>
+  <h4><a href="arduino.html">Core — Arduino</a></h4>
+  <a href="arduino.html#pardalotebegin">Pardalote.begin()</a>
+  <a href="arduino.html#pardaloterun">Pardalote.run()</a>
+  <a href="arduino.html#pardaloteshare">Pardalote.share()</a>
+  <a href="arduino.html#pardalotesend">Pardalote.send()</a>
+  <a href="arduino.html#when-not-to-share">When not to share</a>
+  <h4><a href="messaging.html">Core — Messaging</a></h4>
+  <a href="messaging.html#javascript-to-arduino">JavaScript to Arduino</a>
+  <a href="messaging.html#arduino-to-javascript">Arduino to JavaScript</a>
+  <a href="messaging.html#retain-and-broadcast">Retain and broadcast</a>
+  <a href="messaging.html#inspecting-all-traffic">Inspecting all traffic</a>
+  <h4><a href="extensions.html">Extensions</a></h4>
   <a href="extensions.html">Overview</a>
+  <a href="extensions.html#creating-extension-objects-in-the-firmware">Creating extension objects in the firmware</a>
+  <a href="extensions.html#reading-and-writing-actuators-from-the-sketch">Reading and writing actuators from the sketch</a>
   <a href="servo.html">Servo</a>
   <a href="stepper.html">Stepper</a>
   <a href="bus-servo.html">Bus servo</a>
   <a href="groups.html">Groups</a>
   <a href="neopixel.html">NeoPixel</a>
   <a href="ultrasonic.html">Ultrasonic</a>
-  <a href="mpu.html">MPU / IMU</a>
+  <a href="encoder.html">Rotary encoder</a>
+  <a href="imu.html">IMU</a>
   <a href="camera.html">Camera</a>
-  <h4>Under the hood</h4>
+  <h4><a href="protocol.html">Under the hood</a></h4>
   <a href="protocol.html">Protocol</a>
+  <a href="pin-capabilities.html">Pin capabilities</a>
   <a href="troubleshooting.html">Troubleshooting</a>
+  </div>
 </aside>
     <main class="ref-main">
       <h1>Installation</h1>
       <p class="lede">What you need and where to put it — hardware, software, and the two Pardalote libraries.</p>
 <h2 id="hardware">Hardware</h2>
 <ul>
-<li><strong>Arduino UNO R4 WiFi</strong> or <strong>ESP32 development board</strong></li>
-<li>The Arduino and your browser must be on the same WiFi network</li>
+<li><strong>Arduino UNO R4 WiFi</strong>, <strong>ESP32 development board</strong>, or <strong>Arduino UNO R4 Minima</strong> (USB serial only — it has no radio)</li>
+<li>Over WiFi: the Arduino and your browser must be on the same network. Over USB serial: just the cable, using Chrome or Edge (<a href="connecting.html#connectserial">details</a>)</li>
 </ul>
 <h2 id="software">Software</h2>
 <ul>
@@ -82,7 +105,7 @@
 <tbody>
 <tr>
 <td><code>WebSocketsServer</code> (Markus Sattler)</td>
-<td>Always required</td>
+<td>Always required on WiFi boards (not needed on the UNO R4 Minima — its serial-only build compiles the WiFi path out)</td>
 </tr>
 <tr>
 <td><code>Adafruit NeoPixel</code></td>
@@ -98,11 +121,11 @@
 </tr>
 <tr>
 <td><code>SCServo</code> (Feetech/Waveshare)</td>
-<td>Serial bus servos — usually a ZIP from the Waveshare wiki or Feetech SDK, not in the Library Manager</td>
+<td>Serial bus servos — install <strong>&quot;SCServo&quot; by FT&amp;WS</strong> from the Library Manager, or a ZIP from the Waveshare wiki / Feetech SDK</td>
 </tr>
 </tbody>
 </table>
-<p>No extra library is needed for the MPU / IMU extension — it reads sensor registers directly over I2C. The camera extension needs only the ESP32 Arduino core.</p>
+<p>No extra library is needed for the IMU extension — it reads sensor registers directly over I2C. The camera extension needs only the ESP32 Arduino core.</p>
 <h2 id="the-pardalote-arduino-library">The Pardalote Arduino library</h2>
 <p>Pardalote ships as an Arduino library. Install it by copying the <code>Pardalote</code> folder from the download into your Arduino libraries folder:</p>
 <table>
@@ -138,10 +161,10 @@
 </code></pre></div>
 <h2 id="a-minimal-sketch">A minimal sketch</h2>
 <p>A complete Pardalote sketch is two lines of <code>setup()</code> and one line of <code>loop()</code>:</p>
-<div class="code-ex"><div class="bar">sketch.ino — a complete Pardalote sketch</div><pre><code><span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;Pardalote.h&gt;</span><span class="cp"></span>
+<div class="code-ex"><span class="lang-badge lang-arduino">Arduino</span><div class="bar">sketch.ino — a complete Pardalote sketch</div><pre><code><span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;Pardalote.h&gt;</span>
 
-<span class="kt">void</span><span class="w"> </span><span class="nf">setup</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">begin</span><span class="p">();</span><span class="w"> </span><span class="p">}</span><span class="w"></span>
-<span class="kt">void</span><span class="w"> </span><span class="nf">loop</span><span class="p">()</span><span class="w">  </span><span class="p">{</span><span class="w"> </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">run</span><span class="p">();</span><span class="w">   </span><span class="p">}</span><span class="w"></span>
+<span class="kt">void</span><span class="w"> </span><span class="nf">setup</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">begin</span><span class="p">();</span><span class="w"> </span><span class="p">}</span>
+<span class="kt">void</span><span class="w"> </span><span class="nf">loop</span><span class="p">()</span><span class="w">  </span><span class="p">{</span><span class="w"> </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">run</span><span class="p">();</span><span class="w">   </span><span class="p">}</span>
 </code></pre></div>
 <p>Extensions self-register when included — see <a href="extensions.html">Extensions</a>.</p>
 <h2 id="finding-the-boards-ip-address">Finding the board's IP address</h2>
@@ -156,7 +179,7 @@
   </div>
 </div>
 
-<footer class="site-footer speckled">
+<footer class="site-footer">
   <div class="wrap">
     <span>Pardalote — created by Scott Mitchell for design education and creative technology.</span>
     <span><a href="index.html">Reference</a> · <a href="https://github.com/ScottMit/Pardalote">GitHub</a> · GPL-3.0</span>

@@ -1,7 +1,7 @@
 // ==============================================================
 // PardaloteStepper.h
 // Pardalote Stepper Motor Extension
-// Version v1.0
+// Part of Pardalote — version in library.properties
 // by Scott Mitchell
 // GPL-3.0 License
 //
@@ -44,7 +44,10 @@ private:
     //              duration (runSpeedToPosition()); used for group arrive-together.
     //   STOPPING — decelerating a constant-speed (VELOCITY/TIMED) motion to a
     //              clean halt by ramping setSpeed() toward 0; then → POSITION.
-    enum Mode : uint8_t { MODE_POSITION = 0, MODE_VELOCITY = 1, MODE_TIMED = 2, MODE_STOPPING = 3 };
+    //   EASED    — playing a gesture SEGMENT SCHEDULE: each tick follows the
+    //              segment's eased position at a feed-forward speed derived
+    //              from the same curve (see loop() + loadStepperSegment()).
+    enum Mode : uint8_t { MODE_POSITION = 0, MODE_VELOCITY = 1, MODE_TIMED = 2, MODE_STOPPING = 3, MODE_EASED = 4 };
 
     inline static AccelStepper* _steppers[MAX_STEPPERS] = {};
     inline static bool          _attached[MAX_STEPPERS] = {};
@@ -106,7 +109,32 @@ private:
     inline static uint32_t  _homeDeadline[MAX_STEPPERS] = {};   // millis() cap for SEEK+BACKOFF
     static const uint32_t HOME_MAX_MS = 30000;   // default cap — unplugged switch can't spin forever
 
+    // Gesture segment schedule (CMD_STEPPER_GESTURE, MODE_EASED). Unlike the
+    // servo's sampled interpolation, a stepper can't teleport, so each tick
+    // follows the segment's eased POSITION at a feed-forward SPEED (magnitude
+    // from the curve slope; runSpeedToPosition() supplies direction and the
+    // exact landing). `from` is re-captured from currentPosition() at each
+    // segment start (dynamic capture), so step-quantisation error never
+    // accumulates across a gesture and relative bounces need no homing.
+    static const uint8_t MAX_STEPPER_SEGMENTS = 16;
+    struct Seg { uint8_t curve; uint16_t dur; int32_t value; };
+    inline static Seg      _segs[MAX_STEPPERS][MAX_STEPPER_SEGMENTS] = {};
+    inline static uint8_t  _segCount[MAX_STEPPERS]   = {};   // 0 = no gesture running
+    inline static uint8_t  _segIndex[MAX_STEPPERS]   = {};   // current segment
+    inline static uint8_t  _segFlags[MAX_STEPPERS]   = {};   // GESTURE_FLAG_* (reference frame, loop)
+    inline static uint8_t  _curveNow[MAX_STEPPERS]   = {};   // easing id of the current segment
+    inline static int32_t  _segFromPos[MAX_STEPPERS] = {};   // captured position at segment start
+    inline static int32_t  _segTarget[MAX_STEPPERS]  = {};   // segment end position (clamped)
+    inline static uint32_t _segStartMs[MAX_STEPPERS] = {};   // segment timebase (start+dur, drift-free)
+    inline static uint32_t _segDurMs[MAX_STEPPERS]   = {};
+
     static bool validId(int id) { return id >= 0 && id < MAX_STEPPERS; }
+
+    // Periodic reads — per-client registration + gating.
+    // Gates on position; default threshold 1 step (positions are exact
+    // counters — every step is a real change).
+    inline static ExtReadPoll _polls[MAX_STEPPERS] = {};
+    static constexpr uint16_t DEFAULT_THRESHOLD = 1;
 
     // Read a numeric param as float regardless of how JS encoded it.
     // encodeFrame() sends whole numbers as int32 and only non-integers as
@@ -250,6 +278,7 @@ private:
     static void startTimedMove(int id, int32_t target, uint32_t durationMs) {
         AccelStepper* s = _steppers[id];
         if (!s) return;
+        cancelEased(id);           // a timed move supersedes any running gesture
         _homing[id] = HOME_IDLE;   // explicit move cancels homing
         target = clampTarget(id, target);
         long  distance = (long)target - s->currentPosition();
@@ -260,6 +289,71 @@ private:
         s->moveTo(target);
         s->setSpeed(distance >= 0 ? speed : -speed);
         _mode[id] = MODE_TIMED;
+    }
+
+    // Peak/average speed ratio for a curve — an eased move's velocity peaks
+    // above its distance/duration average, so we raise the live maxSpeed cap
+    // to render the curve within the authored duration (restored on finish).
+    static float curveSlopeMax(uint8_t curve) {
+        switch (curve) {
+            case CURVE_EASE_IN:     return 2.0f;   // slope 2t → 2 at t=1
+            case CURVE_EASE_OUT:    return 2.0f;   // slope 2(1-t) → 2 at t=0
+            case CURVE_EASE_IN_OUT: return 1.5f;   // smoothstep peak 1.5 at t=0.5
+            case CURVE_BACK:        return 3.6f;   // easeOutBack peak ≈ 3.6
+            default:                return 1.0f;   // linear
+        }
+    }
+
+    // Load segment `idx` as the current eased move. from = live position
+    // (dynamic capture); target = from+delta (relative) or the value itself
+    // (absolute), clamped to soft limits. Raises the live speed cap to fit the
+    // curve's velocity peak inside `dur`. _maxSpeed[id] keeps the USER value.
+    static void loadStepperSegment(int id, uint8_t idx, uint32_t startMs) {
+        AccelStepper* s = _steppers[id];
+        const Seg& seg  = _segs[id][idx];
+        int32_t from    = s->currentPosition();
+        int32_t target  = (_segFlags[id] & GESTURE_FLAG_ABSOLUTE) ? seg.value : from + seg.value;
+        target          = clampTarget(id, target);
+        uint32_t dur    = seg.dur ? seg.dur : 1;
+
+        _segFromPos[id] = from;
+        _segTarget[id]  = target;
+        _curveNow[id]   = seg.curve;
+        _segStartMs[id] = startMs;
+        _segDurMs[id]   = dur;
+        _segIndex[id]   = idx;
+
+        float durSec = dur / 1000.0f;
+        float peak   = fabsf((float)(target - from)) / durSec * curveSlopeMax(seg.curve);
+        if (peak < 1.0f) peak = 1.0f;
+        if (s->maxSpeed() < peak) s->setMaxSpeed(peak);   // raised for the move; restored on finish
+        _mode[id] = MODE_EASED;
+    }
+
+    // End a gesture: stop, restore the user's speed cap, drop the schedule,
+    // and announce completion via the normal DONE frame (whenDone()).
+    static void finishStepperGesture(int id) {
+        AccelStepper* s = _steppers[id];
+        s->setSpeed(0);
+        s->moveTo(s->currentPosition());      // no residual target
+        s->setMaxSpeed(_maxSpeed[id]);        // restore the user-configured cap
+        _mode[id]       = MODE_POSITION;
+        _segCount[id]   = 0;
+        _wasRunning[id] = false;              // suppress the generic DONE edge — we send it here
+        FrameBuilder fb;
+        fb.begin(CMD_STEPPER_DONE, DEVICE_STEPPER);
+        fb.addInt(id);
+        fb.addInt(s->currentPosition());
+        Pardalote.broadcastFrame(fb);
+    }
+
+    // Abandon a running gesture WITHOUT a DONE frame (a new explicit motion
+    // command supersedes it). Restores the speed cap so the next move honours
+    // the user's maxSpeed. No-op when no gesture is active.
+    static void cancelEased(int id) {
+        if (_mode[id] != MODE_EASED && _segCount[id] == 0) return;
+        if (_steppers[id]) _steppers[id]->setMaxSpeed(_maxSpeed[id]);
+        _segCount[id] = 0;
     }
 
 public:
@@ -404,6 +498,36 @@ public:
             return;
         }
 
+        // Global (multi-stepper) gesture — one or more channel blocks, each a
+        // segment schedule the board plays locally (see defs.h layout).
+        if (cmd == CMD_STEPPER_GESTURE) {
+            uint32_t now = millis();
+            uint16_t off = 0;
+            while (off + 3 <= payloadLen) {
+                int     sid   = payload[off];
+                uint8_t flags = payload[off + 1];
+                uint8_t count = payload[off + 2];
+                off += 3;
+                if ((uint32_t)off + (uint32_t)count * 7 > payloadLen) break;   // malformed — stop
+                if (validId(sid) && _attached[sid] && _steppers[sid] && count > 0) {
+                    _homing[sid] = HOME_IDLE;              // a gesture supersedes homing
+                    uint8_t n = count > MAX_STEPPER_SEGMENTS ? MAX_STEPPER_SEGMENTS : count;
+                    for (uint8_t i = 0; i < n; i++) {
+                        const uint8_t* r = payload + off + i * 7;
+                        _segs[sid][i].curve = r[0];
+                        _segs[sid][i].dur   = (uint16_t)(((uint16_t)r[1] << 8) | r[2]);
+                        _segs[sid][i].value = (int32_t)(((uint32_t)r[3] << 24) | ((uint32_t)r[4] << 16) |
+                                                        ((uint32_t)r[5] <<  8) |  (uint32_t)r[6]);
+                    }
+                    _segCount[sid] = n;
+                    _segFlags[sid] = flags;
+                    loadStepperSegment(sid, 0, now);
+                }
+                off += (uint16_t)count * 7;               // skip the whole declared block, even if capped
+            }
+            return;
+        }
+
         if (nparams < 1) return;
         int id = (int)paramInt(params, 0);
         if (!validId(id)) {
@@ -452,6 +576,7 @@ public:
                 _steppers[id]->setAcceleration(_accel[id]);
                 _mode[id]       = MODE_POSITION;
                 _wasRunning[id] = false;
+                _segCount[id]   = 0;    // no stale gesture from a previous instance on this id
                 _attached[id]   = true;
 
                 Serial.print(F("Stepper ")); Serial.print(id);
@@ -467,6 +592,8 @@ public:
                         delete _steppers[id];
                         _steppers[id] = nullptr;
                     }
+                    ExtReadPoll* p = extPollFind(_polls, MAX_STEPPERS, id);
+                    if (p) p->instance = -1;   // stop any periodic read
                     _attached[id]   = false;
                     _limitEnabled[id] = false;
                     _swPin[id][0] = _swPin[id][1] = -1;
@@ -481,6 +608,7 @@ public:
             case CMD_STEPPER_MOVE_TO: {
                 if (!_attached[id] || nparams < 2) return;
                 cancelHoming(id);
+                cancelEased(id);
                 int32_t target = clampTarget(id, (int32_t)paramInt(params, 1));
                 _mode[id] = MODE_POSITION;
                 _steppers[id]->setMaxSpeed(_maxSpeed[id]);   // restore cap (a timed move may have raised it)
@@ -491,6 +619,7 @@ public:
             case CMD_STEPPER_MOVE: {
                 if (!_attached[id] || nparams < 2) return;
                 cancelHoming(id);
+                cancelEased(id);
                 int32_t rel    = (int32_t)paramInt(params, 1);
                 int32_t target = clampTarget(id, _steppers[id]->currentPosition() + rel);
                 _mode[id] = MODE_POSITION;
@@ -526,6 +655,7 @@ public:
             case CMD_STEPPER_RUN_SPEED: {
                 if (!_attached[id] || nparams < 2) return;
                 cancelHoming(id);
+                cancelEased(id);
                 float v = paramNum(params, typeMask, 1);
                 _mode[id] = MODE_VELOCITY;
                 _steppers[id]->setSpeed(v);
@@ -535,6 +665,7 @@ public:
             case CMD_STEPPER_STOP:
                 if (!_attached[id]) return;
                 cancelHoming(id);
+                cancelEased(id);   // stop() ends a gesture (its own DONE is not sent — mirrors servo.stop())
                 if (_mode[id] == MODE_VELOCITY || _mode[id] == MODE_TIMED) {
                     // Constant-speed motion (runSpeed/timed): decelerate via a
                     // speed ramp in the loop hook. AccelStepper::stop()/run()
@@ -553,12 +684,14 @@ public:
             case CMD_STEPPER_HARD_STOP:
                 if (!_attached[id]) return;
                 cancelHoming(id);
+                cancelEased(id);
                 hardStop(id);   // instant: zero speed + distanceToGo, keep position
                 break;
 
             case CMD_STEPPER_SET_POSITION: {
                 if (!_attached[id] || nparams < 2) return;
                 cancelHoming(id);
+                cancelEased(id);
                 _steppers[id]->setCurrentPosition((int32_t)paramInt(params, 1));
                 _wasRunning[id] = false;
                 break;
@@ -659,6 +792,7 @@ public:
 
             case CMD_STEPPER_HOME: {
                 if (!_attached[id]) return;
+                cancelEased(id);   // homing supersedes any running gesture
                 AccelStepper* s = _steppers[id];
                 // Pick the switch: MIN if configured, else MAX.
                 int end = (_swPin[id][LIMIT_MIN] >= 0) ? LIMIT_MIN
@@ -687,9 +821,31 @@ public:
                 break;
             }
 
+            // READ — params [id, interval?, threshold?]. Always
+            // answers the requester immediately. interval > 0 registers a
+            // board-side per-client periodic read (gated on position);
+            // interval < 0 (JS END) removes this client's registration;
+            // absent/0 = one-shot.
             case CMD_STEPPER_READ: {
+                long ms  = (nparams > 1) ? paramInt(params, 1) : 0;
+                long thr = (nparams > 2) ? paramInt(params, 2) : 0;
+
+                if (ms < 0) {   // END — unregister this client
+                    ExtReadPoll* p = extPollFind(_polls, MAX_STEPPERS, id);
+                    if (p) p->removeClient(clientNum);
+                    break;
+                }
+
                 if (!_attached[id]) return;
-                sendRead(id);
+                sendReadTo(clientNum, id);
+
+                if (ms > 0) {
+                    ExtReadPoll* p = extPollGet(_polls, MAX_STEPPERS, id);
+                    if (!p) break;
+                    p->setClient(clientNum, (uint16_t)constrain(ms, 1, 65535),
+                                 thr > 0 ? (uint16_t)thr : DEFAULT_THRESHOLD);
+                    p->seed(clientNum, _steppers[id]->currentPosition(), millis());
+                }
                 break;
             }
 
@@ -794,6 +950,44 @@ public:
                 }
             } else if (_mode[id] == MODE_TIMED) {
                 s->runSpeedToPosition();   // constant speed to target (arrive-together)
+            } else if (_mode[id] == MODE_EASED) {
+                // Follow the segment's eased position at a feed-forward speed.
+                uint32_t now      = millis();
+                uint32_t elapsed  = now - _segStartMs[id];
+                float    durSec   = _segDurMs[id] / 1000.0f;
+                long     from     = _segFromPos[id];
+                long     target   = _segTarget[id];
+                if (elapsed < _segDurMs[id]) {
+                    float t  = (float)elapsed / (float)_segDurMs[id];
+                    // Aim at the scheduled position (may pass `target` for BACK,
+                    // giving a real overshoot); runSpeedToPosition() lands on it.
+                    float p  = (float)from + (float)(target - from) * pardaloteEase(_curveNow[id], t);
+                    // Feed-forward speed magnitude = curve slope × distance / dur,
+                    // via a central difference of the SAME curve (no derivative table).
+                    float h  = 0.02f;
+                    float tl = t - h < 0.0f ? 0.0f : t - h;
+                    float th = t + h > 1.0f ? 1.0f : t + h;
+                    float vmag = fabsf((float)(target - from) *
+                                       (pardaloteEase(_curveNow[id], th) - pardaloteEase(_curveNow[id], tl)) /
+                                       ((th - tl) * durSec));
+                    if (vmag < 1.0f) vmag = 1.0f;
+                    s->moveTo(lroundf(p));
+                    s->setSpeed(vmag);            // magnitude; runSpeedToPosition() derives direction
+                    s->runSpeedToPosition();
+                } else {
+                    // Segment time elapsed — land exactly on target, then advance.
+                    s->moveTo(target);
+                    if (s->distanceToGo() != 0) {
+                        float vmag = fabsf((float)(target - from)) / durSec;
+                        if (vmag < 1.0f) vmag = 1.0f;
+                        s->setSpeed(vmag);
+                        s->runSpeedToPosition();
+                    } else if (_segCount[id] > 0 && _segIndex[id] + 1 < _segCount[id]) {
+                        loadStepperSegment(id, _segIndex[id] + 1, _segStartMs[id] + _segDurMs[id]);
+                    } else {
+                        finishStepperGesture(id);
+                    }
+                }
             } else {
                 s->run();
             }
@@ -810,21 +1004,45 @@ public:
             }
             _wasRunning[id] = running;
         }
+
+        // Board-side periodic reads — per-client gating on position
+        //.
+        const unsigned long now = millis();
+        for (int i = 0; i < MAX_STEPPERS; i++) {
+            ExtReadPoll& p = _polls[i];
+            if (!p.due(now)) continue;
+            if (!validId(p.instance) || !_attached[p.instance] || !_steppers[p.instance]) {
+                p.instance = -1;
+                continue;
+            }
+            const int32_t pos = _steppers[p.instance]->currentPosition();
+            for (uint8_t c = 0; c < PARDALOTE_MAX_CLIENTS; c++)
+                if (p.gate(c, pos, now)) sendReadTo(c, p.instance);
+        }
+    }
+
+    // Client disconnect — drop its read registrations.
+    static void disconnect(uint8_t clientNum) {
+        extPollDropClient(_polls, MAX_STEPPERS, clientNum);
     }
 
     // -------------------------------------------------------------------
     // Poll response — current position, remaining distance, speed, state.
     // -------------------------------------------------------------------
-    static void sendRead(int id) {
+    static void buildRead(FrameBuilder& fb, int id) {
         AccelStepper* s = _steppers[id];
-        FrameBuilder fb;
         fb.begin(CMD_STEPPER_READ, DEVICE_STEPPER);
         fb.addInt(id);
         fb.addInt(s->currentPosition());
         fb.addInt(s->distanceToGo());
         fb.addFloat(s->speed());
         fb.addInt(isRunning(id) ? 1 : 0);
-        Pardalote.broadcastFrame(fb);
+    }
+
+    static void sendReadTo(uint8_t clientNum, int id) {
+        FrameBuilder fb;
+        buildRead(fb, id);
+        Pardalote.sendFrame(clientNum, fb);
     }
 
     // -------------------------------------------------------------------
@@ -988,6 +1206,6 @@ inline PardaloteStepperAccess PardaloteStepper;
 // Self-register — runs before setup(). Passes nullptr for the disconnect
 // hook and StepperExt::loop for the per-iteration loop hook.
 INSTALL_EXTENSION(DEVICE_STEPPER, StepperExt::handle, StepperExt::announce,
-                  nullptr, StepperExt::loop)
+                  StepperExt::disconnect, StepperExt::loop)
 
 #endif

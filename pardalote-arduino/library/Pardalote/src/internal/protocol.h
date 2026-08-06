@@ -1,7 +1,7 @@
 // ==============================================================
 // protocol.h
 // Pardalote Binary Frame Parsing and Building
-// Version v1.0
+// Part of Pardalote — version in library.properties
 // ==============================================================
 //
 // Frame layout (all multi-byte values big-endian):

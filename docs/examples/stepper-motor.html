@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stepper motor — Pardalote examples</title>
+<meta name="description" content="Precise position moves, continuous rotation, and a live position readout — the browser as a motor controller.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../css/site.css">
+</head>
+<body data-nav="examples">
+
+<nav class="site-nav">
+  <a class="logo" href="../index.html">
+    <img src="../assets/logo.svg" width="26" height="26" alt="">
+    Pardalote
+  </a>
+  <div class="links">
+    <a data-nav="home" href="../index.html">Home</a>
+    <a data-nav="download" href="../download.html">Download</a>
+    <a data-nav="examples" href="index.html">Examples</a>
+    <a data-nav="reference" href="../reference/index.html">Reference</a>
+    <a href="https://github.com/ScottMit/Pardalote">GitHub</a>
+  </div>
+</nav>
+
+<div class="page-head">
+  <div class="wrap">
+    <div class="crumb"><a href="index.html">Examples</a> / Stepper motor</div>
+    <h1>Stepper motor</h1>
+    <p>Precise position moves, continuous rotation, and a live position readout — the browser as a motor controller.</p>
+  </div>
+</div>
+
+<div class="wrap md-layout">
+  <div class="md-body">
+    <div class="tags" style="margin-bottom:.5rem;"><span class="tag lvl-mid">Intermediate</span><span class="tag">Motion</span><span class="tag">Tool</span></div>
+    <div class="ex-meta-row">
+      <a class="btn btn-dark" href="https://github.com/ScottMit/Pardalote/tree/main/examples/stepper-motor">View the code on GitHub</a>
+    </div>
+    <div class="screenshot-slot">Screenshot / video of this example — coming soon</div>
+<h1 id="stepper-motor">Stepper motor</h1>
+<p>Drive a stepper motor from the browser with Pardalote. Demonstrates
+accel-limited position moves, continuous rotation, live position readout,
+and the <code>done</code> completion event.</p>
+
+  </div>
+
+  <div class="md-body">
+<h2 id="hardware">Hardware</h2>
+<ul>
+<li>Arduino UNO R4 WiFi or ESP32</li>
+<li>A STEP/DIR stepper driver: <strong>TMC2208</strong>, <strong>TMC2209</strong>, <strong>A4988</strong>, or
+<strong>EasyDriver</strong> (or a 28BYJ-48 + ULN2003 — see <code>attach4wire</code> below)</li>
+<li>A stepper motor with its <strong>own power supply</strong> (do not run the motor coils
+off the board's 5 V rail)</li>
+</ul>
+<p>Wiring for a STEP/DIR driver:</p>
+<table>
+<thead>
+<tr>
+<th>Driver pin</th>
+<th>Arduino</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>STEP</td>
+<td>pin 2 (default — change it in the page's Wiring row)</td>
+</tr>
+<tr>
+<td>DIR</td>
+<td>pin 3 (default)</td>
+</tr>
+<tr>
+<td>EN</td>
+<td>pin 4 (default) — optional, active-LOW on most drivers; −1 = none</td>
+</tr>
+<tr>
+<td>GND</td>
+<td>shared ground with the Arduino</td>
+</tr>
+</tbody>
+</table>
+<p>Set microstepping with the driver's MS pins as usual, then tell the JS side
+how many steps that makes per revolution with <code>setStepsPerRev()</code>.</p>
+<h2 id="arduino">Arduino</h2>
+<p>Install the <strong>AccelStepper</strong> library (Arduino IDE → Manage Libraries), then
+upload <strong>File → Examples → Pardalote → stepper-motor</strong>. Note the IP address the
+board reports (LED matrix on UNO R4, Serial Monitor on ESP32).</p>
+<h2 id="browser">Browser</h2>
+<p>This is a <strong>tool</strong> — it works out of the box, no code editing:</p>
+<ol>
+<li>Open <code>index.html</code> in a browser.</li>
+<li>Type the board's IP into the <strong>Board</strong> row and press <strong>Connect</strong>.</li>
+<li>Pick your driver type and pins in the <strong>Wiring</strong> row (STEP/DIR or 4 coil
+pins), then press <strong>Connect</strong> again to apply.</li>
+</ol>
+<p>The browser remembers your IP, wiring, and motion profile, so next visit it
+reconnects with one click. Every stepper feature has a control row — position
+and timed moves, continuous spin, torque on/off, soft limits, limit switches,
+and the homing routine — with a live dial and a call log underneath.</p>
+<h2 id="notes">Notes</h2>
+<ul>
+<li><strong>Motion runs on the board.</strong> The browser sends targets and motion
+profiles; the Arduino generates the step pulses via AccelStepper. You never
+stream individual steps over WiFi.</li>
+<li><strong>Soft limits</strong> (<code>setLimits(-6400, 6400)</code>) are enforced on the Arduino — the
+board clamps every target, so the browser (or an LLM driving it) can't send
+the motor past the set range.</li>
+<li><strong><code>done</code></strong> fires when a position move completes. <code>await arduino.x.moveTo(n).whenDone()</code>
+resolves at the same moment — handy for sequencing moves.</li>
+</ul>
+
+  </div>
+</div>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <span>Pardalote — created by Scott Mitchell for design education and creative technology.</span>
+    <span><a href="../reference/index.html">Reference</a> · <a href="https://github.com/ScottMit/Pardalote">GitHub</a> · GPL-3.0</span>
+  </div>
+</footer>
+
+<script src="../js/site.js"></script>
+</body>
+</html>

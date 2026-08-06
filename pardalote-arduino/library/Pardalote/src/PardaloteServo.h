@@ -1,7 +1,7 @@
 // ==============================================================
 // PardaloteServo.h
 // Pardalote Servo Extension
-// Version v1.0
+// Part of Pardalote — version in library.properties
 // by Scott Mitchell
 // GPL-3.0 License
 //
@@ -63,7 +63,71 @@ private:
     // time (millis()), so loop jitter never desynchronises a group move.
     static const uint32_t STEP_MS = 20;
 
+    // Gesture segment schedule (CMD_SERVO_GESTURE). A gesture generalises the
+    // single-segment timed move above: the interpolation state (_fromAngle …
+    // _durMs, _curveNow) always describes the CURRENT segment, and loop()
+    // advances _segIndex through _segs on each boundary. A plain writeTimed()
+    // is just the degenerate _segCount == 0 case. ~8 B/segment × 16 × 8 servos
+    // ≈ 1 KB RAM — fine on ESP32 / UNO R4; MAX_SERVO_SEGMENTS caps it.
+    static const uint8_t MAX_SERVO_SEGMENTS = 16;
+    struct Seg { uint8_t curve; uint16_t dur; int32_t value; };
+    inline static Seg     _segs[MAX_SERVOS][MAX_SERVO_SEGMENTS] = {};
+    inline static uint8_t _segCount[MAX_SERVOS] = {};   // 0 = no gesture (plain timed move)
+    inline static uint8_t _segIndex[MAX_SERVOS] = {};   // current segment
+    inline static uint8_t _segFlags[MAX_SERVOS] = {};   // GESTURE_FLAG_* (reference frame, loop)
+    inline static uint8_t _curveNow[MAX_SERVOS] = {};   // easing id of the current segment
+
     static bool validId(int id) { return id >= 0 && id < MAX_SERVOS; }
+
+    // Easing shared with every other extension — see pardaloteEase() in
+    // defs.h (matches curveShape() in pardalote.js). CURVE_BACK returns >1
+    // mid-flight (the overshoot), which loadSegment's write re-clamps.
+
+    // Load segment `idx` as the current interpolation move. `from` is the
+    // servo's live angle (dynamic capture); the target is a delta off it
+    // (relative) or the segment value itself (absolute), clamped to limits.
+    static void loadSegment(int id, uint8_t idx, uint32_t startMs) {
+        const Seg& s = _segs[id][idx];
+        int32_t base   = _angles[id];
+        int32_t target = (_segFlags[id] & GESTURE_FLAG_ABSOLUTE) ? s.value : base + s.value;
+        _fromAngle[id]  = (int16_t)base;
+        _toAngle[id]    = (int16_t)clampAngle(id, target);
+        _curveNow[id]   = s.curve;
+        _startMs[id]    = startMs;
+        _durMs[id]      = s.dur ? s.dur : 1;   // guard /0
+        _segIndex[id]   = idx;
+        _lastStepMs[id] = 0;                   // force a write on the first tick
+        _moving[id]     = true;
+    }
+
+    // End a running gesture (or single timed move): land, drop the schedule,
+    // tell the browser once via the existing DONE frame.
+    static void finishGesture(int id) {
+        _moving[id]   = false;
+        _segCount[id] = 0;
+        broadcastDone(id, _angles[id]);
+    }
+
+    // Periodic reads — per-client registration + gating.
+    // Default threshold 1 degree.
+    inline static ExtReadPoll _polls[MAX_SERVOS] = {};
+    static constexpr uint16_t DEFAULT_THRESHOLD = 1;
+
+    // Poll the current angle (delegating to the Servo library) and cache it.
+    // (readAngle() below is the sketch accessor for the cached value.)
+    static int32_t pollAngle(int id) {
+        int angle = _attached[id] ? _servos[id].read() : -1;
+        if (_attached[id]) _angles[id] = (int16_t)angle;
+        return angle;
+    }
+
+    static void sendReadTo(uint8_t clientNum, int id, int32_t angle) {
+        FrameBuilder fb;
+        fb.begin(CMD_SERVO_READ, DEVICE_SERVO);
+        fb.addInt(id);
+        fb.addInt(angle);
+        Pardalote.sendFrame(clientNum, fb);
+    }
 
     // Clamp an angle to 0–180 and, if set, the soft limits.
     static int clampAngle(int id, int angle) {
@@ -88,6 +152,8 @@ private:
         _durMs[id]      = dur;
         _lastStepMs[id] = 0;          // force a write on the first tick
         _moving[id]     = true;
+        _segCount[id]   = 0;          // a plain timed move is a 1-segment, non-gesture case
+        _curveNow[id]   = CURVE_LINEAR;
     }
 
     static void broadcastDone(int id, int angle) {
@@ -210,6 +276,35 @@ public:
             return;
         }
 
+        // Global (multi-servo) gesture — one or more channel blocks, each a
+        // segment schedule the board then plays locally (see defs.h layout).
+        if (cmd == CMD_SERVO_GESTURE) {
+            uint32_t now = millis();
+            uint16_t off = 0;
+            while (off + 3 <= payloadLen) {
+                int     sid   = payload[off];
+                uint8_t flags = payload[off + 1];
+                uint8_t count = payload[off + 2];
+                off += 3;
+                if ((uint32_t)off + (uint32_t)count * 7 > payloadLen) break;   // malformed — stop
+                if (validId(sid) && _attached[sid] && count > 0) {
+                    uint8_t n = count > MAX_SERVO_SEGMENTS ? MAX_SERVO_SEGMENTS : count;
+                    for (uint8_t i = 0; i < n; i++) {
+                        const uint8_t* r = payload + off + i * 7;
+                        _segs[sid][i].curve = r[0];
+                        _segs[sid][i].dur   = (uint16_t)(((uint16_t)r[1] << 8) | r[2]);
+                        _segs[sid][i].value = (int32_t)(((uint32_t)r[3] << 24) | ((uint32_t)r[4] << 16) |
+                                                        ((uint32_t)r[5] <<  8) |  (uint32_t)r[6]);
+                    }
+                    _segCount[sid] = n;
+                    _segFlags[sid] = flags;
+                    loadSegment(sid, 0, now);
+                }
+                off += (uint16_t)count * 7;             // skip the whole declared block, even if capped
+            }
+            return;
+        }
+
         if (nparams < 1) return;
         int id = (int)paramInt(params, 0);
         if (!validId(id)) {
@@ -255,6 +350,8 @@ public:
                     _attached[id] = false;
                     _pins[id]     = -1;
                     _limitSet[id] = false;
+                    ExtReadPoll* p = extPollFind(_polls, MAX_SERVOS, id);
+                    if (p) p->instance = -1;   // stop any periodic read
                     Serial.print(F("Servo ")); Serial.print(id);
                     Serial.println(F(" detached"));
                 }
@@ -262,7 +359,7 @@ public:
 
             case CMD_SERVO_WRITE: {
                 if (!_attached[id] || nparams < 2) return;
-                _moving[id] = false;   // an immediate write cancels a timed move
+                _moving[id] = false; _segCount[id] = 0;   // an immediate write cancels a timed move / gesture
                 int angle = clampAngle(id, (int)paramInt(params, 1));
                 _servos[id].write(angle);
                 _angles[id] = (int16_t)angle;
@@ -271,7 +368,7 @@ public:
 
             case CMD_SERVO_WRITE_MICROSECONDS: {
                 if (!_attached[id] || nparams < 2) return;
-                _moving[id] = false;   // an immediate write cancels a timed move
+                _moving[id] = false; _segCount[id] = 0;   // an immediate write cancels a timed move / gesture
                 int us = constrain((int)paramInt(params, 1), 544, 2400);
                 if (_limitSet[id]) {
                     // Translate the angle limits into the pulse domain.
@@ -293,7 +390,7 @@ public:
             }
 
             case CMD_SERVO_STOP:
-                if (_attached[id]) _moving[id] = false;   // hold current angle
+                if (_attached[id]) { _moving[id] = false; _segCount[id] = 0; }   // hold current angle, drop any gesture
                 break;
 
             case CMD_SERVO_SET_LIMITS: {
@@ -306,27 +403,38 @@ public:
                 break;
             }
 
+            // READ — params [id, interval?, threshold?]. Delegates to
+            // the underlying Servo library's read():
+            //   - Arduino Servo (UNO R4): returns the last written angle
+            //   - ESP32Servo: reads back from the LEDC PWM duty register
+            // Always answers the requester immediately. interval > 0
+            // registers a board-side per-client periodic read; interval < 0
+            // (JS END) removes this client's registration; absent/0 = one-shot.
             case CMD_SERVO_READ: {
-                // Delegate to the underlying Servo library's read().
-                //   - Arduino Servo (UNO R4): returns the last written angle
-                //   - ESP32Servo: reads back from the LEDC PWM duty register
-                // The ESP32 path can return values slightly different from
-                // the commanded angle — that's the library's actual behavior
-                // and we forward it faithfully. Sketches that just want to
-                // know "what did I last command?" should track that locally
-                // (or read arduino.myServo.angle on the JS side) instead of
-                // round-tripping through read().
-                int angle = _attached[id] ? _servos[id].read() : -1;
-                if (_attached[id]) _angles[id] = (int16_t)angle;
+                long ms  = (nparams > 1) ? paramInt(params, 1) : 0;
+                long thr = (nparams > 2) ? paramInt(params, 2) : 0;
 
-                FrameBuilder fb;
-                fb.begin(CMD_SERVO_READ, DEVICE_SERVO);
-                fb.addInt(id);
-                fb.addInt(angle);
-                Pardalote.broadcastFrame(fb);
+                if (ms < 0) {   // END — unregister this client
+                    ExtReadPoll* p = extPollFind(_polls, MAX_SERVOS, id);
+                    if (p) p->removeClient(clientNum);
+                    break;
+                }
+
+                int32_t angle = pollAngle(id);
+                sendReadTo(clientNum, id, angle);
+
+                if (ms > 0 && _attached[id]) {
+                    ExtReadPoll* p = extPollGet(_polls, MAX_SERVOS, id);
+                    if (!p) break;
+                    p->setClient(clientNum, (uint16_t)constrain(ms, 1, 65535),
+                                 thr > 0 ? (uint16_t)thr : DEFAULT_THRESHOLD);
+                    p->seed(clientNum, angle, millis());
+                }
                 break;
             }
 
+            // Query — answers the REQUESTER only (JS attached() resolves a
+            // promise with this; another browser's question isn't our answer).
             case CMD_SERVO_ATTACHED: {
                 bool isAttached = _attached[id] && _servos[id].attached();
 
@@ -334,7 +442,7 @@ public:
                 fb.begin(CMD_SERVO_ATTACHED, DEVICE_SERVO);
                 fb.addInt(id);
                 fb.addInt(isAttached ? 1 : 0);
-                Pardalote.broadcastFrame(fb);
+                Pardalote.sendFrame(clientNum, fb);
                 break;
             }
 
@@ -410,18 +518,41 @@ public:
             if (!_attached[i] || !_moving[i]) continue;
             uint32_t elapsed = now - _startMs[i];
             if (elapsed >= _durMs[i]) {
+                // Land exactly on this segment's end.
                 _servos[i].write(_toAngle[i]);
                 _angles[i] = _toAngle[i];
-                _moving[i] = false;
-                broadcastDone(i, _toAngle[i]);
+                if (_segCount[i] > 0 && _segIndex[i] + 1 < _segCount[i]) {
+                    // Chain to the next segment. Its start is the previous
+                    // start+dur (not `now`), so the timeline never drifts.
+                    loadSegment(i, _segIndex[i] + 1, _startMs[i] + _durMs[i]);
+                } else {
+                    finishGesture(i);                               // gesture (or plain move) complete
+                }
             } else if (now - _lastStepMs[i] >= STEP_MS) {
-                float t   = (float)elapsed / (float)_durMs[i];       // 0..1 (linear)
-                int   ang = _fromAngle[i] + (int)((_toAngle[i] - _fromAngle[i]) * t);
+                float t   = (float)elapsed / (float)_durMs[i];       // 0..1
+                float sh  = pardaloteEase(_curveNow[i], t);          // eased position along the segment
+                long  d   = (long)_toAngle[i] - (long)_fromAngle[i];
+                int   ang = clampAngle(i, _fromAngle[i] + (int)lroundf(d * sh)); // re-clamp: BACK can overshoot
                 _servos[i].write(ang);
                 _angles[i]     = (int16_t)ang;
                 _lastStepMs[i] = now;
             }
         }
+
+        // Board-side periodic reads — per-client gating.
+        for (int i = 0; i < MAX_SERVOS; i++) {
+            ExtReadPoll& p = _polls[i];
+            if (!p.due(now)) continue;
+            if (!validId(p.instance) || !_attached[p.instance]) { p.instance = -1; continue; }
+            const int32_t angle = pollAngle(p.instance);
+            for (uint8_t c = 0; c < PARDALOTE_MAX_CLIENTS; c++)
+                if (p.gate(c, angle, now)) sendReadTo(c, p.instance, angle);
+        }
+    }
+
+    // Client disconnect — drop its read registrations.
+    static void disconnect(uint8_t clientNum) {
+        extPollDropClient(_polls, MAX_SERVOS, clientNum);
     }
 };
 
@@ -473,6 +604,6 @@ inline PardaloteServoAccess PardaloteServo;
 // Self-register — runs before setup(). Passes nullptr for the disconnect
 // hook and ServoExt::loop for the per-iteration interpolation.
 INSTALL_EXTENSION(DEVICE_SERVO, ServoExt::handle, ServoExt::announce,
-                  nullptr, ServoExt::loop)
+                  ServoExt::disconnect, ServoExt::loop)
 
 #endif

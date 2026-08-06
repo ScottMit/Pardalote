@@ -62,13 +62,14 @@ Move to 90°, 0°, and 180° respectively.
 
 ## read()
 
-Reads the servo's angle. Same poll-and-cache pattern as `analogRead()`: the first call starts a poll, later calls return the cached value.
+Reads the servo's angle. Same poll-and-cache pattern as `analogRead()`: the first call starts a poll, later calls return the cached value. The board runs the poll (per-browser interval and threshold) and only transmits changes of threshold+ degrees.
 
-<div class="sig">arduino.pan.<span class="fn">read</span>([interval])</div>
+<div class="sig">arduino.pan.<span class="fn">read</span>([interval], [threshold])</div>
 
 | Parameter | Type | Description |
 |---|---|---|
 | `interval` | number | Optional. Poll interval in ms. Pass `END` to stop. |
+| `threshold` | number | Optional. Minimum change worth transmitting, in degrees (`0` = default: `1`). Also settable via `setReadInterval(ms)` / `setReadThreshold(degrees)`. |
 
 **Returns** the cached angle in degrees.
 
@@ -114,6 +115,34 @@ arduino.pan.on('done', ({ angle }) => { /* arrived */ });
 
 An immediate `write()` cancels an in-progress timed move.
 
+## gesture()
+
+Plays an authored **segment schedule** — an ordered list of eased moves the Arduino runs back-to-back on its own clock (on-board, no WiFi streaming). Where `writeTimed()` is one eased move, a gesture is many: the primitive for *expressive* motion — anticipation, overshoot, holds, follow-through. Fires `done` (resolves `whenDone()`) when the last segment lands.
+
+<div class="sig">arduino.pan.<span class="fn">gesture</span>(segments, [opts])</div>
+
+Each segment is an object with a duration, a curve, and a displacement expressed **either** relatively (`by`) **or** absolutely (`to`):
+
+| Field | Type | Description |
+|---|---|---|
+| `dur` | number | Segment duration in ms. |
+| `curve` | string | Easing: `'linear'`, `'easeIn'`, `'easeOut'`, `'easeInOut'`, or `'back'` (overshoot). Default `'linear'`. |
+| `by` | number | **Relative** displacement in degrees — the default, portable frame. |
+| `to` | number | **Absolute** target angle — use in place of `by`. |
+
+The reference frame is inferred (`to` → absolute, `by` → relative) or forced with `opts.absolute`. Relative is the default: the board captures the start angle at each segment, so a gesture needs no absolute position truth. Up to **16** segments (extras dropped with a warning); a `back` overshoot is re-clamped to the servo range / `setLimits()`.
+
+```javascript Example — a nod with follow-through
+arduino.pan.gesture([
+    { by:  25, dur: 250, curve: 'easeOut'   },
+    { by: -25, dur: 400, curve: 'easeInOut' },
+    { by:   6, dur: 180, curve: 'back'      },   // small overshoot settle
+]);
+await arduino.pan.gesture([ /* … */ ]).whenDone();
+```
+
+To play coordinated gestures across several actuators at once, see [group.gesture()](groups.html#gesture).
+
 ## whenDone()
 
 Promise for the most recent timed move — resolves `true` on the servo's `done` (or immediately if no move is pending), `false` on the safety timeout (default `max(duration × 2, 10000)` ms; pass `{ timeout }` or a bare number to override, `0` to wait forever). The same method exists on steppers, bus servos, and groups.
@@ -152,24 +181,37 @@ arduino.pan.setHome(45);
 await arduino.pan.home(1000).whenDone();
 ```
 
+## attached()
+
+Asks the **board** whether this servo is attached. Resolves `true`/`false` (`false` after a 2 s timeout — dead link or unresponsive board). Query → promise, like `busServo.ping()`; for the cached mirror, read `arduino.pan.isAttached`.
+
+<div class="sig">await arduino.pan.<span class="fn">attached</span>()</div>
+
+```javascript Example — preflight check
+if (await arduino.pan.attached()) beginSequence();
+else showError('pan servo not responding');
+```
+
 ## Events
 
 <div class="sig">arduino.pan.<span class="fn">on</span>(event, handler)</div>
 
 | Event | Payload | Fires when |
 |---|---|---|
-| `'read'` | `{ angle }` | A poll result arrives. |
+| `'change'` | `{ angle }` | The angle changed by at least the threshold. |
 | `'write'` | `{ angle }` | A write is issued. |
-| `'attached'` | `{ attached }` | Attach state changes. |
-| `'done'` | `{ angle }` | A timed move reaches its target. |
+| `'gesture'` | `{ segments, absolute, duration }` | A gesture starts playing. |
+| `'done'` | `{ angle }` | A timed move or gesture reaches its target. |
 
-Shorthand: `onRead(fn)`, `onWrite(fn)`, `onAttached(fn)`, `onDone(fn)`.
+Shorthand: `onChange(fn)`, `onWrite(fn)`, `onDone(fn)`.
 
-## setThrottle() / setThreshold()
+## setWriteThrottle() / setWriteThreshold()
 
 Rate-limits outgoing writes — useful when driving the servo from mouse movement or a draw loop.
 
-<div class="sig">arduino.pan.<span class="fn">setThrottle</span>(ms) · arduino.pan.<span class="fn">setThreshold</span>(degrees)</div>
+<div class="sig">arduino.pan.<span class="fn">setWriteThrottle</span>(ms) · arduino.pan.<span class="fn">setWriteThreshold</span>(degrees)</div>
+
+The write family paces what you **send** (min ms between writes; skip deltas under `degrees`); the `setRead*` family gates what you **hear**.
 
 | Parameter | Type | Description |
 |---|---|---|
@@ -186,4 +228,4 @@ Rate-limits outgoing writes — useful when driving the servo from mouse movemen
 
 **Returns** a snapshot of all servo state.
 
-See also: [Groups](groups.html) · [Bus servo](bus-servo.html) · [Servo example](../examples/servo-example.html)
+See also: [Groups](groups.html) · [Bus servo](bus-servo.html) · [Servo example](../examples/servo-control.html) · [Expressive gesture example](../examples/expressive-gesture.html)

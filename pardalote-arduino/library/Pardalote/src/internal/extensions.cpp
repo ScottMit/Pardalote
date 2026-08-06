@@ -85,7 +85,7 @@ bool ensureWire(int sda, int scl) {
     Wire.begin(sda, scl);
 #else
     // UNO R4 (and other non-ESP32 Wire impls) don't support custom pins.
-    // Fall back to default begin(); MPU's caller is already #ifdef-guarded
+    // Fall back to default begin(); IMU's caller is already #ifdef-guarded
     // to ESP32 so this branch is effectively unreachable in real use.
     (void)sda; (void)scl;
     Wire.begin();

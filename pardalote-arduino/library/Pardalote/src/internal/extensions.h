@@ -16,6 +16,7 @@
 #define PARDALOTE_INTERNAL_EXTENSIONS_H
 
 #include <Arduino.h>
+#include "defs.h"
 #include "protocol.h"
 
 #define MAX_EXTENSIONS 8
@@ -70,6 +71,116 @@ void dispatchExtension(uint8_t clientNum, uint16_t deviceId,
 void announceAll(uint8_t clientNum);
 void disconnectAll(uint8_t clientNum);
 void loopAll();
+
+// -------------------------------------------------------------------
+// ExtReadPoll — per-instance periodic-read registration with per-client
+// gating, shared by every extension that supports read(interval,
+// threshold). Mirrors the core pin Action table:
+//
+//   - one physical measurement per pollInterval (the fastest rate any
+//     client registered);
+//   - each client then gets its own send gate: at least interval[c] ms
+//     since its last send AND at least threshold[c] change since the
+//     value it last saw. threshold 0 = send every interval tick.
+//
+// The extension owns a static table of these (one per instance slot),
+// registers clients from its READ handler, calls due()/gate() from its
+// loop hook, and drops clients in its disconnect hook. Registered
+// clients are always live: disconnect hooks remove them, so gate()
+// needs no connectivity check.
+// -------------------------------------------------------------------
+struct ExtReadPoll {
+    int8_t        instance = -1;   // extension instance id; -1 = empty slot
+    uint8_t       unit     = 0;    // free byte for extension use (ultrasonic unit)
+    unsigned long lastPoll = 0;
+    unsigned long pollInterval = (unsigned long)-1;
+    uint8_t       clientMask = 0;
+    uint8_t       seededMask = 0;  // client has received at least one value
+    uint16_t      interval[PARDALOTE_MAX_CLIENTS]  = {};
+    uint16_t      threshold[PARDALOTE_MAX_CLIENTS] = {};
+    int32_t       lastSent[PARDALOTE_MAX_CLIENTS]  = {};
+    unsigned long lastSendTime[PARDALOTE_MAX_CLIENTS] = {};
+
+    void reset(int8_t inst) {
+        instance = inst; unit = 0; lastPoll = 0;
+        pollInterval = (unsigned long)-1;
+        clientMask = seededMask = 0;
+    }
+
+    void recompute() {
+        unsigned long m = (unsigned long)-1;
+        for (uint8_t c = 0; c < PARDALOTE_MAX_CLIENTS; c++)
+            if ((clientMask & (1 << c)) && interval[c] < m) m = interval[c];
+        pollInterval = m;
+    }
+
+    void setClient(uint8_t c, uint16_t ms, uint16_t thr) {
+        clientMask  |= (1 << c);
+        interval[c]  = ms;
+        threshold[c] = thr;
+        recompute();
+    }
+
+    // Record a value just sent to client c (registration seed).
+    void seed(uint8_t c, int32_t val, unsigned long now) {
+        lastSent[c] = val; lastSendTime[c] = now;
+        seededMask |= (1 << c);
+    }
+
+    // Returns true when the slot is now empty (caller may free it).
+    bool removeClient(uint8_t c) {
+        clientMask &= ~(1 << c);
+        seededMask &= ~(1 << c);
+        if (!clientMask) { instance = -1; return true; }
+        recompute();
+        return false;
+    }
+
+    // One physical read due? Commits the poll time on true.
+    bool due(unsigned long now) {
+        if (instance == -1 || !clientMask) return false;
+        if (now - lastPoll < pollInterval)  return false;
+        lastPoll = now;
+        return true;
+    }
+
+    // Should client c receive `val` now? Commits on true.
+    bool gate(uint8_t c, int32_t val, unsigned long now) {
+        const uint8_t bit = 1 << c;
+        if (!(clientMask & bit)) return false;
+        if (seededMask & bit) {
+            if (now - lastSendTime[c] < interval[c]) return false;
+            int32_t d = val - lastSent[c];
+            if (d < 0) d = -d;
+            if ((uint32_t)d < threshold[c]) return false;
+        }
+        lastSent[c] = val; lastSendTime[c] = now;
+        seededMask |= bit;
+        return true;
+    }
+};
+
+// Find the poll slot for an instance; nullptr if none.
+inline ExtReadPoll* extPollFind(ExtReadPoll* table, int n, int inst) {
+    for (int i = 0; i < n; i++)
+        if (table[i].instance == inst) return &table[i];
+    return nullptr;
+}
+
+// Find-or-allocate the poll slot for an instance; nullptr if full.
+inline ExtReadPoll* extPollGet(ExtReadPoll* table, int n, int inst) {
+    ExtReadPoll* p = extPollFind(table, n, inst);
+    if (p) return p;
+    for (int i = 0; i < n; i++)
+        if (table[i].instance == -1) { table[i].reset((int8_t)inst); return &table[i]; }
+    return nullptr;
+}
+
+// Drop a departing client from every slot in a table.
+inline void extPollDropClient(ExtReadPoll* table, int n, uint8_t c) {
+    for (int i = 0; i < n; i++)
+        if (table[i].instance != -1) table[i].removeClient(c);
+}
 
 // Call before Wire.begin() in any extension. Idempotent.
 void ensureWire();

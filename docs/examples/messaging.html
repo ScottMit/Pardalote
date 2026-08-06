@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Messaging — Pardalote examples</title>
+<meta name="description" content="Send named key/value messages between the browser and the sketch — no pins involved — and inspect every frame on the wire with the live traffic monitor.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../css/site.css">
+</head>
+<body data-nav="examples">
+
+<nav class="site-nav">
+  <a class="logo" href="../index.html">
+    <img src="../assets/logo.svg" width="26" height="26" alt="">
+    Pardalote
+  </a>
+  <div class="links">
+    <a data-nav="home" href="../index.html">Home</a>
+    <a data-nav="download" href="../download.html">Download</a>
+    <a data-nav="examples" href="index.html">Examples</a>
+    <a data-nav="reference" href="../reference/index.html">Reference</a>
+    <a href="https://github.com/ScottMit/Pardalote">GitHub</a>
+  </div>
+</nav>
+
+<div class="page-head">
+  <div class="wrap">
+    <div class="crumb"><a href="index.html">Examples</a> / Messaging</div>
+    <h1>Messaging</h1>
+    <p>Send named key/value messages between the browser and the sketch — no pins involved — and inspect every frame on the wire with the live traffic monitor.</p>
+  </div>
+</div>
+
+<div class="wrap md-layout">
+  <div class="md-body">
+    <div class="tags" style="margin-bottom:.5rem;"><span class="tag lvl-mid">Intermediate</span><span class="tag">Multi-user</span><span class="tag">Tool</span></div>
+    <div class="ex-meta-row">
+      <a class="btn btn-dark" href="https://github.com/ScottMit/Pardalote/tree/main/examples/messaging">View the code on GitHub</a>
+    </div>
+    <div class="screenshot-slot">Screenshot / video of this example — coming soon</div>
+<h1 id="messaging">Messaging</h1>
+<p>Named <strong>key/value messages</strong> between the browser and the Arduino sketch — no
+pin, no hardware device. Send a value under a key, watch keys for changes, and
+inspect <em>all</em> WebSocket traffic with the frame monitor.</p>
+
+  </div>
+
+  <div class="md-body">
+<h2 id="what-it-shows">What it shows</h2>
+<ul>
+<li><strong>Send</strong> any value type from the browser — <code>int</code>, <code>float</code>, <code>bool</code>, or <code>text</code>
+(auto-typed from the text box) — with optional <code>retain</code> and <code>broadcast</code>.</li>
+<li><strong>Receive</strong> every message via <code>arduino.on('message', …)</code>, and one specific
+key (<code>uptime</code>) via <code>arduino.watch(…)</code>.</li>
+<li><strong>Frame monitor</strong> — tick the checkbox to log every frame in and out
+(<code>SERVO_WRITE</code>, <code>DIGITAL_WRITE</code>, <code>MESSAGE</code>, …), decoded and named.</li>
+</ul>
+<p>The sketch (<code>messaging.ino</code>) drives the built-in LED from a <code>led</code> message, logs
+every message to Serial, and sends a <strong>retained</strong> <code>uptime</code> counter once a second
+— retained means a browser that connects later immediately gets the current value.</p>
+<h2 id="run-it">Run it</h2>
+<ol>
+<li>In Arduino IDE: <strong>File → Examples → Pardalote → messaging</strong>, select your board, upload.</li>
+<li>Open <code>index.html</code> in a browser.</li>
+<li>Type the board's IP into the <strong>Board IP</strong> field and press <strong>Connect</strong> —
+this is a <strong>tool</strong>, so no code editing is needed and the browser remembers
+the IP for next time.</li>
+</ol>
+<p>Try sending <code>led</code> = <code>true</code> / <code>false</code> to toggle the LED. Open the page in <strong>two
+browser tabs</strong> and send with <strong>broadcast</strong> ticked — the other tab sees it too
+(the board relays it). Tick <strong>retain</strong>, reload, and the value is still there.</p>
+<h2 id="api-used">API used</h2>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">send</span><span class="p">(</span><span class="s1">&#39;mode&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;idle&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">retain</span><span class="o">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span><span class="w"> </span><span class="nx">broadcast</span><span class="o">:</span><span class="w"> </span><span class="kc">true</span><span class="w"> </span><span class="p">});</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">send</span><span class="p">(</span><span class="s1">&#39;count&#39;</span><span class="p">,</span><span class="w"> </span><span class="mf">42</span><span class="p">);</span><span class="w">            </span><span class="c1">// int    (auto-typed)</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">send</span><span class="p">(</span><span class="s1">&#39;temp&#39;</span><span class="p">,</span><span class="w"> </span><span class="mf">22.5</span><span class="p">);</span><span class="w">           </span><span class="c1">// float</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">send</span><span class="p">(</span><span class="s1">&#39;on&#39;</span><span class="p">,</span><span class="w"> </span><span class="kc">true</span><span class="p">);</span><span class="w">             </span><span class="c1">// bool</span>
+
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">watch</span><span class="p">(</span><span class="s1">&#39;uptime&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="nx">v</span><span class="p">,</span><span class="w"> </span><span class="nx">key</span><span class="p">,</span><span class="w"> </span><span class="nx">type</span><span class="p">)</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="err">…</span><span class="p">);</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;message&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">({</span><span class="w"> </span><span class="nx">key</span><span class="p">,</span><span class="w"> </span><span class="nx">value</span><span class="p">,</span><span class="w"> </span><span class="nx">type</span><span class="w"> </span><span class="p">})</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="err">…</span><span class="p">);</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">messages</span><span class="p">[</span><span class="s1">&#39;mode&#39;</span><span class="p">];</span><span class="w">             </span><span class="c1">// last received value</span>
+
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;frame&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">({</span><span class="w"> </span><span class="nx">dir</span><span class="p">,</span><span class="w"> </span><span class="nx">cmdName</span><span class="p">,</span><span class="w"> </span><span class="nx">target</span><span class="p">,</span><span class="w"> </span><span class="nx">params</span><span class="w"> </span><span class="p">})</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="err">…</span><span class="p">);</span><span class="w">   </span><span class="c1">// inspect all traffic</span>
+</code></pre></div>
+<div class="code-ex"><span class="lang-badge lang-arduino">Arduino</span><pre><code><span class="n">Pardalote</span><span class="p">.</span><span class="n">send</span><span class="p">(</span><span class="s">&quot;uptime&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">secs</span><span class="p">,</span><span class="w"> </span><span class="n">MSG_FLAG_RETAIN</span><span class="p">);</span>
+<span class="n">Pardalote</span><span class="p">.</span><span class="n">watch</span><span class="p">(</span><span class="s">&quot;led&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">onLed</span><span class="p">);</span><span class="w">        </span><span class="c1">// void onLed(const Message&amp; m)</span>
+<span class="n">Pardalote</span><span class="p">.</span><span class="n">onMessage</span><span class="p">(</span><span class="n">onAny</span><span class="p">);</span>
+<span class="n">Pardalote</span><span class="p">.</span><span class="n">onFrame</span><span class="p">(</span><span class="n">onFrame</span><span class="p">);</span><span class="w">           </span><span class="c1">// void onFrame(const FrameEvent&amp; ev)</span>
+</code></pre></div>
+
+  </div>
+</div>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <span>Pardalote — created by Scott Mitchell for design education and creative technology.</span>
+    <span><a href="../reference/index.html">Reference</a> · <a href="https://github.com/ScottMit/Pardalote">GitHub</a> · GPL-3.0</span>
+  </div>
+</footer>
+
+<script src="../js/site.js"></script>
+</body>
+</html>

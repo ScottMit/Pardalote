@@ -1,7 +1,7 @@
 // ==============================================================
 // servo.js
 // Pardalote Servo Extension
-// Version v1.0
+// Part of Pardalote — version in package.json
 // by Scott Mitchell
 // GPL-3.0 License
 //
@@ -36,6 +36,12 @@ const CMD_SERVO_STOP               = 0x1C;
 const CMD_SERVO_DONE               = 0x1D;
 const CMD_SERVO_SET_LIMITS         = 0x54;  // [id, min, max, enabled] — board-clamped soft angle limits
                                             // (numbered after the stepper switch block; 0x14–0x1D was full)
+const CMD_SERVO_GESTURE            = 0x58;  // global: payload = servo channel blocks (segment schedules).
+                                            // See pardalote.js CURVE_IDS / GESTURE_FLAG_* and defs.h.
+
+// Board-side cap (PardaloteServo.h MAX_SERVO_SEGMENTS) — mirrored so the JS
+// side can warn instead of silently overrunning. Extra segments are dropped.
+const MAX_SERVO_SEGMENTS = 16;
 
 class Servo extends Extension {
     static deviceId = DEVICE_SERVO;
@@ -72,15 +78,20 @@ class Servo extends Extension {
         this.writeThreshold = 1;
         this._lastSentAngle = null;
 
-        // Periodic read
-        this._readTimer    = null;
-        this._readInterval = 0;
+        // Periodic read registration (board-side).
+        // _readThreshold is in degrees; 0 = board default (1 degree).
+        // Survives _reset() — it's user-tuned configuration.
+        this._readInterval  = 0;
+        this._readThreshold = 0;
 
         // Sweep cancellation
         this._sweepAbort = false;
 
         // Pending _whenDone() resolvers, drained on the 'done' event
         this._doneResolvers = [];
+
+        // Pending attached() resolvers — entries { resolve, timer }.
+        this._attachedResolvers = [];
 
         // Promise for the most recent move, consumed by whenDone(). Armed by
         // moves that will produce a 'done' (writeTimed, group timed moves);
@@ -101,8 +112,9 @@ class Servo extends Extension {
     // -------------------------------------------------------------------
     _reset() {
         if (this._pendingWrite) { clearTimeout(this._pendingWrite); this._pendingWrite = null; }
-        this._stopRead();
+        this._readInterval = 0;  // registration died with the old board — send nothing
         this._resolveDone();     // don't leave awaiters hanging on a board switch
+        this._resolveAttached(false);
         this._movePromise        = null;
         this._moveDuration       = 0;
         this._sweepAbort         = true;
@@ -149,6 +161,9 @@ class Servo extends Extension {
             this.arduino.send(encodeFrame(CMD_SERVO_WRITE, DEVICE_SERVO,
                 [this.logicalId, this.angle]));  // raw send — no event, no throttle update
         }
+        // Periodic read registrations are per-WS-client on the Arduino
+        // (cleared on disconnect), so always re-register if active.
+        if (this.isAttached && this._readInterval > 0) this._sendRead();
         // Reset for next disconnect/reconnect cycle.
         this._announcedByArduino = false;
     }
@@ -200,7 +215,7 @@ class Servo extends Extension {
         this._movePromise  = null;   // instant move — nothing to await
         this._moveDuration = 0;
         if (!this.isAttached) {
-            console.warn(`Servo ${this.logicalId}: not attached`);
+            this._warn('not attached');
             return this;
         }
 
@@ -274,7 +289,7 @@ class Servo extends Extension {
     // -------------------------------------------------------------------
     writeTimed(angle, duration = 1000) {
         this._sweepAbort = true;
-        if (!this.isAttached) { console.warn(`Servo ${this.logicalId}: not attached`); return this; }
+        if (!this.isAttached) { this._warn('not attached'); return this; }
         angle = this._clampAngle(angle);
         this._armDone(duration);
         this.arduino.send(encodeFrame(CMD_SERVO_WRITE_TIMED, DEVICE_SERVO,
@@ -284,6 +299,103 @@ class Servo extends Extension {
         this._lastSentAngle = angle;
         this._emit('write', { angle });
         return this;
+    }
+
+    // -------------------------------------------------------------------
+    // gesture(segments, opts?) — play an authored SEGMENT SCHEDULE on-board.
+    //
+    // A gesture generalises writeTimed(): instead of one eased move it plays
+    // an ordered list of eased segments back-to-back, on the board's own
+    // clock (no WiFi streaming). Each segment is { dur, curve, and either
+    // `by` (relative delta) or `to` (absolute angle) }:
+    //
+    //   pan.gesture([                       // a nod with follow-through
+    //       { by:  25, dur: 250, curve: 'easeOut' },
+    //       { by: -25, dur: 400, curve: 'easeInOut' },
+    //       { by:   6, dur: 180, curve: 'back' },   // small overshoot settle
+    //   ]);
+    //   await pan.gesture([...]).whenDone();
+    //
+    // Reference frame (per gesture): relative by default — the portable
+    // primitive, needing no absolute truth (`from` is captured on-board at
+    // each segment). Use `to`, or opts.absolute, for absolute targets;
+    // servos are absolute-capable so both are allowed. Fires 'done' (and
+    // resolves whenDone()) when the last segment lands.
+    // -------------------------------------------------------------------
+    gesture(segments, opts = {}) {
+        const blk = this._gestureBlock(segments, opts);
+        if (!blk) return this;
+        this.arduino.send(encodeFrame(CMD_SERVO_GESTURE, DEVICE_SERVO, [], blk.bytes));
+        return this;
+    }
+
+    // Encode ONE gesture channel block — shared by gesture() (wrap + send) and
+    // the group adapter _memberGestureEncode() (batched, no send). Arms
+    // whenDone(), updates cached angle, emits 'gesture'. Returns { bytes, total }
+    // or null when there's nothing to play.
+    _gestureBlock(segments, opts = {}) {
+        this._sweepAbort = true;
+        if (!this.isAttached) { this._warn('not attached (gesture)'); return null; }
+        if (!Array.isArray(segments) || segments.length === 0) {
+            this._warn('gesture: needs a non-empty array of segments');
+            return null;
+        }
+
+        const usesTo = segments.some(s => s.to !== undefined);
+        const usesBy = segments.some(s => s.by !== undefined || s.value !== undefined);
+        const absolute = (opts.absolute !== undefined) ? !!opts.absolute : usesTo;
+        if (usesTo && usesBy)
+            this._warn(`gesture: mixes 'to' (absolute) and 'by' (relative) — treating whole gesture as ${absolute ? 'absolute' : 'relative'}`);
+
+        if (segments.length > MAX_SERVO_SEGMENTS)
+            this._warn(`gesture: ${segments.length} segments exceeds board max ${MAX_SERVO_SEGMENTS} — extra segments dropped`);
+        const count = Math.min(segments.length, MAX_SERVO_SEGMENTS);
+
+        const flags = absolute ? GESTURE_FLAG_ABSOLUTE : 0;
+
+        // Encode: [logicalId u8, flags u8, count u8] + count × {curve u8, dur u16, value i32}.
+        const bytes = new Uint8Array(3 + count * 7);
+        const dv    = new DataView(bytes.buffer);
+        dv.setUint8(0, this.logicalId & 0xFF);
+        dv.setUint8(1, flags & 0xFF);
+        dv.setUint8(2, count & 0xFF);
+        let total = 0, rest = this.angle;
+        for (let i = 0; i < count; i++) {
+            const s   = segments[i];
+            const off = 3 + i * 7;
+            const dur = Math.max(1, Math.round(s.dur ?? 0));
+            // Wire value: absolute → clamped target; relative → raw delta (board clamps the result).
+            const val = absolute ? this._clampAngle(Math.round(s.to ?? this.angle))
+                                 : Math.round(s.by ?? s.value ?? 0);
+            dv.setUint8(off, curveId(s.curve));
+            dv.setUint16(off + 1, dur & 0xFFFF, false);
+            dv.setInt32(off + 3, val, false);
+            total += dur;
+            // Predict the resting angle so cached state / memberValue track the gesture.
+            rest = absolute ? this._clampAngle(Math.round(s.to ?? rest))
+                            : this._clampAngle(rest + Math.round(s.by ?? s.value ?? 0));
+        }
+
+        this._armDone(total);
+        this.angle          = rest;
+        this.micros         = this._angleToMicros(rest);
+        this._lastSentAngle = rest;
+        this._emit('gesture', { segments: count, absolute, duration: total });
+        return { bytes, total };
+    }
+
+    // Group adapter (group.gesture()). entries: [[member, segments], ...], all
+    // Servos → one CMD_SERVO_GESTURE frame carrying every member's channel
+    // block; the board plays them phase-locked on its own clock. Returns
+    // frame(s) WITHOUT sending, so the group batches all types into one message.
+    _memberGestureEncode(entries) {
+        const blocks = [];
+        for (const [m, segs] of entries) { const b = m._gestureBlock(segs); if (b) blocks.push(b.bytes); }
+        if (!blocks.length) return [];
+        const payload = new Uint8Array(blocks.reduce((n, b) => n + b.length, 0));
+        let off = 0;
+        for (const b of blocks) { payload.set(b, off); off += b.length; }
+        return [encodeFrame(CMD_SERVO_GESTURE, DEVICE_SERVO, [], payload)];
     }
 
     // -------------------------------------------------------------------
@@ -342,53 +454,90 @@ class Servo extends Extension {
     }
 
     // -------------------------------------------------------------------
-    // read(interval?)
-    // Returns the locally cached angle immediately.
-    // With no argument: one-shot — returns cached angle, no network traffic.
-    // With an interval (ms): sets up a periodic poll of the Arduino;
-    //   the 'read' event fires each time a response arrives.
-    // read(END) or read(0): stops any active periodic poll.
+    // read(interval?, threshold?)
+    // read()             — return cached angle; no network traffic.
+    // read(interval)     — board-side periodic poll (ms); 'change' fires
+    //                      when the angle moved by threshold+ degrees.
+    // read(interval, 2)  — only report changes of 2+ degrees.
+    // read(END)          — stop this browser's periodic read.
+    // The board runs the poll and gates per browser ;
+    // threshold 0 = board default (1 degree). Calling again with the same
+    // settings just returns the cached value.
     // -------------------------------------------------------------------
-    // read(interval) — start/update periodic poll at interval (ms).
-    // read()         — return cached angle; start default poll if none running.
-    // read(END)      — stop any active periodic read.
-    // Calling again with the same interval just returns the cached value.
-    read(interval) {
+    read(interval, threshold) {
         if (interval === END) {
             this._stopRead();
             return this.angle;
         }
-        if (this._readTimer && (interval === undefined || interval === this._readInterval)) {
+        if (this._readInterval > 0
+            && (interval  === undefined || interval  === this._readInterval)
+            && (threshold === undefined || threshold === this._readThreshold)) {
             return this.angle;
         }
-        interval ??= this.arduino.defaultInterval;
-        this._stopRead();
-        this._readInterval = interval;
-        this._sendReadRequest();
-        this._readTimer = setInterval(() => this._sendReadRequest(), interval);
+        this._readInterval = interval ?? this.arduino.defaultInterval;
+        if (threshold !== undefined) this._readThreshold = threshold;
+        this._sendRead();
         return this.angle;
     }
 
-    _sendReadRequest() {
-        this.arduino.send(encodeFrame(CMD_SERVO_READ, DEVICE_SERVO, [this.logicalId]));
+    // setReadInterval(ms) / setReadThreshold(degrees) — set poll settings
+    // directly; applied immediately if polling, stored for read() otherwise.
+    setReadInterval(ms) {
+        this._readInterval = ms;
+        if (this.isAttached && ms > 0) this._sendRead();
+        return this;
+    }
+
+    setReadThreshold(degrees) {
+        this._readThreshold = degrees;
+        if (this.isAttached && this._readInterval > 0) this._sendRead();
+        return this;
+    }
+
+    // Register (or update) this browser's poll with the board.
+    _sendRead() {
+        this.arduino.send(encodeFrame(CMD_SERVO_READ, DEVICE_SERVO,
+            [this.logicalId, this._readInterval,
+             Math.max(0, Math.round(this._readThreshold))]));
     }
 
     _stopRead() {
-        if (this._readTimer) { clearInterval(this._readTimer); this._readTimer = null; }
+        if (this._readInterval > 0) {
+            this.arduino.send(encodeFrame(CMD_SERVO_READ, DEVICE_SERVO,
+                [this.logicalId, END]));   // END = unregister
+        }
         this._readInterval = 0;
     }
 
     // -------------------------------------------------------------------
-    // attached()
-    // Returns cached attach state and requests confirmation from Arduino.
-    // The 'attached' event fires when the response arrives.
+    // attached() — ask the BOARD whether this servo is attached; resolves
+    // true/false (false on timeout — dead link or unresponsive board).
+    // Query → promise, like busServo.ping(); for the cached mirror, read
+    // servo.isAttached.
+    //
+    //   if (await arduino.pan.attached()) { beginSequence(); }
     // -------------------------------------------------------------------
-    attached() {
+    attached(timeout = 2000) {
         this.arduino.send(encodeFrame(
             CMD_SERVO_ATTACHED, DEVICE_SERVO,
             [this.logicalId]
         ));
-        return this.isAttached;
+        return new Promise(resolve => {
+            const entry = { resolve, timer: setTimeout(() => {
+                const i = this._attachedResolvers.indexOf(entry);
+                if (i >= 0) this._attachedResolvers.splice(i, 1);
+                resolve(false);
+            }, timeout) };
+            this._attachedResolvers.push(entry);
+        });
+    }
+
+    // Drain pending attached() promises with the board's answer.
+    _resolveAttached(value) {
+        this._attachedResolvers.splice(0).forEach(({ resolve, timer }) => {
+            clearTimeout(timer);
+            resolve(value);
+        });
     }
 
     // -------------------------------------------------------------------
@@ -405,7 +554,7 @@ class Servo extends Extension {
     // -------------------------------------------------------------------
     async sweep(startAngle = 0, endAngle = 180, duration = 2000, steps = 50) {
         if (!this.isAttached) {
-            console.warn(`Servo ${this.logicalId}: not attached`);
+            this._warn('not attached');
             return;
         }
 
@@ -431,19 +580,18 @@ class Servo extends Extension {
     // Callback shortcuts
     // -------------------------------------------------------------------
     onWrite(fn)    { return this.on('write',    fn); }
-    onRead(fn)     { return this.on('read',     fn); }
-    onAttached(fn) { return this.on('attached', fn); }
-    onDone(fn) { return this.on('done', fn); }
+    onChange(fn)   { return this.on('change',   fn); }
+    onDone(fn)     { return this.on('done',     fn); }
 
     // -------------------------------------------------------------------
     // Configuration
     // -------------------------------------------------------------------
-    setThrottle(ms) { this.writeThrottle = Math.max(0, ms); return this; }
+    setWriteThrottle(ms) { this.writeThrottle = Math.max(0, ms); return this; }
 
     // Skip write() calls whose angle changes by less than `degrees` from the
     // last sent angle. Useful for animation loops that produce tiny deltas.
     // Set to 0 to disable. First write after attach is never filtered.
-    setThreshold(degrees) { this.writeThreshold = Math.max(0, degrees); return this; }
+    setWriteThreshold(degrees) { this.writeThreshold = Math.max(0, degrees); return this; }
 
     // -------------------------------------------------------------------
     // Group member adapter — used by arduino.group(). Returns the frame(s)
@@ -451,7 +599,7 @@ class Servo extends Extension {
     // into one WebSocket message. Updates local state directly.
     // -------------------------------------------------------------------
     _memberWrite(angle) {
-        if (!this.isAttached) { console.warn(`Servo ${this.logicalId}: not attached (group write)`); return []; }
+        if (!this.isAttached) { this._warn('not attached (group write)'); return []; }
         this._sweepAbort    = true;
         this._movePromise   = null;   // instant move — nothing to await
         this._moveDuration  = 0;
@@ -546,12 +694,12 @@ class Servo extends Extension {
             case CMD_SERVO_READ:
                 this.angle  = frame.params[1];
                 this.micros = this._angleToMicros(this.angle);
-                this._emit('read', { angle: this.angle });
+                this._emit('change', { angle: this.angle });
                 break;
 
             case CMD_SERVO_ATTACHED:
                 this.isAttached = frame.params[1] === 1;
-                this._emit('attached', { attached: this.isAttached });
+                this._resolveAttached(this.isAttached);
                 break;
 
             case CMD_SERVO_DONE:

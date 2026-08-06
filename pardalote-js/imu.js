@@ -1,0 +1,448 @@
+// ==============================================================
+// imu.js
+// Pardalote Generic IMU Extension
+// Part of Pardalote — version in package.json
+// by Scott Mitchell
+// GPL-3.0 License
+//
+// Supports MPU-6050, MPU-6500, MPU-9250, MPU-9255,
+//          LSM6DS3, LSM6DSOX (and future sensors added to
+//          the SENSORS[] table in PardaloteIMU.h).
+//
+// Usage:
+//   const arduino = new Arduino();
+//   arduino.add('imu', new IMU('6050'));     // MPU-6050
+//   arduino.add('imu', new IMU('LSM6DS3')); // STMicro LSM6DS3
+//   arduino.connect('192.168.1.42');
+//
+//   arduino.on('ready', () => {
+//       arduino.imu.attach();               // uses model default address
+//       arduino.imu.attach(0x69);           // override I2C address
+//       arduino.imu.attach(0x68, 21, 22);   // ESP32 custom SDA/SCL pins
+//
+//       arduino.imu.onChange(({ accel, gyro, temp }) => {
+//           console.log('accel:', accel);  // { x, y, z } in g
+//           console.log('gyro:',  gyro);   // { x, y, z } in °/s
+//           console.log('temp:',  temp);   // °C
+//       });
+//       arduino.imu.read(20);              // poll every 20 ms (50 Hz)
+//   });
+//
+// The model name string is sent in the payload of CMD_IMU_ATTACH and
+// matched against SENSORS[i].name on the firmware side. Row order in
+// SENSORS[] does not affect anything — the two tables are coupled only
+// by the name string, so adding or reordering sensors on either side
+// is safe.
+// ==============================================================
+
+const DEVICE_IMU = 203;
+
+const CMD_IMU_ATTACH          = 0x28;
+const CMD_IMU_DETACH          = 0x29;
+const CMD_IMU_READ            = 0x2A;
+const CMD_IMU_SET_ACCEL_RANGE = 0x2B;
+const CMD_IMU_SET_GYRO_RANGE  = 0x2C;
+const CMD_IMU_CALIBRATE       = 0x2D;
+
+// Human-readable range labels indexed by range setting (0–3)
+const IMU_ACCEL_RANGES = [2, 4, 8, 16];          // ± g
+const IMU_GYRO_RANGES  = [250, 500, 1000, 2000];  // ± °/s
+
+// -------------------------------------------------------------------
+// IMU_MODELS — maps model name string to its DOF and default I2C address.
+//
+// The key is the wire identifier sent in the payload of CMD_IMU_ATTACH.
+// It must match a SENSORS[i].name on the firmware side.
+//
+// dof  — degrees of freedom (6 or 9), for display only.
+// addr — default I2C address used when attach() is called without
+//         an address argument.
+// -------------------------------------------------------------------
+const IMU_MODELS = {
+    // InvenSense / TDK MPU family
+    '6050':     { dof: 6, addr: 0x68 },
+    '6500':     { dof: 6, addr: 0x68 },
+    '9250':     { dof: 9, addr: 0x68 },
+    '9255':     { dof: 9, addr: 0x68 },
+    // STMicroelectronics LSM6 family
+    'LSM6DS3':  { dof: 6, addr: 0x6A },
+    'LSM6DSOX': { dof: 6, addr: 0x6A },
+};
+
+class IMU extends Extension {
+    static deviceId = DEVICE_IMU;
+
+    // -------------------------------------------------------------------
+    // constructor(model?)
+    //
+    // model — model number or string key from IMU_MODELS.
+    //         Default: 6050
+    //
+    // Examples:
+    //   new IMU()            → MPU-6050  (default)
+    //   new IMU('6050')      → MPU-6050
+    //   new IMU('9250')      → MPU-9250  (9-DOF)
+    //   new IMU('LSM6DS3')   → LSM6DS3
+    //   new IMU('LSM6DSOX')  → LSM6DSOX
+    // -------------------------------------------------------------------
+    constructor(model = '6050') {
+        super();
+
+        const def = IMU_MODELS[model];
+        if (!def) {
+            throw new Error(
+                `IMU: unknown model "${model}". ` +
+                `Valid options: ${Object.keys(IMU_MODELS).join(', ')}`
+            );
+        }
+
+        this.model    = model;
+        this.dof      = def.dof;
+        this._defAddr = def.addr;
+
+        // Hardware state
+        this.isAttached = false;
+        this.address    = def.addr;
+        this.accelRange = 0;  // 0=±2g,   1=±4g,   2=±8g,   3=±16g
+        this.gyroRange  = 0;  // 0=±250°/s 1=±500°/s 2=±1000°/s 3=±2000°/s
+
+        // Latest sensor reading
+        this.accel = { x: 0, y: 0, z: 0 };  // g
+        this.gyro  = { x: 0, y: 0, z: 0 };  // °/s
+        this.temp  = 0;                       // °C
+
+        // Calibration offsets (received from Arduino after calibrate())
+        this.calibration  = { ax: 0, ay: 0, az: 0, gx: 0, gy: 0, gz: 0 };
+        this.isCalibrated = false;
+
+        // Periodic read registration (board-side)
+        this._readInterval = 0;
+
+        // Set true when Arduino announces this IMU's attach state on connect.
+        // _reRegister() uses this to skip re-sending CMD_IMU_ATTACH when the
+        // Arduino is already in sync — only replay when it has reset.
+        this._announcedByArduino = false;
+    }
+
+    // -------------------------------------------------------------------
+    // attach(address?, sda?, scl?)
+    //
+    // address  — I2C address. Defaults to the model's standard address.
+    //             MPU family: 0x68 (AD0 LOW) or 0x69 (AD0 HIGH)
+    //             LSM6 family: 0x6A (SA0 LOW) or 0x6B (SA0 HIGH)
+    // sda, scl — custom I2C pins for ESP32 (-1 = use board default).
+    //             Only sent when both are ≥ 0.
+    // -------------------------------------------------------------------
+    attach(address, sda = -1, scl = -1) {
+        address       = address ?? this._defAddr;
+        this.address  = address;
+        this.isAttached = true;
+
+        // Model name travels in the payload; SDA/SCL (ESP32 only) are params 2/3.
+        const params = [this.logicalId, address];
+        if (sda >= 0 && scl >= 0) params.push(sda, scl);
+        this.arduino.send(encodeFrame(CMD_IMU_ATTACH, DEVICE_IMU, params, this.model));
+        return this;
+    }
+
+    // -------------------------------------------------------------------
+    // detach()
+    // -------------------------------------------------------------------
+    detach() {
+        this._stopRead();
+        this.arduino.send(encodeFrame(CMD_IMU_DETACH, DEVICE_IMU, [this.logicalId]));
+        this.isAttached = false;
+        return this;
+    }
+
+    // -------------------------------------------------------------------
+    // read(interval?)
+    //
+    // read()          — request one reading; 'change' event fires on response.
+    // read(interval)  — board-side poll every interval ms; 'change' fires
+    //                   each sample. No threshold: IMU streams are usually
+    //                   integrated/smoothed in JS, where dropped samples
+    //                   cause drift — every registered browser receives
+    //                   every sample at its own rate, from ONE I2C
+    //                   transaction per poll tick.
+    // read(END)       — stop this browser's periodic poll.
+    //
+    // Keep the interval ≥ 10 ms for stable results; 20–50 ms is typical.
+    // -------------------------------------------------------------------
+    read(interval) {
+        if (interval === END) {
+            this._stopRead();
+            return this;
+        }
+        if (this._readInterval > 0 &&
+            (interval === undefined || interval === this._readInterval)) {
+            return this;
+        }
+        if (interval !== undefined) {
+            this._readInterval = interval;
+            this._sendRead();
+        } else {
+            this._sendReadRequest();   // one-shot
+        }
+        return this;
+    }
+
+    // setReadInterval(ms) — set the poll rate directly; applied immediately
+    // if polling, stored for read() otherwise.
+    setReadInterval(ms) {
+        this._readInterval = ms;
+        if (this.isAttached && ms > 0) this._sendRead();
+        return this;
+    }
+
+    // Register (or update) this browser's board-side poll.
+    _sendRead() {
+        if (!this.isAttached) return;
+        this.arduino.send(encodeFrame(CMD_IMU_READ, DEVICE_IMU,
+            [this.logicalId, this._readInterval]));
+    }
+
+    _sendReadRequest() {
+        if (!this.isAttached) return;
+        this.arduino.send(encodeFrame(CMD_IMU_READ, DEVICE_IMU, [this.logicalId]));
+    }
+
+    _stopRead() {
+        if (this._readInterval > 0 && this.isAttached) {
+            this.arduino.send(encodeFrame(CMD_IMU_READ, DEVICE_IMU,
+                [this.logicalId, END]));   // END = unregister
+        }
+        this._readInterval = 0;
+    }
+
+    // -------------------------------------------------------------------
+    // setAccelRange(g)
+    //
+    // g — one of 2, 4, 8, 16. Sets the accelerometer ±g range.
+    //
+    // Higher range → less sensitivity but handles larger accelerations.
+    // Default ±2g gives the finest resolution for gentle motion.
+    // Unknown values are rejected with a console warning; the current
+    // range is left unchanged.
+    // -------------------------------------------------------------------
+    setAccelRange(g) {
+        const idx = IMU_ACCEL_RANGES.indexOf(g);
+        if (idx === -1) {
+            this._warn(`invalid accel range ±${g}g — valid values: ${IMU_ACCEL_RANGES.join(', ')}`);
+            return this;
+        }
+        this.accelRange = idx;
+        this.arduino.send(encodeFrame(CMD_IMU_SET_ACCEL_RANGE, DEVICE_IMU,
+            [this.logicalId, idx]));
+        return this;
+    }
+
+    // -------------------------------------------------------------------
+    // setGyroRange(dps)
+    //
+    // dps — one of 250, 500, 1000, 2000. Sets the gyroscope ±°/s range.
+    //
+    // Default ±250°/s gives the finest resolution for slow rotation.
+    // Use ±2000°/s for fast spins (e.g. RC vehicles, drones).
+    // Unknown values are rejected with a console warning; the current
+    // range is left unchanged.
+    // -------------------------------------------------------------------
+    setGyroRange(dps) {
+        const idx = IMU_GYRO_RANGES.indexOf(dps);
+        if (idx === -1) {
+            this._warn(`invalid gyro range ±${dps}°/s — valid values: ${IMU_GYRO_RANGES.join(', ')}`);
+            return this;
+        }
+        this.gyroRange = idx;
+        this.arduino.send(encodeFrame(CMD_IMU_SET_GYRO_RANGE, DEVICE_IMU,
+            [this.logicalId, idx]));
+        return this;
+    }
+
+    // -------------------------------------------------------------------
+    // calibrate(samples?)
+    //
+    // Place the sensor flat with Z pointing UP and call this once.
+    // The Arduino collects `samples` readings (default 200) and computes
+    // offset corrections applied to all subsequent reads.
+    //
+    // After calibration:
+    //   accel: x ≈ 0g, y ≈ 0g, z ≈ +1g  (gravity preserved on Z axis)
+    //   gyro:  x ≈ 0,  y ≈ 0,  z ≈ 0
+    //
+    // The 'calibrate' event fires when the Arduino finishes (~400 ms at
+    // 200 samples). The WebSocket will be unresponsive during this time.
+    //
+    // Calibration offsets are re-sent during announce so a reconnecting
+    // browser receives the current offsets without re-running the process.
+    // -------------------------------------------------------------------
+    calibrate(samples = 200) {
+        if (!this.isAttached) {
+            this._warn('not attached');
+            return this;
+        }
+        this.arduino.send(encodeFrame(CMD_IMU_CALIBRATE, DEVICE_IMU,
+            [this.logicalId, samples]));
+        return this;
+    }
+
+    // -------------------------------------------------------------------
+    // Callback shortcuts
+    // -------------------------------------------------------------------
+    onChange(fn)    { return this.on('change',    fn); }
+    onCalibrate(fn) { return this.on('calibrate', fn); }
+
+    // -------------------------------------------------------------------
+    // Convenience getters
+    // -------------------------------------------------------------------
+    get accelRangeG()  { return IMU_ACCEL_RANGES[this.accelRange]; }
+    get gyroRangeDps() { return IMU_GYRO_RANGES[this.gyroRange]; }
+
+    // -------------------------------------------------------------------
+    // Board switch — called by Arduino.connect() to wipe per-board state.
+    // Identity fields (model, _defAddr, dof) are constructor-set
+    // and preserved; the announce-drift handler in handleMessage refreshes
+    // them if the new board reports a different sensor.
+    // -------------------------------------------------------------------
+    _reset() {
+        this._readInterval       = 0;   // registration died with the old board — send nothing
+        this.isAttached          = false;
+        this.address             = this._defAddr;
+        this.accelRange          = 0;
+        this.gyroRange           = 0;
+        this.accel               = { x: 0, y: 0, z: 0 };
+        this.gyro                = { x: 0, y: 0, z: 0 };
+        this.temp                = 0;
+        this.calibration         = { ax: 0, ay: 0, az: 0, gx: 0, gy: 0, gz: 0 };
+        this.isCalibrated        = false;
+        this._announcedByArduino = false;
+    }
+
+    // -------------------------------------------------------------------
+    // Reconnect — restores attach and range state on Arduino reset.
+    // Calibration offsets are stored on the Arduino and re-sent during
+    // announce — they do not need to be replayed from JS.
+    // -------------------------------------------------------------------
+    _reRegister() {
+        if (!this.isAttached) {
+            this._announcedByArduino = false;
+            return;
+        }
+
+        // Only replay attach/ranges if the Arduino didn't announce us — i.e.
+        // it has reset and lost state. If announce did sync us, skip the
+        // replay (avoids duplicate Serial output and redundant I2C init).
+        if (!this._announcedByArduino) {
+            // Model name in payload so the firmware re-initialises the correct sensor.
+            this.arduino.send(encodeFrame(CMD_IMU_ATTACH, DEVICE_IMU,
+                [this.logicalId, this.address], this.model));
+            if (this.accelRange !== 0)
+                this.arduino.send(encodeFrame(CMD_IMU_SET_ACCEL_RANGE, DEVICE_IMU,
+                    [this.logicalId, this.accelRange]));
+            if (this.gyroRange !== 0)
+                this.arduino.send(encodeFrame(CMD_IMU_SET_GYRO_RANGE, DEVICE_IMU,
+                    [this.logicalId, this.gyroRange]));
+        }
+
+        // Periodic read registrations are per-WS-client on the Arduino
+        // (cleared on disconnect), so always re-register if active.
+        if (this._readInterval > 0) this._sendRead();
+
+        this._announcedByArduino = false;  // reset for next reconnect cycle
+    }
+
+    // -------------------------------------------------------------------
+    // Incoming frames from Arduino
+    // -------------------------------------------------------------------
+    handleMessage(frame) {
+        switch (frame.cmd) {
+
+            // State sync during announce — update local state silently.
+            // Params: [id, addr], payload: model name string.
+            case CMD_IMU_ATTACH:
+                this.address             = frame.params[1];
+                this.isAttached          = true;
+                this._announcedByArduino = true;
+                // If the firmware reports a different model than this instance
+                // was constructed with (different firmware build, board swap,
+                // multi-client race), refresh model/dof to match. Range and
+                // calibration settings are intentionally preserved.
+                if (frame.payload) {
+                    const newModel = new TextDecoder().decode(frame.payload);
+                    if (newModel !== this.model) {
+                        const entry = IMU_MODELS[newModel];
+                        if (entry) {
+                            this.model = newModel;
+                            this.dof   = entry.dof;
+                        } else {
+                            this._warn(`firmware reports unknown model "${newModel}" — add it to IMU_MODELS in imu.js`);
+                            this.model = newModel;
+                            this.dof   = 0;
+                        }
+                    }
+                }
+                break;
+
+            case CMD_IMU_SET_ACCEL_RANGE:
+                this.accelRange = frame.params[1];
+                break;
+
+            case CMD_IMU_SET_GYRO_RANGE:
+                this.gyroRange = frame.params[1];
+                break;
+
+            // Poll response — update readings and fire 'change' event.
+            // Params: [id, ax, ay, az, gx, gy, gz, temp]  (floats)
+            case CMD_IMU_READ:
+                this.accel.x = frame.params[1];
+                this.accel.y = frame.params[2];
+                this.accel.z = frame.params[3];
+                this.gyro.x  = frame.params[4];
+                this.gyro.y  = frame.params[5];
+                this.gyro.z  = frame.params[6];
+                this.temp    = frame.params[7];
+                this._emit('change', {
+                    accel: { ...this.accel },
+                    gyro:  { ...this.gyro },
+                    temp:  this.temp,
+                });
+                break;
+
+            // Calibration complete (or announce sync of existing offsets).
+            // Params: [id, ax, ay, az, gx, gy, gz]  (floats)
+            case CMD_IMU_CALIBRATE:
+                this.calibration = {
+                    ax: frame.params[1], ay: frame.params[2], az: frame.params[3],
+                    gx: frame.params[4], gy: frame.params[5], gz: frame.params[6],
+                };
+                this.isCalibrated = true;
+                this._emit('calibrate', { ...this.calibration });
+                break;
+        }
+    }
+
+    // -------------------------------------------------------------------
+    // State snapshot
+    // -------------------------------------------------------------------
+    getState() {
+        const modelName = this.model;
+        return {
+            logicalId:    this.logicalId,
+            model:        modelName,
+            dof:          this.dof,
+            address:      `0x${this.address.toString(16).toUpperCase()}`,
+            attached:     this.isAttached,
+            accelRange:   `±${this.accelRangeG}g`,
+            gyroRange:    `±${this.gyroRangeDps}°/s`,
+            accel:        { ...this.accel },
+            gyro:         { ...this.gyro },
+            temp:         this.temp,
+            calibrated:   this.isCalibrated,
+            calibration:  { ...this.calibration },
+        };
+    }
+}
+
+// Let the core materialise an IMU when the SKETCH creates one
+// (PardaloteIMU.attach("imu", "6050") → CMD_SHARE → arduino.imu).
+registerExtensionType(IMU);

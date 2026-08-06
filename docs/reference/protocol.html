@@ -10,9 +10,9 @@
 </head>
 <body data-nav="reference">
 
-<nav class="site-nav speckled">
+<nav class="site-nav">
   <a class="logo" href="../index.html">
-    <img src="../assets/logo.svg" width="30" height="30" alt="">
+    <img src="../assets/logo.svg" width="26" height="26" alt="">
     Pardalote
   </a>
   <div class="links">
@@ -27,34 +27,57 @@
 <div class="wrap">
   <div class="ref-layout">
 <aside class="ref-nav">
-  <h4>Getting started</h4>
+  <button class="ref-nav-toggle" aria-expanded="false" aria-controls="ref-nav-links">Contents</button>
+  <div class="ref-nav-links" id="ref-nav-links">
+  <h4><a href="index.html">Getting started</a></h4>
   <a href="index.html">Overview</a>
   <a href="installation.html">Installation</a>
   <a href="wifi.html">WiFi configuration</a>
-  <h4>Core — JavaScript</h4>
-  <a href="connecting.html#connect">connect() / events</a>
+  <a href="ai-coding.html">Coding with AI</a>
+  <h4><a href="connecting.html">Core — JavaScript</a></h4>
+  <a href="connecting.html#connect">connect()</a>
+  <a href="connecting.html#on">on()</a>
+  <a href="connecting.html#disconnect">disconnect()</a>
+  <a href="connecting.html#getstatus">getStatus()</a>
   <a href="pins.html#pinmode">pinMode()</a>
-  <a href="pins.html#digitalwrite">digitalWrite() / analogWrite()</a>
-  <a href="pins.html#analogread">analogRead() / digitalRead()</a>
-  <a href="pins.html#onchange">onChange()</a>
+  <a href="pins.html#digitalwrite">digitalWrite()</a>
+  <a href="pins.html#analogwrite">analogWrite()</a>
+  <a href="pins.html#setwritethrottle--setwritethreshold">setWriteThrottle() / setWriteThreshold()</a>
+  <a href="pins.html#analogread">analogRead()</a>
+  <a href="pins.html#digitalread">digitalRead()</a>
+  <a href="pins.html#setreadinterval--setreadthreshold">setReadInterval() / setReadThreshold()</a>
+  <a href="pins.html#pin--the-listening-handle">pin() — the listening handle</a>
+  <a href="pins.html#end--endall">end() / endAll()</a>
   <a href="pins.html#pin-aliases">Pin aliases</a>
-  <h4>Core — Arduino</h4>
-  <a href="arduino.html#pardalotebegin">Pardalote.begin() / run()</a>
-  <a href="arduino.html#pardaloteshare">share() / send()</a>
-  <a href="arduino.html#the-actuator-objects">Reading actuators</a>
-  <h4>Extensions</h4>
+  <h4><a href="arduino.html">Core — Arduino</a></h4>
+  <a href="arduino.html#pardalotebegin">Pardalote.begin()</a>
+  <a href="arduino.html#pardaloterun">Pardalote.run()</a>
+  <a href="arduino.html#pardaloteshare">Pardalote.share()</a>
+  <a href="arduino.html#pardalotesend">Pardalote.send()</a>
+  <a href="arduino.html#when-not-to-share">When not to share</a>
+  <h4><a href="messaging.html">Core — Messaging</a></h4>
+  <a href="messaging.html#javascript-to-arduino">JavaScript to Arduino</a>
+  <a href="messaging.html#arduino-to-javascript">Arduino to JavaScript</a>
+  <a href="messaging.html#retain-and-broadcast">Retain and broadcast</a>
+  <a href="messaging.html#inspecting-all-traffic">Inspecting all traffic</a>
+  <h4><a href="extensions.html">Extensions</a></h4>
   <a href="extensions.html">Overview</a>
+  <a href="extensions.html#creating-extension-objects-in-the-firmware">Creating extension objects in the firmware</a>
+  <a href="extensions.html#reading-and-writing-actuators-from-the-sketch">Reading and writing actuators from the sketch</a>
   <a href="servo.html">Servo</a>
   <a href="stepper.html">Stepper</a>
   <a href="bus-servo.html">Bus servo</a>
   <a href="groups.html">Groups</a>
   <a href="neopixel.html">NeoPixel</a>
   <a href="ultrasonic.html">Ultrasonic</a>
-  <a href="mpu.html">MPU / IMU</a>
+  <a href="encoder.html">Rotary encoder</a>
+  <a href="imu.html">IMU</a>
   <a href="camera.html">Camera</a>
-  <h4>Under the hood</h4>
+  <h4><a href="protocol.html">Under the hood</a></h4>
   <a href="protocol.html">Protocol</a>
+  <a href="pin-capabilities.html">Pin capabilities</a>
   <a href="troubleshooting.html">Troubleshooting</a>
+  </div>
 </aside>
     <main class="ref-main">
       <h1>Protocol</h1>
@@ -71,8 +94,16 @@ Bytes 8+N×4 PAYLOAD      — optional string or binary data
 </code></pre>
 <h2 id="batching">Batching</h2>
 <p>Multiple frames are batched into a single WebSocket message before sending. The <code>FrameBuilder</code> class (Arduino) and <code>encodeFrame()</code> / <code>encodeBatch()</code> functions (JS) handle this automatically. Batching is what makes <a href="groups.html">group</a> writes land together on the board.</p>
+<h2 id="gesture-frames">Gesture frames</h2>
+<p>Expressive motion is pushed as a <strong>segment schedule</strong> the board plays on its own clock — never streamed step-by-step. One frame per actuator type (<code>CMD_SERVO_GESTURE</code> <code>0x58</code>, <code>CMD_STEPPER_GESTURE</code> <code>0x59</code>, <code>CMD_BUSSERVO_GESTURE</code> <code>0x5A</code>) carries one or more channel blocks in its payload:</p>
+<pre><code>Per channel:  [ logicalId u8 ][ flags u8 ][ count u8 ]  then count × segment
+Per segment:  [ curve u8 ][ dur u16, ms ][ value i32 ]        (big-endian)
+</code></pre>
+<p><code>flags</code> bit 0 selects the reference frame (relative delta vs absolute target); <code>value</code> is a signed displacement or target in the actuator's native unit (degrees, steps, counts); <code>curve</code> indexes the shared easing table (<code>linear</code>, <code>easeIn</code>, <code>easeOut</code>, <code>easeInOut</code>, <code>back</code>). A <a href="groups.html#gesture">group gesture</a> batches every type's frame into one message. This same record layout is what an on-device sequencer replays — one gesture vocabulary shared across the browser and the board.</p>
 <h2 id="state-sync-on-connect">State sync on connect</h2>
-<p>On connect, the Arduino sends its full current state — pin modes, output values, extension configuration, NeoPixel colours — before signalling <code>ready</code>. Any browser connecting to a running system immediately sees live state. This is why Pardalote is multi-user by default: every client starts from the same picture.</p>
+<p>On connect, the Arduino sends its full current state — pin modes, output values, current readings of every polled input, extension configuration, NeoPixel colours — before signalling <code>ready</code>. Any browser connecting to a running system immediately sees live state. This is why Pardalote is multi-user by default: every client starts from the same picture.</p>
+<h2 id="periodic-reads">Periodic reads</h2>
+<p>A read registration (<code>CMD_DIGITAL_READ</code> / <code>CMD_ANALOG_READ</code>, params <code>[interval, threshold]</code>) is <strong>per client</strong>: the board keeps a separate interval, change threshold, and last-sent value for each connected browser, and only transmits a reading to a browser when it has changed by at least that browser's threshold since the value that browser last saw. Looking is decoupled from telling: digital pins are watched on every loop pass and edges transmit immediately (15 ms bounce lockout; the interval never delays them); analog pins are sampled every 10 ms, with each client's interval acting as a minimum spacing between its updates. A threshold of <code>0</code> selects the board default (<code>1</code> for digital; the analog noise floor, <code>analogMax &gt;&gt; 8</code>, min <code>1</code>). <code>CMD_END</code> removes only the sending client's registration, and a client's registrations are dropped when it disconnects. Board-owned polls (<code>share()</code> with an interval) are announced in <code>CMD_PIN_MODE</code> as <code>[mode, interval, threshold]</code> and survive disconnects. Older clients and older firmware simply omit or ignore the extra params.</p>
 <h2 id="building-your-own-extension">Building your own extension</h2>
 <p>Extensions live at both ends: a JS file that encodes frames for your commands, and an Arduino header that registers a handler for them. The built-in extensions are working references — <code>ultrasonic</code> is the smallest, <code>busServo</code> the most complete. See <a href="extensions.html">Extensions overview</a>.</p>
 
@@ -80,7 +111,7 @@ Bytes 8+N×4 PAYLOAD      — optional string or binary data
   </div>
 </div>
 
-<footer class="site-footer speckled">
+<footer class="site-footer">
   <div class="wrap">
     <span>Pardalote — created by Scott Mitchell for design education and creative technology.</span>
     <span><a href="index.html">Reference</a> · <a href="https://github.com/ScottMit/Pardalote">GitHub</a> · GPL-3.0</span>

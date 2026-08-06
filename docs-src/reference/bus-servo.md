@@ -80,7 +80,7 @@ Moves to the middle of the range (`resolution / 2`, i.e. 2048 for ST).
 
 ## setMoveDefaults()
 
-Sets the default speed and acceleration used by plain `write()`, group `set()` and `moveTo()`.
+Sets the default speed and acceleration used by plain `write()` and group `write()` / `writeTimed()`.
 
 <div class="sig">arduino.shoulder.<span class="fn">setMoveDefaults</span>(speed, acc)</div>
 
@@ -94,6 +94,34 @@ Reaches a position in about a set time — the speed is picked from the move dis
 |---|---|---|
 | `counts` | number | Target position in counts. |
 | `duration` | number | Approximate arrival time in ms. |
+
+## gesture()
+
+Plays an authored **segment schedule** — an ordered list of moves the board runs back-to-back, advancing to the next when the servo reports it has arrived (its own `Moving` flag, not a timer). Values are in **counts**. Because a bus servo runs its own motion, each segment is one move at a distance/duration-matched speed, so the `curve` is accepted (for schema parity across actuators) but **not rendered inside a segment** — unlike a PWM servo. Expression comes from how you break the move into segments, and from lane overlap in a [group](groups.html#gesture). Fires `done` when the last segment lands.
+
+<div class="sig">arduino.shoulder.<span class="fn">gesture</span>(segments, [opts])</div>
+
+Each segment carries a duration and a displacement expressed **either** relatively (`by`) **or** absolutely (`to`):
+
+| Field | Type | Description |
+|---|---|---|
+| `dur` | number | Segment duration in ms — sizes the segment's speed. |
+| `by` | number | **Relative** displacement in counts — the default frame. |
+| `to` | number | **Absolute** target in counts — use in place of `by`. |
+| `curve` | string | Accepted for parity; not rendered within a bus-servo segment. |
+
+Relative by default (the board reads the live start position, then chains from each target). Absolute targets are clamped to the series range / `setLimits()`. Up to **12** segments. If a segment's implied speed exceeds the servo's maximum it simply takes longer and the next fires on true arrival, so the timeline self-corrects.
+
+```javascript Example — reach out, ease back, small settle
+arduino.shoulder.gesture([
+    { by:  600, dur: 400 },
+    { by: -600, dur: 600 },
+    { by:   80, dur: 200 },
+]);
+await arduino.shoulder.gesture([ /* … */ ]).whenDone();
+```
+
+A direct `write()`, `runSpeed()`, or `setMode()` cancels a running gesture. To coordinate several actuators at once, see [group.gesture()](groups.html#gesture).
 
 ## whenDone()
 
@@ -138,13 +166,14 @@ Hold position, or go limp. Disabling torque lets you move a joint by hand while 
 
 ## read()
 
-Starts polling feedback. One bus transaction per poll returns position, velocity, load, voltage, temperature, and (ST) current.
+Starts polling feedback. ONE bus transaction per poll tick — however many browsers are connected — returns position, velocity, load, voltage, temperature, and (ST) current. The board runs the poll (per-browser interval and threshold) and only transmits changes of threshold+ counts (gated on position).
 
-<div class="sig">arduino.shoulder.<span class="fn">read</span>([interval])</div>
+<div class="sig">arduino.shoulder.<span class="fn">read</span>([interval], [threshold])</div>
 
 | Parameter | Type | Description |
 |---|---|---|
 | `interval` | number | Optional. Poll interval in ms. Pass `END` to stop. |
+| `threshold` | number | Optional. Minimum position change worth transmitting, in counts (`0` = default: `2` — the encoder noise floor). Also settable via `setReadInterval(ms)` / `setReadThreshold(counts)`. |
 
 ## setLimits() / clearLimits()
 
@@ -155,6 +184,22 @@ Soft position limits, enforced **on the Arduino** — every commanded position (
 | Parameter | Type | Description |
 |---|---|---|
 | `min`, `max` | number | Allowed position range in counts. |
+
+## readFirmwareLimits()
+
+The **servo's own** angle limits, stored in its EEPROM — separate from the software `setLimits()` above. The board reads them **once when the servo attaches** and caches them, so the cached value is usually already available as the `firmwareLimits` property (see below); it also replays on reconnect. Call `readFirmwareLimits()` only to force a fresh read — e.g. after changing the limits on the servo itself with the vendor tool.
+
+Read-only here: Pardalote never writes these registers. By Feetech convention, `min` and `max` both `0` means the limits are **disabled** (multi-turn / continuous), reported as `enabled: false`.
+
+<div class="sig">await arduino.shoulder.<span class="fn">readFirmwareLimits</span>()</div>
+
+**Returns** `{ min, max, enabled }` (counts), or `null` if the servo didn't answer (unpowered or absent). `enabled` is `false` when the servo reports `min === 0 && max === 0`.
+
+```javascript Example — read once, then use the cached value
+await arduino.shoulder.readFirmwareLimits();
+const fw = arduino.shoulder.firmwareLimits;   // cheap cached read, no bus traffic
+if (fw && fw.enabled) console.log(`firmware limits: ${fw.min}–${fw.max}`);
+```
 
 ## setHome() / home()
 
@@ -193,24 +238,35 @@ Bus utilities. Servos ship as ID 1 — to renumber, put a **single** servo on th
 | Property | Description |
 |---|---|
 | `arduino.shoulder.position` | Raw counts — real feedback, needs polling. |
-| `arduino.shoulder.target` | Commanded goal — set immediately by `write()`. |
+| `arduino.shoulder.target` | Last commanded goal — set immediately by `write()`. |
+| `arduino.shoulder.hasTarget` | `true` while `target` is a live goal; `false` when the servo has no active target (freed, in wheel mode, or never commanded). Check this before trusting `target`. |
 | `arduino.shoulder.positionDegrees` | Position converted to degrees. |
 | `arduino.shoulder.velocity` | From feedback. |
 | `arduino.shoulder.load` | From feedback. |
 | `arduino.shoulder.voltage` | Volts. |
 | `arduino.shoulder.temperature` | °C. |
 | `arduino.shoulder.current` | Raw units (ST only). |
+| `arduino.shoulder.firmwareLimits` | The servo's own EEPROM angle limits: `{ min, max, enabled }` or `null` (not yet read / no answer). Cached from the attach-time read — see `readFirmwareLimits()`. |
+| `arduino.shoulder.present` | Is the servo answering? `true` = found, `false` = no response (check wiring / ID / baud), `null` = not yet attached. Seeded by the attach-time ping (the browser equivalent of the serial monitor's `[found]` / `[NO RESPONSE]` line), then kept **live from `read()` feedback** — a servo powered up or unplugged mid-session updates it. See the `'presence'` event. |
 
 `target` vs `position`: `write(n)` sets `target` immediately (where you told it to go); `position` is real encoder feedback and only tracks toward `target` while you're polling. Unlike the stepper, bus-servo `target` is browser-side only — the servo has no board-replayed goal, so it isn't restored after a board reset.
 
+`hasTarget` guards `target`: a position `write()` or `gesture()` makes it `true`; **disabling torque clears it** (a freed servo isn't holding a goal — you're hand-posing it), as does entering wheel mode. `target` keeps its last number for reference, but `hasTarget` tells you whether that number is still meaningful. Re-enabling torque does *not* set a new target — the servo holds where it is, and `hasTarget` stays `false` until you command a position again.
+
 ## Events
 
-| Event | Payload |
-|---|---|
-| `'read'` | `{ position, velocity, load, voltage, temperature }` |
+| Event | Payload | Fires when |
+|---|---|---|
+| `'change'` | `{ position, velocity, load, voltage, temperature }` | A polled reading changed by at least the threshold. |
+| `'write'` | `{ position }` | A move is issued (including a gesture start — `position` is the predicted rest). |
+| `'done'` | `{ position }` | A move, timed move, or gesture settles (the servo's `Moving` flag cleared). |
+| `'fwlimits'` | `{ min, max, enabled }` or `null` | The servo's firmware angle limits arrived — at attach, on reconnect, or after `readFirmwareLimits()`. |
+| `'presence'` | `{ servoId, present }` | The servo's answering state changed. Fires on the attach-time ping, on reconnect, and whenever `read()` feedback shows the servo appearing or disappearing (`present: false` = no answer — wrong ID, wiring, baud, or unpowered). Needs `read()` polling active to track mid-session changes. |
+
+Shorthand: `onChange(fn)`, `onWrite(fn)`, `onDone(fn)`, `onPresence(fn)`.
 
 <div class="sig">arduino.shoulder.<span class="fn">getState</span>()</div>
 
-**Returns** `{ logicalId, servoId, series, attached, mode, torque, resolution, target, position, velocity, load, voltage, temperature, current, limits, interval }`.
+**Returns** `{ logicalId, servoId, series, attached, present, mode, torque, resolution, target, hasTarget, position, velocity, load, voltage, temperature, current, limits, firmwareLimits, home, interval }`.
 
-See also: [Groups](groups.html) · [Bus servo example](../examples/busservo-example.html) · [Troubleshooting](troubleshooting.html)
+See also: [Groups](groups.html) · [Bus servo example](../examples/bus-servos.html) · [Troubleshooting](troubleshooting.html)

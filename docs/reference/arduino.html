@@ -10,9 +10,9 @@
 </head>
 <body data-nav="reference">
 
-<nav class="site-nav speckled">
+<nav class="site-nav">
   <a class="logo" href="../index.html">
-    <img src="../assets/logo.svg" width="30" height="30" alt="">
+    <img src="../assets/logo.svg" width="26" height="26" alt="">
     Pardalote
   </a>
   <div class="links">
@@ -27,34 +27,57 @@
 <div class="wrap">
   <div class="ref-layout">
 <aside class="ref-nav">
-  <h4>Getting started</h4>
+  <button class="ref-nav-toggle" aria-expanded="false" aria-controls="ref-nav-links">Contents</button>
+  <div class="ref-nav-links" id="ref-nav-links">
+  <h4><a href="index.html">Getting started</a></h4>
   <a href="index.html">Overview</a>
   <a href="installation.html">Installation</a>
   <a href="wifi.html">WiFi configuration</a>
-  <h4>Core — JavaScript</h4>
-  <a href="connecting.html#connect">connect() / events</a>
+  <a href="ai-coding.html">Coding with AI</a>
+  <h4><a href="connecting.html">Core — JavaScript</a></h4>
+  <a href="connecting.html#connect">connect()</a>
+  <a href="connecting.html#on">on()</a>
+  <a href="connecting.html#disconnect">disconnect()</a>
+  <a href="connecting.html#getstatus">getStatus()</a>
   <a href="pins.html#pinmode">pinMode()</a>
-  <a href="pins.html#digitalwrite">digitalWrite() / analogWrite()</a>
-  <a href="pins.html#analogread">analogRead() / digitalRead()</a>
-  <a href="pins.html#onchange">onChange()</a>
+  <a href="pins.html#digitalwrite">digitalWrite()</a>
+  <a href="pins.html#analogwrite">analogWrite()</a>
+  <a href="pins.html#setwritethrottle--setwritethreshold">setWriteThrottle() / setWriteThreshold()</a>
+  <a href="pins.html#analogread">analogRead()</a>
+  <a href="pins.html#digitalread">digitalRead()</a>
+  <a href="pins.html#setreadinterval--setreadthreshold">setReadInterval() / setReadThreshold()</a>
+  <a href="pins.html#pin--the-listening-handle">pin() — the listening handle</a>
+  <a href="pins.html#end--endall">end() / endAll()</a>
   <a href="pins.html#pin-aliases">Pin aliases</a>
-  <h4>Core — Arduino</h4>
-  <a href="arduino.html#pardalotebegin">Pardalote.begin() / run()</a>
-  <a href="arduino.html#pardaloteshare">share() / send()</a>
-  <a href="arduino.html#the-actuator-objects">Reading actuators</a>
-  <h4>Extensions</h4>
+  <h4><a href="arduino.html">Core — Arduino</a></h4>
+  <a href="arduino.html#pardalotebegin">Pardalote.begin()</a>
+  <a href="arduino.html#pardaloterun">Pardalote.run()</a>
+  <a href="arduino.html#pardaloteshare">Pardalote.share()</a>
+  <a href="arduino.html#pardalotesend">Pardalote.send()</a>
+  <a href="arduino.html#when-not-to-share">When not to share</a>
+  <h4><a href="messaging.html">Core — Messaging</a></h4>
+  <a href="messaging.html#javascript-to-arduino">JavaScript to Arduino</a>
+  <a href="messaging.html#arduino-to-javascript">Arduino to JavaScript</a>
+  <a href="messaging.html#retain-and-broadcast">Retain and broadcast</a>
+  <a href="messaging.html#inspecting-all-traffic">Inspecting all traffic</a>
+  <h4><a href="extensions.html">Extensions</a></h4>
   <a href="extensions.html">Overview</a>
+  <a href="extensions.html#creating-extension-objects-in-the-firmware">Creating extension objects in the firmware</a>
+  <a href="extensions.html#reading-and-writing-actuators-from-the-sketch">Reading and writing actuators from the sketch</a>
   <a href="servo.html">Servo</a>
   <a href="stepper.html">Stepper</a>
   <a href="bus-servo.html">Bus servo</a>
   <a href="groups.html">Groups</a>
   <a href="neopixel.html">NeoPixel</a>
   <a href="ultrasonic.html">Ultrasonic</a>
-  <a href="mpu.html">MPU / IMU</a>
+  <a href="encoder.html">Rotary encoder</a>
+  <a href="imu.html">IMU</a>
   <a href="camera.html">Camera</a>
-  <h4>Under the hood</h4>
+  <h4><a href="protocol.html">Under the hood</a></h4>
   <a href="protocol.html">Protocol</a>
+  <a href="pin-capabilities.html">Pin capabilities</a>
   <a href="troubleshooting.html">Troubleshooting</a>
+  </div>
 </aside>
     <main class="ref-main">
       <h1>The Arduino sketch</h1>
@@ -65,14 +88,40 @@
 <p><strong>The Arduino is just another voice in a flat command structure.</strong> Both the Arduino sketch and the browser can read and write any pin using the standard Arduino / JS APIs. Whoever wrote last wins on the actual pin state. There's no pin reservation, no negotiation — your sketch and your JS code share the same hardware and you keep them coherent.</p>
 </blockquote>
 <h2 id="pardalotebegin">Pardalote.begin()</h2>
-<p>Starts Pardalote: joins WiFi (see <a href="wifi.html">WiFi configuration</a>) and starts the WebSocket server. Call once in <code>setup()</code>.</p>
-<div class="sig">Pardalote.<span class="fn">begin</span>()</div>
+<p>Starts Pardalote. Call once in <code>setup()</code>. Three forms:</p>
+<div class="sig sig-ino">Pardalote.<span class="fn">begin</span>()</div>
+<div class="sig sig-ino">Pardalote.<span class="fn">begin</span>(key)</div>
+<div class="sig sig-ino">Pardalote.<span class="fn">begin</span>(PARDALOTE_SERIAL)</div>
+<table>
+<thead>
+<tr>
+<th>Form</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>begin()</code></td>
+<td>The default: joins WiFi (see <a href="wifi.html">WiFi configuration</a>) and starts the WebSocket server.</td>
+</tr>
+<tr>
+<td><code>begin(&quot;key&quot;)</code></td>
+<td>As above, plus a <strong>connection key</strong>: only browsers that pass the same key to <a href="connecting.html#connection-keys"><code>connect(ip, { key })</code></a> get in. An accident-prevention latch for shared networks — not security (the key travels unencrypted). Up to 32 characters.</td>
+</tr>
+<tr>
+<td><code>begin(PARDALOTE_SERIAL)</code></td>
+<td>Skips WiFi entirely and talks over the <strong>USB cable</strong> instead — the browser connects with <a href="connecting.html#connectserial"><code>connectSerial()</code></a>. No key concept: holding the cable is access.</td>
+</tr>
+</tbody>
+</table>
+<p>WiFi is the default; serial is an explicit choice. The one exception is the <strong>UNO R4 Minima</strong> — it has no radio, so every <code>begin()</code> form starts the serial transport. There is no runtime WiFi→serial failover on WiFi-capable boards.</p>
+<p>In serial mode, <code>Serial.print</code> from your sketch still works — the output travels between protocol messages and appears in the browser as the <a href="connecting.html#connectserial"><code>'log'</code> event</a> (and in the Serial Monitor as usual when the browser isn't connected). Don't <code>Serial.write</code> raw binary; text is fine.</p>
 <h2 id="pardaloterun">Pardalote.run()</h2>
 <p>Services the connection: handles incoming commands, runs polls and timed moves. Call every pass of <code>loop()</code> — keep the loop non-blocking so it runs often.</p>
-<div class="sig">Pardalote.<span class="fn">run</span>()</div>
+<div class="sig sig-ino">Pardalote.<span class="fn">run</span>()</div>
 <h2 id="pardaloteshare">Pardalote.share()</h2>
 <p>Declares a pin's mode to the browser: &quot;this pin exists, it's in this mode.&quot; Doesn't touch the hardware — you still call <code>pinMode()</code> yourself.</p>
-<div class="sig">Pardalote.<span class="fn">share</span>(pin, mode)</div>
+<div class="sig sig-ino">Pardalote.<span class="fn">share</span>(pin, mode, [interval], [threshold])</div>
 <table>
 <thead>
 <tr>
@@ -90,14 +139,28 @@
 <tr>
 <td><code>mode</code></td>
 <td>constant</td>
-<td><code>INPUT</code>, <code>OUTPUT</code>, <code>INPUT_PULLUP</code>, <code>INPUT_PULLDOWN</code>, or Pardalote's <code>MODE_ANALOG_INPUT</code>.</td>
+<td><code>INPUT</code>, <code>OUTPUT</code>, <code>INPUT_PULLUP</code>, <code>INPUT_PULLDOWN</code>, or Pardalote's <code>ANALOG_INPUT_MODE</code>.</td>
+</tr>
+<tr>
+<td><code>interval</code></td>
+<td>int</td>
+<td>Optional. Registers a <strong>board-owned watch</strong>: values flow to every browser. For analog pins it's the browsers' update rate limit; digital changes transmit immediately.</td>
+</tr>
+<tr>
+<td><code>threshold</code></td>
+<td>int</td>
+<td>Optional. Minimum change worth transmitting (<code>0</code> = default: <code>1</code> for digital, the ADC noise floor for analog).</td>
 </tr>
 </tbody>
 </table>
-<p><strong>For input modes, the browser auto-starts a default-interval (200 ms) poll for the pin</strong> — so the browser starts receiving values without declaring anything itself. For <code>OUTPUT</code> it's purely a declaration (no polling).</p>
+<p><strong>With an <code>interval</code>, the board owns the watch</strong>: values flow to every browser — including ones that connect later — with no JS call and no round trip, and only when the reading has changed by at least <code>threshold</code>. The watch survives browser disconnects.</p>
+<div class="code-ex"><span class="lang-badge lang-arduino">Arduino</span><pre><code><span class="n">Pardalote</span><span class="p">.</span><span class="n">share</span><span class="p">(</span><span class="n">A0</span><span class="p">,</span><span class="w"> </span><span class="n">ANALOG_INPUT_MODE</span><span class="p">,</span><span class="w"> </span><span class="mi">50</span><span class="p">);</span><span class="w">      </span><span class="c1">// browsers hear changes at most every 50 ms</span>
+<span class="n">Pardalote</span><span class="p">.</span><span class="n">share</span><span class="p">(</span><span class="n">A0</span><span class="p">,</span><span class="w"> </span><span class="n">ANALOG_INPUT_MODE</span><span class="p">,</span><span class="w"> </span><span class="mi">50</span><span class="p">,</span><span class="w"> </span><span class="mi">8</span><span class="p">);</span><span class="w">   </span><span class="c1">// …and only changes of 8+ counts</span>
+</code></pre></div>
+<p><strong>Without an <code>interval</code></strong> (input modes), the browser auto-starts a default-interval (200 ms) poll for the pin — so it still receives values without declaring anything itself. For <code>OUTPUT</code> it's purely a declaration (no polling).</p>
 <h2 id="pardalotesend">Pardalote.send()</h2>
-<p>Pushes a value to the browser. The browser caches it, fires <code>arduino.onChange(pin, …)</code> handlers, and makes it available via <code>arduino.digitalRead(pin)</code> / <code>analogRead(pin)</code>. Doesn't touch the hardware.</p>
-<div class="sig">Pardalote.<span class="fn">send</span>(pin, value)</div>
+<p>Pushes a value to the browser. The browser caches it, fires <code>arduino.pin(pin)</code>'s <code>'change'</code> listeners, and makes it available via <code>arduino.digitalRead(pin)</code> / <code>analogRead(pin)</code>. Doesn't touch the hardware.</p>
+<div class="sig sig-ino">Pardalote.<span class="fn">send</span>(pin, value)</div>
 <table>
 <thead>
 <tr>
@@ -121,202 +184,65 @@
 </table>
 <h2 id="example--light-switch">Example — light switch</h2>
 <p>An LED controlled by two physical buttons <em>and</em> two browser buttons. Either side flips it; both stay in sync. The Arduino calls <code>share</code> once and <code>send</code> whenever its buttons fire:</p>
-<div class="code-ex"><div class="bar">sketch.ino — light switch, Arduino side</div><pre><code><span class="kt">void</span><span class="w"> </span><span class="nf">setup</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">begin</span><span class="p">();</span><span class="w"></span>
-<span class="w">    </span><span class="n">pinMode</span><span class="p">(</span><span class="n">LIGHT</span><span class="p">,</span><span class="w">  </span><span class="n">OUTPUT</span><span class="p">);</span><span class="w"></span>
-<span class="w">    </span><span class="n">pinMode</span><span class="p">(</span><span class="n">BTN_ON</span><span class="p">,</span><span class="w">  </span><span class="n">INPUT_PULLUP</span><span class="p">);</span><span class="w"></span>
-<span class="w">    </span><span class="n">pinMode</span><span class="p">(</span><span class="n">BTN_OFF</span><span class="p">,</span><span class="w"> </span><span class="n">INPUT_PULLUP</span><span class="p">);</span><span class="w"></span>
-<span class="w">    </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">share</span><span class="p">(</span><span class="n">LIGHT</span><span class="p">,</span><span class="w"> </span><span class="n">OUTPUT</span><span class="p">);</span><span class="w"></span>
-<span class="p">}</span><span class="w"></span>
+<div class="code-ex"><span class="lang-badge lang-arduino">Arduino</span><div class="bar">sketch.ino — light switch, Arduino side</div><pre><code><span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;Pardalote.h&gt;</span>
 
-<span class="kt">void</span><span class="w"> </span><span class="nf">loop</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">run</span><span class="p">();</span><span class="w"></span>
-<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">button_on_pressed</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">        </span><span class="n">digitalWrite</span><span class="p">(</span><span class="n">LIGHT</span><span class="p">,</span><span class="w"> </span><span class="n">HIGH</span><span class="p">);</span><span class="w"></span>
-<span class="w">        </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">send</span><span class="p">(</span><span class="n">LIGHT</span><span class="p">,</span><span class="w"> </span><span class="n">HIGH</span><span class="p">);</span><span class="w"></span>
-<span class="w">    </span><span class="p">}</span><span class="w"></span>
+<span class="k">const</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">LIGHT</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">13</span><span class="p">;</span>
+<span class="k">const</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">BTN_ON</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">4</span><span class="p">;</span>
+<span class="k">const</span><span class="w"> </span><span class="kt">int</span><span class="w"> </span><span class="n">BTN_OFF</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">5</span><span class="p">;</span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">setup</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">begin</span><span class="p">();</span>
+<span class="w">    </span><span class="n">pinMode</span><span class="p">(</span><span class="n">LIGHT</span><span class="p">,</span><span class="w">  </span><span class="n">OUTPUT</span><span class="p">);</span>
+<span class="w">    </span><span class="n">pinMode</span><span class="p">(</span><span class="n">BTN_ON</span><span class="p">,</span><span class="w">  </span><span class="n">INPUT_PULLUP</span><span class="p">);</span>
+<span class="w">    </span><span class="n">pinMode</span><span class="p">(</span><span class="n">BTN_OFF</span><span class="p">,</span><span class="w"> </span><span class="n">INPUT_PULLUP</span><span class="p">);</span>
+<span class="w">    </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">share</span><span class="p">(</span><span class="n">LIGHT</span><span class="p">,</span><span class="w"> </span><span class="n">OUTPUT</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">loop</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">run</span><span class="p">();</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">button_on_pressed</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">digitalWrite</span><span class="p">(</span><span class="n">LIGHT</span><span class="p">,</span><span class="w"> </span><span class="n">HIGH</span><span class="p">);</span>
+<span class="w">        </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">send</span><span class="p">(</span><span class="n">LIGHT</span><span class="p">,</span><span class="w"> </span><span class="n">HIGH</span><span class="p">);</span>
+<span class="w">    </span><span class="p">}</span>
 <span class="w">    </span><span class="c1">// ... mirror for off ...</span>
-<span class="p">}</span><span class="w"></span>
+<span class="p">}</span>
+</code></pre></div>
+<p>The browser writes the same pin and listens for changes, so a press on either side keeps both in sync:</p>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><div class="bar">sketch.js — light switch, browser side</div><pre><code><span class="c1">// Browser → Arduino: the on-screen buttons write the pin</span>
+<span class="nx">onBtn</span><span class="p">.</span><span class="nx">onclick</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">digitalWrite</span><span class="p">(</span><span class="nx">LIGHT</span><span class="p">,</span><span class="w"> </span><span class="nx">HIGH</span><span class="p">);</span>
+<span class="nx">offBtn</span><span class="p">.</span><span class="nx">onclick</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">digitalWrite</span><span class="p">(</span><span class="nx">LIGHT</span><span class="p">,</span><span class="w"> </span><span class="nx">LOW</span><span class="p">);</span>
+
+<span class="c1">// Arduino → browser: a change from either side lands here</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">pin</span><span class="p">(</span><span class="nx">LIGHT</span><span class="p">).</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;change&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">({</span><span class="w"> </span><span class="nx">value</span><span class="w"> </span><span class="p">})</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">lightEl</span><span class="p">.</span><span class="nx">textContent</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">value</span><span class="w"> </span><span class="o">?</span><span class="w"> </span><span class="s1">&#39;ON&#39;</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;OFF&#39;</span><span class="p">;</span>
+<span class="p">});</span>
 </code></pre></div>
 <h2 id="example--potentiometer">Example — potentiometer</h2>
 <p>The Arduino announces an analog input; the browser receives values automatically with no JS-side setup:</p>
-<div class="code-ex"><div class="bar">sketch.ino — announce an analog input</div><pre><code><span class="kt">void</span><span class="w"> </span><span class="nf">setup</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">begin</span><span class="p">();</span><span class="w"></span>
-<span class="w">    </span><span class="n">pinMode</span><span class="p">(</span><span class="n">A0</span><span class="p">,</span><span class="w"> </span><span class="n">INPUT</span><span class="p">);</span><span class="w"></span>
-<span class="w">    </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">share</span><span class="p">(</span><span class="n">A0</span><span class="p">,</span><span class="w"> </span><span class="n">MODE_ANALOG_INPUT</span><span class="p">);</span><span class="w">   </span><span class="c1">// browser auto-starts polling</span>
-<span class="p">}</span><span class="w"></span>
+<div class="code-ex"><span class="lang-badge lang-arduino">Arduino</span><div class="bar">sketch.ino — announce an analog input</div><pre><code><span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;Pardalote.h&gt;</span>
 
-<span class="kt">void</span><span class="w"> </span><span class="nf">loop</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="kt">void</span><span class="w"> </span><span class="nf">setup</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">begin</span><span class="p">();</span>
+<span class="w">    </span><span class="n">pinMode</span><span class="p">(</span><span class="n">A0</span><span class="p">,</span><span class="w"> </span><span class="n">INPUT</span><span class="p">);</span>
+<span class="w">    </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">share</span><span class="p">(</span><span class="n">A0</span><span class="p">,</span><span class="w"> </span><span class="n">ANALOG_INPUT_MODE</span><span class="p">);</span><span class="w">   </span><span class="c1">// browser auto-starts polling</span>
+<span class="p">}</span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">loop</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
 <span class="w">    </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">run</span><span class="p">();</span><span class="w">   </span><span class="c1">// that&#39;s it — browser&#39;s polls are handled here</span>
-<span class="p">}</span><span class="w"></span>
+<span class="p">}</span>
 </code></pre></div>
-<div class="code-ex"><div class="bar">sketch.js — receive with no setup</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">onChange</span><span class="p">(</span><span class="s1">&#39;A0&#39;</span><span class="p">,</span> <span class="nx">value</span> <span class="p">=&gt;</span> <span class="nx">updateDisplay</span><span class="p">(</span><span class="nx">value</span><span class="p">));</span>   <span class="c1">// no pinMode, no analogRead</span>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><div class="bar">sketch.js — receive with no setup</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">pin</span><span class="p">(</span><span class="s1">&#39;A0&#39;</span><span class="p">).</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;change&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">({</span><span class="w"> </span><span class="nx">value</span><span class="w"> </span><span class="p">})</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">updateDisplay</span><span class="p">(</span><span class="nx">value</span><span class="p">));</span><span class="w">   </span><span class="c1">// no pinMode, no analogRead</span>
 </code></pre></div>
 <h2 id="when-not-to-share">When not to share</h2>
 <p>Not every pin needs to be shared. In the light-switch example the two button pins are only used by the Arduino — the browser has its own buttons, so there's no reason to tell it about the physical ones. Share only the pins you want the browser to see.</p>
-<h2 id="creating-actuators-from-the-sketch">Creating actuators from the sketch</h2>
-<p>The sketch can create a servo itself — and every browser receives it automatically, as a full <code>Servo</code> instance named <code>arduino.&lt;name&gt;</code>, identical to one created with <code>arduino.add()</code>.</p>
-<div class="sig">PardaloteServo.<span class="fn">attach</span>(name, pin, minPulse?, maxPulse?)</div>
-<table>
-<thead>
-<tr>
-<th>Parameter</th>
-<th>Type</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>name</code></td>
-<td>string</td>
-<td>The browser-side name — <code>arduino.&lt;name&gt;</code>. Max 15 chars.</td>
-</tr>
-<tr>
-<td><code>pin</code></td>
-<td>int</td>
-<td>The servo signal pin.</td>
-</tr>
-<tr>
-<td><code>minPulse</code></td>
-<td>int</td>
-<td>Optional pulse range, default 544.</td>
-</tr>
-<tr>
-<td><code>maxPulse</code></td>
-<td>int</td>
-<td>Optional pulse range, default 2400.</td>
-</tr>
-</tbody>
-</table>
-<p><strong>Returns</strong> the logical id for the <code>write()</code> / <code>read()</code> calls below, or −1 if no slot is free.</p>
-<div class="code-ex"><div class="bar">sketch.ino — the sketch creates a servo</div><pre><code><span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;Pardalote.h&gt;</span><span class="cp"></span>
-<span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;PardaloteServo.h&gt;</span><span class="cp"></span>
-
-<span class="kt">int</span><span class="w"> </span><span class="n">pan</span><span class="p">;</span><span class="w"></span>
-
-<span class="kt">void</span><span class="w"> </span><span class="nf">setup</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">begin</span><span class="p">();</span><span class="w"></span>
-<span class="w">    </span><span class="n">pan</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">PardaloteServo</span><span class="p">.</span><span class="n">attach</span><span class="p">(</span><span class="s">&quot;pan&quot;</span><span class="p">,</span><span class="w"> </span><span class="mi">9</span><span class="p">);</span><span class="w">   </span><span class="c1">// arduino.pan now exists in every browser</span>
-<span class="w">    </span><span class="n">PardaloteServo</span><span class="p">.</span><span class="n">write</span><span class="p">(</span><span class="n">pan</span><span class="p">,</span><span class="w"> </span><span class="mi">90</span><span class="p">);</span><span class="w"></span>
-<span class="p">}</span><span class="w"></span>
-</code></pre></div>
-<p>The object exists in the browser before <code>'ready'</code> fires, and browsers that connect later get it too. <code>arduino.on('share', ({ name, extension }) =&gt; …)</code> fires the moment it appears. Calling <code>attach</code> again with the same name reuses the same servo; names that would collide with the browser core API (like <code>&quot;connect&quot;</code>) are refused with a console warning.</p>
-<p>Unlike raw pins, there's no separate <code>share()</code> step — a Pardalote servo has no life outside Pardalote, so creating it <em>is</em> sharing it. A servo that should stay private to the sketch shouldn't go through Pardalote at all: use the plain <code>Servo</code>/<code>ESP32Servo</code> library directly, the way unshared pins just use <code>pinMode()</code>.</p>
-<p><em>(Currently servos; steppers and bus servos will follow the same pattern.)</em></p>
-<h2 id="the-actuator-objects">The actuator objects</h2>
-<p><code>share</code>/<code>send</code> cover raw pins. For the <strong>extension actuators</strong> — browser-configured or sketch-created — each type gives the sketch a small <strong>bus object</strong>. The browser and the sketch share the same actuator (last writer wins), just as they share raw pins.</p>
-<table>
-<thead>
-<tr>
-<th>Object</th>
-<th><code>scan()</code> returns</th>
-<th><code>read(id)</code> returns</th>
-<th><code>id</code> is</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>PardaloteServo</code></td>
-<td>attached servo ids</td>
-<td>angle (0–180)</td>
-<td>logical id (<code>arduino.add()</code> order, or returned by sketch <code>attach</code>)</td>
-</tr>
-<tr>
-<td><code>PardaloteStepper</code></td>
-<td>attached stepper ids</td>
-<td>position (steps)</td>
-<td>logical id</td>
-</tr>
-<tr>
-<td><code>PardaloteBusServo</code></td>
-<td>responding servo ids</td>
-<td>position (counts)</td>
-<td><strong>hardware</strong> servo ID</td>
-</tr>
-</tbody>
-</table>
-<h3 id="scan">scan()</h3>
-<p>Lists what's there.</p>
-<div class="sig">Pardalote<i>Type</i>.<span class="fn">scan</span>(buffer, maxCount)</div>
-<table>
-<thead>
-<tr>
-<th>Parameter</th>
-<th>Type</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>buffer</code></td>
-<td>int[] / uint8_t[]</td>
-<td>Array to fill with ids.</td>
-</tr>
-<tr>
-<td><code>maxCount</code></td>
-<td>int</td>
-<td>Size of the array.</td>
-</tr>
-</tbody>
-</table>
-<p><strong>Returns</strong> the number of ids written. For <code>PardaloteBusServo</code>, <code>scan()</code> pings the bus.</p>
-<pre><code><span class="kt">int</span><span class="w"> </span><span class="n">ids</span><span class="p">[</span><span class="mi">8</span><span class="p">];</span><span class="w"></span>
-<span class="kt">int</span><span class="w"> </span><span class="n">n</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">PardaloteServo</span><span class="p">.</span><span class="n">scan</span><span class="p">(</span><span class="n">ids</span><span class="p">,</span><span class="w"> </span><span class="mi">8</span><span class="p">);</span><span class="w"></span>
-<span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">n</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="o">++</span><span class="p">)</span><span class="w"> </span><span class="n">Serial</span><span class="p">.</span><span class="n">println</span><span class="p">(</span><span class="n">PardaloteServo</span><span class="p">.</span><span class="n">read</span><span class="p">(</span><span class="n">ids</span><span class="p">[</span><span class="n">i</span><span class="p">]));</span><span class="w"></span>
-</code></pre>
-<h3 id="read">read()</h3>
-<p>Reads one actuator's position.</p>
-<div class="sig">Pardalote<i>Type</i>.<span class="fn">read</span>(id)</div>
-<p><strong>Returns</strong> angle (servo), steps (stepper), or counts (bus servo); negative on failure.</p>
-<pre><code><span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;Pardalote.h&gt;</span><span class="cp"></span>
-<span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;PardaloteBusServo.h&gt;</span><span class="cp"></span>
-
-<span class="kt">void</span><span class="w"> </span><span class="nf">loop</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">run</span><span class="p">();</span><span class="w"></span>
-<span class="w">    </span><span class="kt">int</span><span class="w"> </span><span class="n">pos</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">PardaloteBusServo</span><span class="p">.</span><span class="n">read</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span><span class="w">   </span><span class="c1">// servo ID 1 → position (counts)</span>
-<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">pos</span><span class="w"> </span><span class="o">&gt;=</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="n">digitalWrite</span><span class="p">(</span><span class="n">LED_BUILTIN</span><span class="p">,</span><span class="w"> </span><span class="n">pos</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mi">2048</span><span class="w"> </span><span class="o">?</span><span class="w"> </span><span class="n">HIGH</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">LOW</span><span class="p">);</span><span class="w"></span>
-<span class="p">}</span><span class="w"></span>
-</code></pre>
-<h3 id="write-and-friends">write() and friends</h3>
-<p>The same objects command the actuators — addressed the same way:</p>
-<pre><code><span class="n">PardaloteServo</span><span class="p">.</span><span class="n">write</span><span class="p">(</span><span class="n">id</span><span class="p">,</span><span class="w"> </span><span class="mi">90</span><span class="p">);</span><span class="w">            </span><span class="c1">// angle 0–180</span>
-<span class="n">PardaloteServo</span><span class="p">.</span><span class="n">writeTimed</span><span class="p">(</span><span class="n">id</span><span class="p">,</span><span class="w"> </span><span class="mi">90</span><span class="p">,</span><span class="w"> </span><span class="mi">1000</span><span class="p">);</span><span class="w"> </span><span class="c1">// over 1 s (board-interpolated)</span>
-<span class="n">PardaloteServo</span><span class="p">.</span><span class="n">stop</span><span class="p">(</span><span class="n">id</span><span class="p">);</span><span class="w"></span>
-
-<span class="n">PardaloteStepper</span><span class="p">.</span><span class="n">moveTo</span><span class="p">(</span><span class="n">id</span><span class="p">,</span><span class="w"> </span><span class="mi">2000</span><span class="p">);</span><span class="w">       </span><span class="c1">// steps</span>
-<span class="n">PardaloteStepper</span><span class="p">.</span><span class="n">move</span><span class="p">(</span><span class="n">id</span><span class="p">,</span><span class="w"> </span><span class="mi">-400</span><span class="p">);</span><span class="w"></span>
-<span class="n">PardaloteStepper</span><span class="p">.</span><span class="n">stop</span><span class="p">(</span><span class="n">id</span><span class="p">);</span><span class="w"></span>
-
-<span class="n">PardaloteBusServo</span><span class="p">.</span><span class="n">write</span><span class="p">(</span><span class="n">id</span><span class="p">,</span><span class="w"> </span><span class="mi">2048</span><span class="p">);</span><span class="w">       </span><span class="c1">// counts (optional speed, acc)</span>
-<span class="n">PardaloteBusServo</span><span class="p">.</span><span class="n">torque</span><span class="p">(</span><span class="n">id</span><span class="p">,</span><span class="w"> </span><span class="nb">false</span><span class="p">);</span><span class="w">     </span><span class="c1">// release / hold</span>
-</code></pre>
-<p>Servo/stepper writes run through the <strong>same command path the browser uses</strong> (so they respect limits, cancel timed moves, etc.); bus-servo writes go straight to the bus by hardware ID.</p>
-<h3 id="status-helpers">Status helpers</h3>
-<pre><code><span class="n">PardaloteServo</span><span class="p">.</span><span class="n">isMoving</span><span class="p">(</span><span class="n">id</span><span class="p">);</span><span class="w">          </span><span class="c1">// timed move in progress</span>
-<span class="n">PardaloteStepper</span><span class="p">.</span><span class="n">distanceToGo</span><span class="p">(</span><span class="n">id</span><span class="p">);</span><span class="w"></span>
-<span class="n">PardaloteStepper</span><span class="p">.</span><span class="n">isRunning</span><span class="p">(</span><span class="n">id</span><span class="p">);</span><span class="w"></span>
-<span class="n">PardaloteBusServo</span><span class="p">.</span><span class="n">feedback</span><span class="p">(</span><span class="n">id</span><span class="p">);</span><span class="w">       </span><span class="c1">// position, load, voltage, temperature in one read</span>
-<span class="n">PardaloteBusServo</span><span class="p">.</span><span class="n">isMoving</span><span class="p">(</span><span class="n">id</span><span class="p">);</span><span class="w">       </span><span class="c1">// the servo&#39;s own Moving flag</span>
-<span class="n">PardaloteBusServo</span><span class="p">.</span><span class="n">arrived</span><span class="p">(</span><span class="n">id</span><span class="p">);</span><span class="w"></span>
-</code></pre>
-<p>For bus servos, <code>isMoving(id)</code> / <code>arrived(id)</code> read the servo's own <strong>Moving flag</strong> — its honest &quot;am I still moving?&quot;, accounting for deadband and settling. It's one bus read (the servo can't notify you — you ask when you want to know):</p>
-<div class="code-ex"><div class="bar">Example — wait for a bus servo to arrive</div><pre><code><span class="n">PardaloteBusServo</span><span class="p">.</span><span class="n">write</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">3000</span><span class="p">);</span><span class="w"></span>
-<span class="k">while</span><span class="w"> </span><span class="p">(</span><span class="n">PardaloteBusServo</span><span class="p">.</span><span class="n">isMoving</span><span class="p">(</span><span class="mi">1</span><span class="p">))</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="cm">/* do other work */</span><span class="w"> </span><span class="p">}</span><span class="w"></span>
-<span class="c1">// arrived — trigger the next thing</span>
-</code></pre></div>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>A <strong>bus servo read/scan/write is a blocking bus transaction</strong> — fine in <code>setup()</code> or a throttled <code>loop()</code>, not a tight high-rate loop competing with the browser's own polling.</li>
-<li><strong>Sketch writes update the browser's record automatically.</strong> A sketch write echoes the commanded value to the browser exactly as if the browser had issued it — a PWM servo sets the browser's <code>angle</code>, a stepper or bus servo sets its <code>target</code>. The live <code>position</code> feedback is separate — that still comes from polling.</li>
-<li>See <strong>File → Examples → Pardalote → arduino-read</strong>.</li>
-</ul>
-<p>See also: <a href="servo.html">Servo</a> · <a href="stepper.html">Stepper</a> · <a href="bus-servo.html">Bus servo</a></p>
+<p><code>Pardalote.send(pin, value)</code> above is really one special case of a more general idea. The same <code>send</code> verb, given a <strong>string key</strong> instead of a pin number, becomes the <strong><a href="messaging.html#arduino-to-javascript">message channel</a></strong>: <code>send(key, value)</code> pushes any named key/value to the browser — symmetric in both directions and carrying every basic type. Pushing a pin's value is just the pin-shaped form of it; use a string key for anything that isn't tied to a pin or a device.</p>
+<p>See also: <a href="messaging.html">Messaging</a> · <a href="extensions.html">Extensions overview</a> · <a href="servo.html">Servo</a> · <a href="stepper.html">Stepper</a> · <a href="bus-servo.html">Bus servo</a></p>
 
     </main>
   </div>
 </div>
 
-<footer class="site-footer speckled">
+<footer class="site-footer">
   <div class="wrap">
     <span>Pardalote — created by Scott Mitchell for design education and creative technology.</span>
     <span><a href="index.html">Reference</a> · <a href="https://github.com/ScottMit/Pardalote">GitHub</a> · GPL-3.0</span>

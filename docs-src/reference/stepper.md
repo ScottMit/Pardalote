@@ -90,6 +90,34 @@ Runs a **constant-speed** move sized to arrive in about `duration` ms — the bo
 | `target` | number | Absolute position in steps. |
 | `duration` | number | Approximate arrival time in ms. |
 
+## gesture()
+
+Plays an authored **segment schedule** — an ordered list of eased moves the board runs back-to-back on its own clock. Where `moveToTimed()` is one constant-speed move, a gesture is a sequence of *eased* ones: the primitive for expressive motion. Each segment's velocity follows its curve (a dedicated on-board eased mode, not AccelStepper's fixed ramp), so you get anticipation, overshoot, and holds a plain ramp can't produce. Values are in **steps**. Fires `done` when the last segment lands.
+
+<div class="sig">arduino.x.<span class="fn">gesture</span>(segments, [opts])</div>
+
+Each segment carries a duration, a curve, and a displacement expressed **either** relatively (`by`) **or** absolutely (`to`):
+
+| Field | Type | Description |
+|---|---|---|
+| `dur` | number | Segment duration in ms. |
+| `curve` | string | `'linear'`, `'easeIn'`, `'easeOut'`, `'easeInOut'`, or `'back'` (overshoot). Default `'linear'`. |
+| `by` | number | **Relative** displacement in steps — the default, portable frame. |
+| `to` | number | **Absolute** target in steps — use in place of `by`. |
+
+Relative by default (the board captures its live position at the start of each segment). **No homing needed** — a relative bounce works on an open-loop stepper with no position truth, which is the point: a `back` segment drives *past* the target then reverses, a real over-travel (e.g. a lead-screw bounce). Absolute targets are clamped to `setLimits()`. Up to **16** segments. An eased move's velocity peaks above its average, so the board briefly raises the speed cap to hit the authored duration, then restores your `setMaxSpeed()` value.
+
+```javascript Example — a lead-screw bounce, no homing
+arduino.x.gesture([
+    { by:  800, dur: 350, curve: 'easeOut'   },
+    { by: -800, dur: 550, curve: 'easeInOut' },
+    { by:  120, dur: 200, curve: 'back'      },   // small overshoot settle
+]);
+await arduino.x.gesture([ /* … */ ]).whenDone();
+```
+
+Any explicit move (`moveTo`, `move`, `runSpeed`, `stop`, `hardStop`, `home`) cancels a running gesture. To coordinate several actuators at once, see [group.gesture()](groups.html#gesture).
+
 ## runSpeed()
 
 Continuous rotation at a constant speed until stopped. Sign sets direction.
@@ -103,23 +131,30 @@ arduino.x.runSpeed(-600);             // reverse
 
 ## stop()
 
-Decelerates to a stop (position mode) or stops a velocity-mode spin.
+Decelerates to a stop (position mode) or stops a velocity-mode spin. The motor keeps its coordinate and a `done` follows, so `whenDone()` settles.
 
 <div class="sig">arduino.x.<span class="fn">stop</span>()</div>
 
+## hardStop()
+
+Instant halt with **no deceleration ramp** — unlike `stop()`, the board zeroes speed and distance-to-go in one call. The current position is kept and a `done` follows. Use it for an e-stop, or to end a `runSpeed()` spin without the decel travel. An abrupt stop above the acceleration limit can lose steps, so re-zero afterwards (`setPosition()`) or home if the coordinate matters.
+
+<div class="sig">arduino.x.<span class="fn">hardStop</span>()</div>
+
 ## read()
 
-Starts polling position and status. Same poll-and-cache pattern as everywhere else.
+Starts polling position and status. Same poll-and-cache pattern as everywhere else. The board runs the poll (per-browser interval and threshold) and only transmits changes of threshold+ steps.
 
-<div class="sig">arduino.x.<span class="fn">read</span>([interval])</div>
+<div class="sig">arduino.x.<span class="fn">read</span>([interval], [threshold])</div>
 
 | Parameter | Type | Description |
 |---|---|---|
 | `interval` | number | Optional. Poll interval in ms. Pass `END` to stop. |
+| `threshold` | number | Optional. Minimum position change worth transmitting, in steps (`0` = default: `1`). Also settable via `setReadInterval(ms)` / `setReadThreshold(steps)`. |
 
 ## setPosition()
 
-Declares the current physical position to be a given value — steppers have no absolute feedback, so move to a reference point (by hand or against a stop) and zero there. Limit-switch homing is planned for a future version.
+Declares the current physical position to be a given value — steppers have no absolute feedback, so move to a reference point (by hand or against a stop) and zero there. For automatic zeroing against an end-stop, see `home()` below.
 
 <div class="sig">arduino.x.<span class="fn">setPosition</span>(steps)</div>
 
@@ -166,23 +201,41 @@ arduino.x.on('limit', ({ which, position }) => {
 
 After a trip the step counter is suspect (an instant stop above the acceleration limit can lose steps) — that's what homing is for.
 
+## setSwitchPosition()
+
+Declares where a limit switch physically sits, **as a coordinate**, independent of the soft limits. Homing adopts this value the moment the switch trips, so you can re-establish an accurate counter even after lost steps. The default is `0` — i.e. the switch *is* the origin — so you only need this when home should sit somewhere other than the switch.
+
+<div class="sig">arduino.x.<span class="fn">setSwitchPosition</span>(which, coord)</div>
+
+| Parameter | Type | Description |
+|---|---|---|
+| `which` | constant | `LIMIT_MIN` or `LIMIT_MAX` — which switch this coordinate belongs to. |
+| `coord` | number | The step position the switch sits at. |
+
+```javascript Example — switch 500 steps below home
+arduino.x.setLimitSwitch(LIMIT_MIN, 9);      // min-end switch on pin 9
+arduino.x.setSwitchPosition(LIMIT_MIN, -500);// it sits 500 steps below home (0)
+```
+
 ## setHome() / home()
 
-`setHome(value)` declares where home is (no-arg: "right here is home" — the board resolves it from its own counter). Home is just a coordinate, not the origin. `home()` goes home:
+**Home is the origin (`0`).** `setHome()` **re-zeros the frame**: the current spot becomes `0` and the enabled soft limits and switch positions all shift by the same offset, so they keep pointing at the same physical places. `setHome(value)` re-zeros to `value` instead of `0` (rarely needed). `home()` travels back to the origin:
 
-- **With a limit switch** — a board-side routine: seek the switch (MIN if configured, else MAX) at a homing speed (default `maxSpeed/4`, override with `{ speed }`), set the counter to `0` when it trips (**the homing switch is the origin** by definition), back off until it releases, then travel to the home position. Re-establishes the counter from the switch, so it works even when the counter is wrong. With only a MAX switch, that switch reads `0` and travel is in negative coordinates.
-- **Without a switch** — a plain accel move to the home position (counter trusted).
+- **With a limit switch** — a board-side routine: seek the switch (MIN if configured, else MAX) at a homing speed (default `maxSpeed/4`, override with `{ speed }`), set the counter to the switch's coordinate (`setSwitchPosition`, default `0`) when it trips, back off until it releases, then travel to the origin. Re-establishes the counter from the switch, so it works even when the counter is wrong.
+- **Without a switch** — a plain accel move to the origin (counter trusted).
 
-The seek/back-off legs are **capped** (default 30 s, `{ timeout }` to override): if the switch never trips or never releases, the board hard-stops, fires `'homeFail'` `{ position }`, then `'done'` — nothing spins forever, and `whenDone()` still settles. `done` fires when the travel leg arrives; any explicit move cancels an in-progress routine.
+The seek/back-off legs are **capped** (default 30 s, `{ timeout }` to override): if the switch never trips or never releases, the board hard-stops, fires `'home:fail'` `{ position }`, then `'done'` — nothing spins forever, and `whenDone()` still settles. `done` fires when the travel leg arrives; any explicit move cancels an in-progress routine.
 
 <div class="sig">arduino.x.<span class="fn">setHome</span>([value]) · arduino.x.<span class="fn">home</span>([{ speed, timeout }])</div>
 
 ```javascript Example — home against the min switch
-arduino.x.setLimitSwitch(LIMIT_MIN, 9);   // the switch is 0 by definition
-arduino.x.setHome(800);                   // home is step 800 from the switch
+arduino.x.setLimitSwitch(LIMIT_MIN, 9);       // min-end switch on pin 9
+arduino.x.setSwitchPosition(LIMIT_MIN, -500); // it sits 500 steps below home
 
-await arduino.x.home().whenDone({ timeout: 30000 });
+await arduino.x.home().whenDone({ timeout: 30000 });   // seeks it, then travels to 0
 ```
+
+This is the CNC/work-coordinate split: the switch is a fixed physical reference, home is your `0` at a known offset from it. With the default switch position (`0`) the switch simply *is* home.
 
 ## Degrees and revolutions
 
@@ -204,13 +257,13 @@ arduino.x.moveRevolutions(0.5);
 
 | Event | Payload | Fires when |
 |---|---|---|
-| `'read'` | `{ position, distanceToGo, speed, isRunning }` | A poll result arrives. |
-| `'done'` | `{ position }` | A position-mode target is reached (or motion ends at a limit switch). |
-| `'move'` | `{ target }` | A move is issued. |
+| `'change'` | `{ position, distanceToGo, speed, isRunning }` | The position changed by at least the threshold. |
+| `'done'` | `{ position }` | A position-mode target, timed move, or gesture finishes (or motion ends at a limit switch). |
+| `'move'` | `{ target }` | THIS page issued a move (including group moves it participates in) — a command echo, like servo `'write'`. Other browsers' moves arrive via the read stream and `'done'`/`'limit'`, not `'move'`. `runSpeed()` emits nothing (continuous rotation has no destination). |
 | `'limit'` | `{ which, position }` | A limit switch tripped and the board hard-stopped the motor. |
-| `'homeFail'` | `{ position }` | Homing gave up (seek/back-off timeout) — the switch never responded. |
+| `'home:fail'` | `{ position }` | Homing gave up (seek/back-off timeout) — the switch never responded. |
 
-Shorthand: `onRead(fn)`, `onDone(fn)`, `onMove(fn)`.
+Shorthand: `onChange(fn)`, `onDone(fn)`, `onMove(fn)`, `onLimit(fn)`, `onHomeFail(fn)`.
 
 ## Properties and state
 
@@ -228,4 +281,4 @@ Shorthand: `onRead(fn)`, `onDone(fn)`, `onMove(fn)`.
 
 **Returns** `{ logicalId, interface, pins, enPin, attached, maxSpeed, acceleration, stepsPerRev, target, position, distanceToGo, speed, isRunning, limits, interval }`.
 
-See also: [Groups](groups.html) · [Stepper example](../examples/stepper-example.html) · [Troubleshooting](troubleshooting.html)
+See also: [Groups](groups.html) · [Stepper example](../examples/stepper-motor.html) · [Troubleshooting](troubleshooting.html)

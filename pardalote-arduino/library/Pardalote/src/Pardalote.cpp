@@ -6,6 +6,10 @@
 #include "Pardalote.h"
 #include "internal/led_matrix.h"
 
+#ifdef PLATFORM_ESP32
+#include <esp_system.h>   // esp_random() — hardware RNG for the boot id
+#endif
+
 // -------------------------------------------------------------------
 // Global singleton — _pardaloteSecrets lives in wifi_config.cpp.
 // -------------------------------------------------------------------
@@ -21,11 +25,73 @@ PardaloteClass::PardaloteClass() {
 }
 
 // -------------------------------------------------------------------
-// begin() — called from setup()
+// begin() — called from setup(). Three public forms (see Pardalote.h);
+// all funnel through _beginCommon() + one transport starter.
 // -------------------------------------------------------------------
+// WiFi is the default transport; serial is chosen explicitly with
+// begin(PARDALOTE_SERIAL). One exception (Scott's call): on a board with
+// no radio at all (UNO R4 Minima) a WiFi begin() can only mean one thing,
+// so it starts the serial transport — with a Serial note saying so —
+// rather than leaving the board dead. There is NO runtime WiFi→serial
+// failover on WiFi-capable boards.
 void PardaloteClass::begin() {
+#ifdef PARDALOTE_NO_WIFI
+    _beginSerial();
+    Serial.println(F("[Pardalote] (no WiFi on this board — serial transport started)"));
+#else
+    _beginWifi(nullptr);
+#endif
+}
+
+void PardaloteClass::begin(const char* key) {
+#ifdef PARDALOTE_NO_WIFI
+    (void)key;   // serial needs no key — the cable is possession
+    _beginSerial();
+    Serial.println(F("[Pardalote] (no WiFi on this board — serial transport started; key ignored)"));
+#else
+    _beginWifi(key);
+#endif
+}
+
+void PardaloteClass::begin(int transport) {
+    if (transport == PARDALOTE_SERIAL) { _beginSerial(); return; }
+#ifdef PARDALOTE_NO_WIFI
+    _beginSerial();
+#else
+    _beginWifi(nullptr);
+#endif
+}
+
+// Shared by both transports: Serial console + boot id.
+void PardaloteClass::_beginCommon() {
     Serial.begin(115200);
 
+    // Boot id — random 31-bit token, new every boot, sent in HELLO so the
+    // browser can tell "board rebooted" from "network blip". Masked to 31
+    // bits so it survives the int32 wire param without sign confusion.
+    // Only needs to differ between consecutive boots of the same board.
+    // (On the WiFi path this runs AFTER the WiFi connect, so micros() has
+    // accumulated association/DHCP jitter — the entropy for non-ESP32
+    // boards. The serial path has no such jitter to harvest; micros()
+    // spread at begin() is smaller there, which is acceptable — a boot-id
+    // collision only costs a missed stale-state drop.)
+#ifdef PLATFORM_ESP32
+    _bootId = esp_random() & 0x7FFFFFFF;
+#else
+    randomSeed(micros() ^ (millis() << 16));
+    _bootId = (uint32_t)random(0x7FFFFFFF);
+#endif
+    if (_bootId == 0) _bootId = 1;   // 0 is reserved as "unknown" JS-side
+
+    Serial.print(F("Board: "));
+    Serial.println(F(PARDALOTE_BOARD));
+}
+
+#ifndef PARDALOTE_NO_WIFI
+void PardaloteClass::_beginWifi(const char* key) {
+    _transport = TRANSPORT_WIFI;
+
+    Serial.begin(115200);
     _platformInit();
 
     wifiConfigInit(_wifiStore);
@@ -36,8 +102,19 @@ void PardaloteClass::begin() {
     while (WiFi.localIP() == IPAddress(0, 0, 0, 0)) delay(100);
 #endif
 
-    Serial.print(F("Board: "));
-    Serial.println(F(PARDALOTE_BOARD));
+    _beginCommon();   // boot id AFTER the WiFi connect (jitter = entropy)
+
+    // Connection key — an opt-in latch against connecting to the wrong
+    // board on a shared network. NOT security (cleartext ws://).
+    if (key && key[0]) {
+        if (strlen(key) > PARDALOTE_KEY_MAX)
+            Serial.println(F("[Pardalote] connection key truncated to 32 chars"));
+        strncpy(_key, key, PARDALOTE_KEY_MAX);
+        _key[PARDALOTE_KEY_MAX] = 0;
+        _keyRequired = true;
+        Serial.println(F("Connection key required"));
+    }
+
     Serial.print(F("IP: "));
     Serial.println(WiFi.localIP());
 
@@ -49,13 +126,32 @@ void PardaloteClass::begin() {
     WiFi.setSleep(false);   // disable modem sleep — prevents latency on incoming frames
 #endif
 }
+#endif   // PARDALOTE_NO_WIFI
+
+void PardaloteClass::_beginSerial() {
+    _transport = TRANSPORT_SERIAL;
+    _beginCommon();
+    // No _platformInit(): the UNO R4 LED matrix scroll exists to show the
+    // IP address — there is no IP here, and the rebuild work it does per
+    // loop() is exactly what the R4's WebSocket lesson taught us to avoid.
+    _serialT.begin(_serialMessageTrampoline,
+                   _serialConnectTrampoline,
+                   _serialDisconnectTrampoline);
+    Serial.println(F("Serial transport ready — connect with arduino.connectSerial()"));
+}
 
 // -------------------------------------------------------------------
 // run() — called from loop()
 // -------------------------------------------------------------------
 void PardaloteClass::run() {
-    _ws.loop();
-    _platformLoop();
+    if (_transport == TRANSPORT_SERIAL) {
+        _serialT.loop(millis());
+    } else {
+#ifndef PARDALOTE_NO_WIFI
+        _ws.loop();
+        _platformLoop();
+#endif
+    }
     loopAll();
 
 #ifdef PLATFORM_ESP32
@@ -66,27 +162,219 @@ void PardaloteClass::run() {
 
     unsigned long now = millis();
 
+#ifndef PARDALOTE_NO_WIFI
+    // Auth timeout — a connected client that never presented the key
+    // (old JS, or a page that wasn't given one) is rejected so it gets a
+    // clear reason instead of a silent HELLO that never comes.
+    if (_keyRequired && _transport == TRANSPORT_WIFI) {
+        for (int c = 0; c < MAX_WS_CLIENTS; c++) {
+            if (!(_connectedClients & (1 << c)) || _authed[c]) continue;
+            if ((int32_t)(now - _authDeadline[c]) > 0) _rejectClient(c, 1);
+        }
+    }
+#endif
+
     // Send deferred HELLO + announce to any newly connected client.
     for (int c = 0; c < MAX_WS_CLIENTS; c++) {
-        if (!(_connectedClients & (1 << c))) continue;
+        if (!_clientReady(c)) continue;
         if (!_pendingHello[c] || now < _helloAfter[c]) continue;
         _pendingHello[c] = false;
         _sendHello(c);
         _announcePins(c);
+        _seedActions(c);   // current value of every polled pin, this client only
         announceAll(c);
         _announceMessages(c);
         _sendSyncComplete(c);
     }
 
-    // Broadcast periodic reads to all connected clients.
+    _pollActions(now);
+}
+
+// -------------------------------------------------------------------
+// Watched pins. Looking is decoupled from telling (see the Action
+// comment in Pardalote.h):
+//
+//   DIGITAL — read on every pass (a GPIO read is nanoseconds). The
+//   first level change is accepted instantly, then a DEBOUNCE_MS
+//   lockout swallows contact bounce; a change still pending when the
+//   lockout expires is accepted then, so both edges of even a very
+//   short tap are delivered. Edges are transmitted immediately —
+//   client intervals do not delay them.
+//
+//   ANALOG — read every ANALOG_SAMPLE_MS. Clients hear about changes
+//   through their own gate: at least `interval` ms since that client's
+//   last update AND at least `threshold` counts of movement since the
+//   value that client last saw. Because sampling is continuous, a
+//   change suppressed by the spacing gate is re-offered a sample later
+//   and goes out the moment the spacing expires.
+// -------------------------------------------------------------------
+void PardaloteClass::_pollActions(unsigned long now) {
     for (int i = 0; i < NUM_ACTIONS; i++) {
-        if (_actions[i].id == -1) continue;
-        if (now - _actions[i].lastUpdate < _actions[i].interval) continue;
-        _performRead(_actions[i].id, _actions[i].cmd);
-        _actions[i].lastUpdate = now;
+        Action& a = _actions[i];
+        if (a.id == -1) continue;
+
+        if (a.cmd == CMD_DIGITAL_READ) {
+            const int32_t val = digitalRead(a.id);
+            if (val == a.lastLevel) continue;
+            if (a.lastLevel != -1 && now < a.lockoutUntil) continue;  // bouncing
+            a.lastLevel    = val;
+            a.lockoutUntil = now + DEBOUNCE_MS;
+            _offerToClients(a, val, now, false);   // edges bypass spacing
+        } else {
+            if (now - a.lastSample < ANALOG_SAMPLE_MS) continue;
+            a.lastSample = now;
+            _offerToClients(a, analogRead(a.id), now, true);
+        }
     }
 }
 
+// Offer a fresh value to every connected client through its own gate.
+// Effective config: the client's own registration, else the sketch's
+// share() settings, else the defaults (passive client following someone
+// else's watch). `respectSpacing` = false for digital edges.
+void PardaloteClass::_offerToClients(Action& a, int32_t val,
+                                     unsigned long now, bool respectSpacing) {
+    for (uint8_t c = 0; c < MAX_WS_CLIENTS; c++) {
+        const uint8_t bit = 1 << c;
+        if (!_clientReady(c)) continue;   // connected AND authed
+
+        uint16_t interval, threshold;
+        if (a.clientMask & bit) {
+            interval  = a.interval[c];
+            threshold = a.threshold[c];
+        } else if (a.boardOwned) {
+            interval  = a.boardInterval;
+            threshold = a.boardThreshold;
+        } else {
+            interval  = 0;
+            threshold = _defaultThreshold(a.cmd);
+        }
+
+        if (a.seededMask & bit) {
+            if (respectSpacing && now - a.lastSendTime[c] < interval) continue;
+            int32_t delta = val - a.lastSent[c];
+            if (delta < 0) delta = -delta;
+            if (delta < threshold) continue;
+        }
+
+        _sendReadTo(c, a.id, a.cmd, val);
+        a.lastSent[c]     = val;
+        a.lastSendTime[c] = now;
+        a.seededMask     |= bit;
+    }
+}
+
+// -------------------------------------------------------------------
+// Client lifecycle — shared by both transports. The WS event handler
+// and the serial transport's connect/disconnect sinks both land here.
+// -------------------------------------------------------------------
+void PardaloteClass::_onClientConnected(uint8_t num) {
+    if (_connectedClients & (1 << num)) return;    // already connected
+    _connectedClients |= (1 << num);
+    // Serial clients are authed by possession; WS clients need the key
+    // (when one is set) before any HELLO/announce/broadcast reaches them.
+    _authed[num] = (_transport == TRANSPORT_SERIAL) || !_keyRequired;
+    _authDeadline[num] = millis() + AUTH_TIMEOUT_MS;
+    if (_authed[num]) {
+        _pendingHello[num] = true;
+        _helloAfter[num]   = millis() + HELLO_DELAY_MS;
+    }
+    Serial.print('['); Serial.print(num); Serial.println(F("] Connected"));
+}
+
+void PardaloteClass::_onClientDisconnected(uint8_t num) {
+    if (!(_connectedClients & (1 << num))) return;  // already disconnected
+    _connectedClients  &= ~(1 << num);
+    _pendingHello[num]  = false;
+    _authed[num]        = false;
+    // Drop this client's read registrations; slots with no remaining
+    // registrations are freed. boardOwned actions (sketch share with
+    // an interval) survive — the sketch, not a client, owns them.
+    _unregisterClient(num);
+    disconnectAll(num);
+    Serial.print('['); Serial.print(num); Serial.println(F("] Disconnected"));
+}
+
+// -------------------------------------------------------------------
+// Inbound binary — one message (a frame, or a JS batch of frames),
+// from either transport. Unauthed WS clients get exactly one verb:
+// CMD_AUTH; everything else is dropped until the key checks out.
+// -------------------------------------------------------------------
+void PardaloteClass::_handleBinary(uint8_t num, uint8_t* payload, size_t length) {
+    size_t pos = 0;
+    while (pos < length) {
+        Frame f = parseFrame(payload, pos, length);
+        if (!f.valid) break;
+
+        if (!_authed[num]) {
+            if (f.cmd == CMD_AUTH && f.target < RESERVED_START)
+                _handleAuthFrame(num, f);
+            pos += f.totalLen;
+            continue;
+        }
+
+        _emitFrame(PARDALOTE_FRAME_IN, f);   // frame monitor tap
+
+        if (f.cmd == CMD_AUTH) {
+            // Authed already (key matched, or none required) — a repeat
+            // AUTH is harmless; ignore it.
+        } else if (f.cmd == CMD_MESSAGE) {
+            // Routed by cmd, not target range — the flags in the
+            // target high byte can push it past RESERVED_START.
+            _handleMessageFrame(num, f, payload + pos);
+        } else if (f.target < RESERVED_START) {
+            _handleCoreFrame(num, f);
+        } else {
+            dispatchExtension(num, f.target, f.cmd, f.typeMask,
+                              f.params, f.nparams,
+                              f.payload, f.payloadLen);
+        }
+        pos += f.totalLen;
+    }
+}
+
+// AUTH: payload is the UTF-8 key. Match → arm the normal HELLO path
+// (HELLO is the acceptance; no AUTH reply). Mismatch → reject + close.
+void PardaloteClass::_handleAuthFrame(uint8_t num, const Frame& f) {
+    const size_t keyLen = strlen(_key);
+    if (f.payloadLen == keyLen && keyLen > 0 &&
+        memcmp(f.payload, _key, keyLen) == 0) {
+        _authed[num]       = true;
+        _pendingHello[num] = true;
+        _helloAfter[num]   = millis() + HELLO_DELAY_MS;
+        Serial.print('['); Serial.print(num); Serial.println(F("] Key accepted"));
+    } else {
+        _rejectClient(num, 2);
+    }
+}
+
+// Send CMD_AUTH [reason] (1 = key required, 2 = wrong key), then close.
+// The JS side surfaces it as the 'authFail' event and stops reconnecting.
+void PardaloteClass::_rejectClient(uint8_t num, int32_t reason) {
+#ifndef PARDALOTE_NO_WIFI
+    FrameBuilder fb;
+    fb.begin(CMD_AUTH, 0x0000);
+    fb.addInt(reason);
+    size_t len = fb.finish();
+    if (len) _ws.sendBIN(num, fb.buf, len);   // deliberate direct send — sendFrame requires _authed
+    Serial.print('['); Serial.print(num);
+    Serial.println(reason == 2 ? F("] Rejected: wrong key") : F("] Rejected: no key presented"));
+    _ws.disconnect(num);                      // fires WStype_DISCONNECTED → cleanup
+#else
+    (void)num; (void)reason;                  // serial transport never rejects
+#endif
+}
+
+// -------------------------------------------------------------------
+// Serial transport sinks — the serial client is permanently client 0.
+// -------------------------------------------------------------------
+void PardaloteClass::_serialMessageTrampoline(uint8_t* data, size_t len) {
+    Pardalote._handleBinary(0, data, len);
+}
+void PardaloteClass::_serialConnectTrampoline()    { Pardalote._onClientConnected(0); }
+void PardaloteClass::_serialDisconnectTrampoline() { Pardalote._onClientDisconnected(0); }
+
+#ifndef PARDALOTE_NO_WIFI
 // -------------------------------------------------------------------
 // WebSocket trampoline + event handler
 // -------------------------------------------------------------------
@@ -106,53 +394,25 @@ void PardaloteClass::_handleWsEvent(uint8_t num, WStype_t type,
         // table, re-fires extension disconnect hooks, and spams Serial —
         // enough overhead to cause visible lag in NeoPixel updates and
         // servo sweeps. Only act on actual state transitions.
+        // (The dedupe now lives in _onClientConnected/_onClientDisconnected,
+        // shared with the serial transport's sinks.)
         case WStype_DISCONNECTED:
-            if (!(_connectedClients & (1 << num))) break;  // already disconnected
-            _connectedClients  &= ~(1 << num);
-            _pendingHello[num]  = false;
-            if (!anyConnected()) {
-                for (int i = 0; i < NUM_ACTIONS; i++) _actions[i].id = -1;
-            }
-            disconnectAll(num);
-            Serial.print('['); Serial.print(num); Serial.println(F("] Disconnected"));
+            _onClientDisconnected(num);
             break;
 
         case WStype_CONNECTED:
-            if (_connectedClients & (1 << num)) break;     // already connected
-            _connectedClients |= (1 << num);
-            _pendingHello[num] = true;
-            _helloAfter[num]   = millis() + HELLO_DELAY_MS;
-            Serial.print('['); Serial.print(num); Serial.println(F("] Connected"));
+            _onClientConnected(num);
             break;
 
-        case WStype_BIN: {
-            size_t pos = 0;
-            while (pos < length) {
-                Frame f = parseFrame(payload, pos, length);
-                if (!f.valid) break;
-
-                _emitFrame(PARDALOTE_FRAME_IN, f);   // frame monitor tap
-
-                if (f.cmd == CMD_MESSAGE) {
-                    // Routed by cmd, not target range — the flags in the
-                    // target high byte can push it past RESERVED_START.
-                    _handleMessageFrame(num, f, payload + pos);
-                } else if (f.target < RESERVED_START) {
-                    _handleCoreFrame(num, f);
-                } else {
-                    dispatchExtension(num, f.target, f.cmd, f.typeMask,
-                                      f.params, f.nparams,
-                                      f.payload, f.payloadLen);
-                }
-                pos += f.totalLen;
-            }
+        case WStype_BIN:
+            _handleBinary(num, payload, length);
             break;
-        }
 
         default:
             break;
     }
 }
+#endif   // PARDALOTE_NO_WIFI
 
 // -------------------------------------------------------------------
 // Core frame handler
@@ -162,6 +422,20 @@ void PardaloteClass::_handleCoreFrame(uint8_t clientNum, const Frame& f) {
 
     switch (f.cmd) {
 
+        // JS → board HELLO request. The serial transport has no CONNECTED
+        // event, so the browser probes with a HELLO frame after opening the
+        // port; answering (re)introduces this board — HELLO + announce +
+        // SYNC_COMPLETE — even when the board never noticed the previous
+        // page go away (e.g. a reload inside the rx-timeout window).
+        // Harmless from a WS client too.
+        case CMD_HELLO: {
+            if (!_pendingHello[clientNum]) {
+                _pendingHello[clientNum] = true;
+                _helloAfter[clientNum]   = millis();   // no delay — the link is warm
+            }
+            break;
+        }
+
         case CMD_PIN_MODE: {
             if (f.nparams < 1) return;
             int pardaloteMode = (int)paramInt(f.params, 0);
@@ -170,7 +444,7 @@ void PardaloteClass::_handleCoreFrame(uint8_t clientNum, const Frame& f) {
                 case MODE_INPUT:          arduinoMode = INPUT;        break;
                 case MODE_OUTPUT:         arduinoMode = OUTPUT;       break;
                 case MODE_INPUT_PULLUP:   arduinoMode = INPUT_PULLUP; break;
-                case MODE_ANALOG_INPUT:   arduinoMode = INPUT;        break;
+                case ANALOG_INPUT_MODE:   arduinoMode = INPUT;        break;
 #ifdef PLATFORM_ESP32
                 case MODE_INPUT_PULLDOWN: arduinoMode = INPUT_PULLDOWN; break;
 #endif
@@ -205,35 +479,39 @@ void PardaloteClass::_handleCoreFrame(uint8_t clientNum, const Frame& f) {
             analogWrite(pin, (int)paramInt(f.params, 0));
             break;
 
+        // Read request/registration: params [interval?, threshold?].
+        // The requesting client always gets an immediate reading (seeds its
+        // mirror); interval > 0 additionally registers a per-client periodic
+        // read. threshold 0 / absent = board default.
         case CMD_DIGITAL_READ:
-            _performRead(pin, CMD_DIGITAL_READ);
-            if (f.nparams > 0 && paramInt(f.params, 0) > 0) {
-                int slot = _getSlot(pin);
-                if (slot >= 0) {
-                    _actions[slot] = {
-                        (int16_t)pin, CMD_DIGITAL_READ,
-                        millis(), (unsigned long)paramInt(f.params, 0)
-                    };
-                }
+        case CMD_ANALOG_READ: {
+            const int32_t val = (f.cmd == CMD_ANALOG_READ)
+                                ? analogRead(pin) : digitalRead(pin);
+            _sendReadTo(clientNum, pin, f.cmd, val);
+
+            const long ms  = (f.nparams > 0) ? paramInt(f.params, 0) : 0;
+            const long thr = (f.nparams > 1) ? paramInt(f.params, 1) : 0;
+            if (ms > 0) {
+                _registerClientRead(clientNum, pin, f.cmd,
+                                    (uint16_t)constrain(ms, 1, 65535),
+                                    (uint16_t)constrain(thr, 0, 65535),
+                                    val);
             }
             break;
+        }
 
-        case CMD_ANALOG_READ:
-            _performRead(pin, CMD_ANALOG_READ);
-            if (f.nparams > 0 && paramInt(f.params, 0) > 0) {
-                int slot = _getSlot(pin);
-                if (slot >= 0) {
-                    _actions[slot] = {
-                        (int16_t)pin, CMD_ANALOG_READ,
-                        millis(), (unsigned long)paramInt(f.params, 0)
-                    };
-                }
+        case CMD_END: {
+            // Remove only THIS client's registration; the slot lives on
+            // while other clients (or the sketch) still want it.
+            for (int i = 0; i < NUM_ACTIONS; i++) {
+                Action& a = _actions[i];
+                if (a.id != pin) continue;
+                a.clientMask &= ~(1 << clientNum);
+                if (a.clientMask == 0 && !a.boardOwned) a.id = -1;
+                break;
             }
             break;
-
-        case CMD_END:
-            _unregisterAction(pin);
-            break;
+        }
 
         case CMD_PING: {
             FrameBuilder fb;
@@ -245,15 +523,92 @@ void PardaloteClass::_handleCoreFrame(uint8_t clientNum, const Frame& f) {
 }
 
 // -------------------------------------------------------------------
-// Read a pin and broadcast the value to all connected clients.
+// Periodic-read plumbing
 // -------------------------------------------------------------------
-void PardaloteClass::_performRead(int pin, uint8_t cmd) {
-    int32_t val = (cmd == CMD_ANALOG_READ) ? analogRead(pin) : digitalRead(pin);
 
+// Default change threshold: any change for digital; the ADC noise floor
+// (~0.4% of full range, min 1) for analog. A jittering ADC otherwise
+// defeats send-on-change entirely.
+uint16_t PardaloteClass::_defaultThreshold(uint8_t cmd) {
+    if (cmd != CMD_ANALOG_READ) return 1;
+    uint16_t t = (uint16_t)(((1UL << ADC_RESOLUTION_BITS) - 1) >> 8);
+    return t > 0 ? t : 1;
+}
+
+// Send one reading to one client.
+void PardaloteClass::_sendReadTo(uint8_t clientNum, int pin, uint8_t cmd,
+                                 int32_t val) {
     FrameBuilder fb;
     fb.begin(cmd, (uint16_t)pin);
     fb.addInt(val);
-    broadcastFrame(fb);
+    sendFrame(clientNum, fb);
+}
+
+// Fresh slot: no registrations yet.
+void PardaloteClass::_initAction(int slot, int pin, uint8_t cmd) {
+    Action& a = _actions[slot];
+    a.id             = (int16_t)pin;
+    a.cmd            = cmd;
+    a.lastSample     = 0;
+    a.lastLevel      = -1;   // digital: adopt the first level silently
+    a.lockoutUntil   = 0;
+    a.boardOwned     = false;
+    a.boardInterval  = 0;
+    a.boardThreshold = 0;
+    a.clientMask     = 0;
+    a.seededMask     = 0;
+}
+
+// Register (or update) one client's watch on a pin. seedVal is the
+// reading just sent to the client, so gating starts from it.
+void PardaloteClass::_registerClientRead(uint8_t clientNum, int pin,
+                                         uint8_t cmd, uint16_t interval,
+                                         uint16_t threshold, int32_t seedVal) {
+    int slot = _getSlot(pin);
+    if (slot < 0) return;
+    Action& a = _actions[slot];
+
+    // New pin, or the pin switched digital<->analog: (re)start clean.
+    // A cmd switch invalidates every registration — the JS side always
+    // ends the old read before registering the new kind.
+    if (a.id == -1 || a.cmd != cmd) _initAction(slot, pin, cmd);
+    if (cmd == CMD_DIGITAL_READ && a.lastLevel == -1) a.lastLevel = seedVal;
+
+    const uint8_t bit = 1 << clientNum;
+    a.clientMask         |= bit;
+    a.interval[clientNum] = interval;
+    a.threshold[clientNum] = threshold > 0 ? threshold : _defaultThreshold(cmd);
+    a.lastSent[clientNum]     = seedVal;
+    a.lastSendTime[clientNum] = millis();
+    a.seededMask         |= bit;
+}
+
+// Drop every registration a departing client held.
+void PardaloteClass::_unregisterClient(uint8_t clientNum) {
+    const uint8_t bit = 1 << clientNum;
+    for (int i = 0; i < NUM_ACTIONS; i++) {
+        Action& a = _actions[i];
+        if (a.id == -1) continue;
+        a.clientMask &= ~bit;
+        a.seededMask &= ~bit;
+        if (a.clientMask == 0 && !a.boardOwned) a.id = -1;
+    }
+}
+
+// Send a newly connected client the current value of every polled pin,
+// so its mirror seeds without waiting for a change to occur.
+void PardaloteClass::_seedActions(uint8_t clientNum) {
+    const uint8_t bit = 1 << clientNum;
+    for (int i = 0; i < NUM_ACTIONS; i++) {
+        Action& a = _actions[i];
+        if (a.id == -1) continue;
+        const int32_t val = (a.cmd == CMD_ANALOG_READ)
+                            ? analogRead(a.id) : digitalRead(a.id);
+        _sendReadTo(clientNum, a.id, a.cmd, val);
+        a.lastSent[clientNum]     = val;
+        a.lastSendTime[clientNum] = millis();
+        a.seededMask             |= bit;
+    }
 }
 
 // -------------------------------------------------------------------
@@ -265,6 +620,7 @@ void PardaloteClass::_sendHello(uint8_t clientNum) {
     fb.addInt(PROTOCOL_VERSION_MAJOR);
     fb.addInt(PROTOCOL_VERSION_MINOR);
     fb.addInt(ADC_RESOLUTION_BITS);
+    fb.addInt((int32_t)_bootId);   // param[3]: boot id (older JS ignores it)
     fb.addString(PARDALOTE_BOARD);
     sendFrame(clientNum, fb);
 }
@@ -276,6 +632,15 @@ void PardaloteClass::_announcePins(uint8_t clientNum) {
         FrameBuilder fm;
         fm.begin(CMD_PIN_MODE, (uint16_t)pin);
         fm.addInt(_corePinModes[pin]);
+        // Board-owned poll (share with interval): include its settings so
+        // the connecting browser registers the pin without a READ round trip.
+        for (int i = 0; i < NUM_ACTIONS; i++) {
+            if (_actions[i].id == pin && _actions[i].boardOwned) {
+                fm.addInt(_actions[i].boardInterval);
+                fm.addInt(_actions[i].boardThreshold);
+                break;
+            }
+        }
         sendFrame(clientNum, fm);
 
         if (_corePinModes[pin] == MODE_OUTPUT) {
@@ -297,7 +662,8 @@ void PardaloteClass::_sendSyncComplete(uint8_t clientNum) {
 // Sharing pin state with the browser. See the API comments in
 // Pardalote.h for the public-facing contract.
 // -------------------------------------------------------------------
-void PardaloteClass::share(uint8_t pin, uint8_t mode) {
+void PardaloteClass::share(uint8_t pin, uint8_t mode,
+                           uint16_t interval, uint16_t threshold) {
     // Map Arduino's mode constants to Pardalote's protocol modes.
     // INPUT / OUTPUT / INPUT_PULLUP happen to align numerically with
     // MODE_INPUT / MODE_OUTPUT / MODE_INPUT_PULLUP — we map explicitly
@@ -310,17 +676,43 @@ void PardaloteClass::share(uint8_t pin, uint8_t mode) {
 #if defined(PLATFORM_ESP32) && defined(INPUT_PULLDOWN)
         case INPUT_PULLDOWN:    pardaloteMode = MODE_INPUT_PULLDOWN; break;
 #endif
-        case MODE_ANALOG_INPUT: pardaloteMode = MODE_ANALOG_INPUT;   break;
+        case ANALOG_INPUT_MODE: pardaloteMode = ANALOG_INPUT_MODE;   break;
         default: return;   // unrecognised — silently skip
     }
 
     // Cache so future client connects see the right state via announce.
     if (pin < MAX_PIN_NUMBER) _corePinModes[pin] = pardaloteMode;
 
+    // An interval on an input mode registers a board-owned periodic read:
+    // the board polls the pin itself and readings flow to every browser,
+    // with no JS read call and no round trip. Survives client disconnects.
+    const bool inputMode = (pardaloteMode == MODE_INPUT ||
+                            pardaloteMode == MODE_INPUT_PULLUP ||
+                            pardaloteMode == MODE_INPUT_PULLDOWN ||
+                            pardaloteMode == ANALOG_INPUT_MODE);
+    if (inputMode && interval > 0) {
+        const uint8_t cmd = (pardaloteMode == ANALOG_INPUT_MODE)
+                            ? CMD_ANALOG_READ : CMD_DIGITAL_READ;
+        int slot = _getSlot(pin);
+        if (slot >= 0) {
+            Action& a = _actions[slot];
+            if (a.id == -1 || a.cmd != cmd) _initAction(slot, pin, cmd);
+            a.boardOwned     = true;
+            a.boardInterval  = interval;
+            a.boardThreshold = threshold > 0 ? threshold : _defaultThreshold(cmd);
+        }
+    }
+
     if (!anyConnected()) return;
     FrameBuilder fb;
     fb.begin(CMD_PIN_MODE, (uint16_t)pin);
     fb.addInt(pardaloteMode);
+    if (inputMode && interval > 0) {
+        // Tell browsers the board is polling — JS registers the pin
+        // without sending a READ back. Older JS ignores the extra params.
+        fb.addInt(interval);
+        fb.addInt(threshold);
+    }
     broadcastFrame(fb);
 }
 
@@ -448,10 +840,11 @@ void PardaloteClass::_handleMessageFrame(uint8_t clientNum, const Frame& f, uint
 
     // Relay to the OTHER browsers (the board is the hub). Send the exact
     // received bytes; receivers process it as an ordinary inbound message.
+    // (No-op on the serial transport — there are no other browsers.)
     if (flags & MSG_FLAG_BROADCAST) {
         for (int c = 0; c < MAX_WS_CLIENTS; c++) {
-            if (c != clientNum && (_connectedClients & (1 << c)))
-                _ws.sendBIN((uint8_t)c, frameStart, f.totalLen);
+            if (c != clientNum && _clientReady((uint8_t)c))
+                _sendRaw((uint8_t)c, frameStart, f.totalLen);
         }
     }
 }
@@ -548,10 +941,22 @@ void PardaloteClass::_emitFrameOut(uint8_t* buf, size_t len) {
 // -------------------------------------------------------------------
 void PardaloteClass::sendFrame(uint8_t clientNum, FrameBuilder& fb) {
     if (clientNum >= MAX_WS_CLIENTS) return;   // loopback client (sketch command) has no socket
+    if (!_authed[clientNum]) return;           // nothing reaches an unauthed client
     size_t len = fb.finish();
     if (len == 0) return;
     _emitFrameOut(fb.buf, len);
-    _ws.sendBIN(clientNum, fb.buf, len);
+    _sendRaw(clientNum, fb.buf, len);
+}
+
+// The ONLY place bytes leave the board — routes to the active transport.
+void PardaloteClass::_sendRaw(uint8_t clientNum, uint8_t* buf, size_t len) {
+    if (_transport == TRANSPORT_SERIAL) {
+        if (clientNum == 0) _serialT.send(buf, len);
+        return;
+    }
+#ifndef PARDALOTE_NO_WIFI
+    _ws.sendBIN(clientNum, buf, len);
+#endif
 }
 
 // -------------------------------------------------------------------
@@ -578,8 +983,8 @@ void PardaloteClass::broadcastFrame(FrameBuilder& fb) {
     if (len == 0) return;
     _emitFrameOut(fb.buf, len);
     for (int c = 0; c < MAX_WS_CLIENTS; c++) {
-        if (_connectedClients & (1 << c))
-            _ws.sendBIN((uint8_t)c, fb.buf, len);
+        if (_clientReady((uint8_t)c))
+            _sendRaw((uint8_t)c, fb.buf, len);
     }
 }
 
@@ -610,5 +1015,5 @@ void PardaloteClass::_platformInit() {
 }
 
 void PardaloteClass::_platformLoop() {
-    ledMatrixLoop();
+    ledMatrixLoop(anyConnected());
 }

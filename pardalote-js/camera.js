@@ -1,7 +1,7 @@
 // ==============================================================
 // camera.js
 // Pardalote Camera Extension
-// Version v1.0
+// Part of Pardalote — version in package.json
 // by Scott Mitchell
 // GPL-3.0 License
 //
@@ -191,7 +191,7 @@ class Camera extends Extension {
     // -------------------------------------------------------------------
     async snapshot() {
         if (!this._snapshotUrl) {
-            console.warn('Camera: call attach() before snapshot()');
+            this._warn('call attach() before snapshot()');
             return null;
         }
         try {
@@ -202,8 +202,7 @@ class Camera extends Extension {
             this._emit('snapshot', { url, blob });
             return url;
         } catch (e) {
-            console.error('Camera: snapshot failed —', e.message);
-            this._emit('error', { message: e.message });
+            this._error(`snapshot failed — ${e.message}`);
             return null;
         }
     }
@@ -275,7 +274,7 @@ class Camera extends Extension {
     // Extract the bare IP from arduino.deviceIP ("ws://ip:port/").
     _extractIp() {
         const m = this.arduino.deviceIP && this.arduino.deviceIP.match(/ws:\/\/([^:/]+)/);
-        if (!m) { console.error('Camera: cannot parse Arduino IP'); return null; }
+        if (!m) { this._error('cannot parse Arduino IP'); return null; }
         return m[1];
     }
 }

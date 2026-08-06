@@ -4,15 +4,15 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Connecting — Pardalote reference</title>
-<meta name="description" content="Opening the connection from JavaScript, connection events, reconnection, and status.">
+<meta name="description" content="Opening the connection from JavaScript — WiFi or USB serial — plus connection keys, events, reconnection, and status.">
 <link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
 <link rel="stylesheet" href="../css/site.css">
 </head>
 <body data-nav="reference">
 
-<nav class="site-nav speckled">
+<nav class="site-nav">
   <a class="logo" href="../index.html">
-    <img src="../assets/logo.svg" width="30" height="30" alt="">
+    <img src="../assets/logo.svg" width="26" height="26" alt="">
     Pardalote
   </a>
   <div class="links">
@@ -27,42 +27,65 @@
 <div class="wrap">
   <div class="ref-layout">
 <aside class="ref-nav">
-  <h4>Getting started</h4>
+  <button class="ref-nav-toggle" aria-expanded="false" aria-controls="ref-nav-links">Contents</button>
+  <div class="ref-nav-links" id="ref-nav-links">
+  <h4><a href="index.html">Getting started</a></h4>
   <a href="index.html">Overview</a>
   <a href="installation.html">Installation</a>
   <a href="wifi.html">WiFi configuration</a>
-  <h4>Core — JavaScript</h4>
-  <a href="connecting.html#connect">connect() / events</a>
+  <a href="ai-coding.html">Coding with AI</a>
+  <h4><a href="connecting.html">Core — JavaScript</a></h4>
+  <a href="connecting.html#connect">connect()</a>
+  <a href="connecting.html#on">on()</a>
+  <a href="connecting.html#disconnect">disconnect()</a>
+  <a href="connecting.html#getstatus">getStatus()</a>
   <a href="pins.html#pinmode">pinMode()</a>
-  <a href="pins.html#digitalwrite">digitalWrite() / analogWrite()</a>
-  <a href="pins.html#analogread">analogRead() / digitalRead()</a>
-  <a href="pins.html#onchange">onChange()</a>
+  <a href="pins.html#digitalwrite">digitalWrite()</a>
+  <a href="pins.html#analogwrite">analogWrite()</a>
+  <a href="pins.html#setwritethrottle--setwritethreshold">setWriteThrottle() / setWriteThreshold()</a>
+  <a href="pins.html#analogread">analogRead()</a>
+  <a href="pins.html#digitalread">digitalRead()</a>
+  <a href="pins.html#setreadinterval--setreadthreshold">setReadInterval() / setReadThreshold()</a>
+  <a href="pins.html#pin--the-listening-handle">pin() — the listening handle</a>
+  <a href="pins.html#end--endall">end() / endAll()</a>
   <a href="pins.html#pin-aliases">Pin aliases</a>
-  <h4>Core — Arduino</h4>
-  <a href="arduino.html#pardalotebegin">Pardalote.begin() / run()</a>
-  <a href="arduino.html#pardaloteshare">share() / send()</a>
-  <a href="arduino.html#the-actuator-objects">Reading actuators</a>
-  <h4>Extensions</h4>
+  <h4><a href="arduino.html">Core — Arduino</a></h4>
+  <a href="arduino.html#pardalotebegin">Pardalote.begin()</a>
+  <a href="arduino.html#pardaloterun">Pardalote.run()</a>
+  <a href="arduino.html#pardaloteshare">Pardalote.share()</a>
+  <a href="arduino.html#pardalotesend">Pardalote.send()</a>
+  <a href="arduino.html#when-not-to-share">When not to share</a>
+  <h4><a href="messaging.html">Core — Messaging</a></h4>
+  <a href="messaging.html#javascript-to-arduino">JavaScript to Arduino</a>
+  <a href="messaging.html#arduino-to-javascript">Arduino to JavaScript</a>
+  <a href="messaging.html#retain-and-broadcast">Retain and broadcast</a>
+  <a href="messaging.html#inspecting-all-traffic">Inspecting all traffic</a>
+  <h4><a href="extensions.html">Extensions</a></h4>
   <a href="extensions.html">Overview</a>
+  <a href="extensions.html#creating-extension-objects-in-the-firmware">Creating extension objects in the firmware</a>
+  <a href="extensions.html#reading-and-writing-actuators-from-the-sketch">Reading and writing actuators from the sketch</a>
   <a href="servo.html">Servo</a>
   <a href="stepper.html">Stepper</a>
   <a href="bus-servo.html">Bus servo</a>
   <a href="groups.html">Groups</a>
   <a href="neopixel.html">NeoPixel</a>
   <a href="ultrasonic.html">Ultrasonic</a>
-  <a href="mpu.html">MPU / IMU</a>
+  <a href="encoder.html">Rotary encoder</a>
+  <a href="imu.html">IMU</a>
   <a href="camera.html">Camera</a>
-  <h4>Under the hood</h4>
+  <h4><a href="protocol.html">Under the hood</a></h4>
   <a href="protocol.html">Protocol</a>
+  <a href="pin-capabilities.html">Pin capabilities</a>
   <a href="troubleshooting.html">Troubleshooting</a>
+  </div>
 </aside>
     <main class="ref-main">
       <h1>Connecting</h1>
-      <p class="lede">Opening the connection from JavaScript, connection events, reconnection, and status.</p>
+      <p class="lede">Opening the connection from JavaScript — WiFi or USB serial — plus connection keys, events, reconnection, and status.</p>
 <p>All examples assume <code>const arduino = new Arduino();</code>.</p>
 <h2 id="connect">connect()</h2>
 <p>Opens a WebSocket connection to the Arduino. Call once; reconnection after drops is automatic.</p>
-<div class="sig">arduino.<span class="fn">connect</span>(ip, [port])</div>
+<div class="sig sig-js">arduino.<span class="fn">connect</span>(ip, [portOrOptions])</div>
 <table>
 <thead>
 <tr>
@@ -78,22 +101,53 @@
 <td>The Arduino's IP address, e.g. <code>'192.168.1.42'</code>. Shown on the LED matrix (UNO R4) or in the Serial Monitor (ESP32).</td>
 </tr>
 <tr>
-<td><code>port</code></td>
-<td>number</td>
-<td>Optional. WebSocket port. Default <code>81</code>.</td>
+<td><code>portOrOptions</code></td>
+<td>number | object</td>
+<td>Optional. A number is the WebSocket port (default <code>81</code>). An object accepts <code>{ port, key }</code> — <code>key</code> is the board's connection key (see below).</td>
 </tr>
 </tbody>
 </table>
-<pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">connect</span><span class="p">(</span><span class="s1">&#39;192.168.1.42&#39;</span><span class="p">);</span>        <span class="c1">// WebSocket on port 81</span>
-<span class="nx">arduino</span><span class="p">.</span><span class="nx">connect</span><span class="p">(</span><span class="s1">&#39;192.168.1.42&#39;</span><span class="p">,</span> <span class="mf">8081</span><span class="p">);</span>  <span class="c1">// custom port</span>
-</code></pre>
-<p>Calling <code>connect()</code> again — for example, to switch to a different Arduino — starts a fresh session: pin modes, polled reads, and write listeners from the previous board are cleared so they aren't replayed onto the new hardware. Each registered extension is reset to its just-constructed state, so attached servos, initialised strips, MPU calibration and camera streams are released — call <code>attach()</code> / <code>init()</code> again inside the new <code>on('ready')</code> handler. Event listeners attached with <code>on('read', …)</code> etc. survive, as do user-tuned settings like <code>setThrottle</code>, <code>setThreshold</code> and <code>setQuality</code>.</p>
-<h2 id="disconnect">disconnect()</h2>
-<p>Closes the connection and disables auto-reconnect.</p>
-<div class="sig">arduino.<span class="fn">disconnect</span>()</div>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">connect</span><span class="p">(</span><span class="s1">&#39;192.168.1.42&#39;</span><span class="p">);</span><span class="w">                         </span><span class="c1">// WebSocket on port 81</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">connect</span><span class="p">(</span><span class="s1">&#39;192.168.1.42&#39;</span><span class="p">,</span><span class="w"> </span><span class="mf">8081</span><span class="p">);</span><span class="w">                   </span><span class="c1">// custom port</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">connect</span><span class="p">(</span><span class="s1">&#39;192.168.1.42&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">key</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;robot-arm-3&#39;</span><span class="w"> </span><span class="p">});</span><span class="w"> </span><span class="c1">// board requires a key</span>
+</code></pre></div>
+<p>Calling <code>connect()</code> (or <code>connectSerial()</code>) again starts a fresh session: pin modes, polled reads, and write listeners from the previous board are cleared. Each registered extension is reset to its just-constructed state, so attached servos, initialised strips, IMU calibration and camera streams are released — call <code>attach()</code> / <code>init()</code> again inside the new <code>on('ready')</code> handler. Event listeners attached with <code>on('change', …)</code> etc. survive, as do user-tuned settings like <code>setWriteThrottle</code>, <code>setWriteThreshold</code> and <code>setQuality</code>.</p>
+<h3 id="connection-keys">Connection keys</h3>
+<p>A board started with <code>Pardalote.begin(&quot;robot-arm-3&quot;)</code> only completes the handshake for clients that present the same key — an opt-in latch against connecting to a neighbour's board on a shared classroom network. A client with the wrong key (or none) receives one <code>'authFail'</code> event with a readable message and auto-reconnect stops, so a typo surfaces as a single clear error rather than a silent retry loop.</p>
+<p>The key is an accident-prevention measure, <strong>not security</strong>: it crosses the network unencrypted (<code>ws://</code>). Boards started without a key accept everyone.</p>
+<h2 id="connectserial">connectSerial()</h2>
+<p>Connects over the USB cable instead of WiFi, using the browser's Web Serial API (Chrome and Edge only, including Chromebooks). WiFi is the default but the Arduino sketch can select serial explicitly with <code>Pardalote.begin(PARDALOTE_SERIAL)</code>. The one exception is the UNO R4 Minima — it has no radio, so every <code>begin()</code> form starts the serial transport, the only one that hardware can have. Everything downstream of connecting is identical to WiFi, so a project can migrate between the two by changing one line on each side. There is no key concept over serial: holding the cable is access.</p>
+<div class="sig sig-js">arduino.<span class="fn">connectSerial</span>([options])</div>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>options</code></td>
+<td>object</td>
+<td>Optional. <code>{ prompt: true }</code> forces the browser's port picker even when a previously granted port exists.</td>
+</tr>
+</tbody>
+</table>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><pre><code><span class="nx">connectButton</span><span class="p">.</span><span class="nx">addEventListener</span><span class="p">(</span><span class="s1">&#39;click&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">connectSerial</span><span class="p">();</span><span class="w">   </span><span class="c1">// first time: Chrome shows a port picker</span>
+<span class="p">});</span>
+</code></pre></div>
+<p>Notes:</p>
+<ul>
+<li>The <strong>first</strong> call must come from a user gesture (a click) — the browser requires it for the port picker. The permission is remembered, so a returning visit can call <code>connectSerial()</code> without a gesture and reconnect silently.</li>
+<li>The sketch's <code>Serial.print</code> output is delivered to the page as the <code>'log'</code> event, one line per event (with no listener it goes to the console prefixed <code>[board]</code>) — debug prints are visible without opening the Arduino IDE. Avoid <code>Serial.write</code> of raw binary from the sketch; text is fine.</li>
+<li>The camera extension needs WiFi (its video travels over HTTP); everything else works over serial.</li>
+<li>Multi-browser sharing is a WiFi feature — a USB cable has one end.</li>
+</ul>
 <h2 id="on">on()</h2>
 <p>Registers a handler for a connection event.</p>
-<div class="sig">arduino.<span class="fn">on</span>(event, handler)</div>
+<div class="sig sig-js">arduino.<span class="fn">on</span>(event, handler)</div>
 <table>
 <thead>
 <tr>
@@ -106,12 +160,12 @@
 <tr>
 <td><code>event</code></td>
 <td>string</td>
-<td>One of <code>'ready'</code>, <code>'connect'</code>, <code>'disconnect'</code>, <code>'reconnecting'</code>.</td>
+<td>One of <code>'ready'</code>, <code>'connect'</code>, <code>'disconnect'</code>, <code>'reconnecting'</code>, <code>'authFail'</code>, <code>'log'</code>, <code>'warn'</code>, <code>'error'</code>.</td>
 </tr>
 <tr>
 <td><code>handler</code></td>
 <td>function</td>
-<td>Called when the event fires. <code>'reconnecting'</code> receives <code>{ attempt, delay }</code>.</td>
+<td>Called when the event fires. <code>'reconnecting'</code> receives <code>{ attempt, delay }</code>; <code>'authFail'</code> receives <code>{ reason, message }</code>; <code>'log'</code> receives a string; <code>'warn'</code>/<code>'error'</code> receive <code>{ source, message }</code>.</td>
 </tr>
 </tbody>
 </table>
@@ -139,21 +193,47 @@
 <td><code>'reconnecting'</code></td>
 <td>A reconnect attempt is scheduled; the next retry is in <code>delay</code> ms.</td>
 </tr>
+<tr>
+<td><code>'authFail'</code></td>
+<td>The board refused this client's connection key (or required one that wasn't sent). Auto-reconnect stops — call <code>connect()</code> again with the right key.</td>
+</tr>
+<tr>
+<td><code>'log'</code></td>
+<td>Serial transport only: one line of the sketch's <code>Serial.print</code> output.</td>
+</tr>
+<tr>
+<td><code>'warn'</code></td>
+<td>Something went wrong but Pardalote carried on — a write to an unattached servo, an oversized message key, a pong timeout. <code>source</code> says who's speaking (<code>&quot;Pardalote&quot;</code>, <code>&quot;Servo 'pan'&quot;</code>, <code>&quot;Group 'arm'&quot;</code>).</td>
+</tr>
+<tr>
+<td><code>'error'</code></td>
+<td>Something failed — a send error, a camera snapshot failure. Device errors also fire <code>'error'</code> on the device instance itself.</td>
+</tr>
 </tbody>
 </table>
-<div class="code-ex"><div class="bar">Example — connection events</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;ready&#39;</span><span class="p">,</span> <span class="p">()</span> <span class="p">=&gt;</span> <span class="p">{</span>
-    <span class="nx">arduino</span><span class="p">.</span><span class="nx">pinMode</span><span class="p">(</span><span class="mf">13</span><span class="p">,</span> <span class="nx">OUTPUT</span><span class="p">);</span>   <span class="c1">// attach, init, start polls here</span>
+<p>Every emitter (the core, devices, pin handles) also has <code>once(event, handler)</code> — a one-shot listener that removes itself after firing — and <code>off(event, handler)</code> to unsubscribe (<code>handler</code> omitted: remove all).</p>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><div class="bar">Example — connection events</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">once</span><span class="p">(</span><span class="s1">&#39;ready&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">pinMode</span><span class="p">(</span><span class="mf">13</span><span class="p">,</span><span class="w"> </span><span class="nx">OUTPUT</span><span class="p">);</span><span class="w">   </span><span class="c1">// attach, init, start polls here</span>
 <span class="p">});</span>
-<span class="nx">arduino</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;reconnecting&#39;</span><span class="p">,</span> <span class="p">({</span> <span class="nx">attempt</span><span class="p">,</span> <span class="nx">delay</span> <span class="p">})</span> <span class="p">=&gt;</span> <span class="p">{</span>
-    <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="sb">`retry </span><span class="si">${</span><span class="nx">attempt</span><span class="si">}</span><span class="sb"> in </span><span class="si">${</span><span class="nx">delay</span><span class="si">}</span><span class="sb"> ms`</span><span class="p">);</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;reconnecting&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">({</span><span class="w"> </span><span class="nx">attempt</span><span class="p">,</span><span class="w"> </span><span class="nx">delay</span><span class="w"> </span><span class="p">})</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="sb">`retry </span><span class="si">${</span><span class="nx">attempt</span><span class="si">}</span><span class="sb"> in </span><span class="si">${</span><span class="nx">delay</span><span class="si">}</span><span class="sb"> ms`</span><span class="p">);</span>
 <span class="p">});</span>
 </code></pre></div>
+<h2 id="warnings-and-errors-in-your-ui">Warnings and errors in your UI</h2>
+<p>Every warning and error in the library funnels through the <code>'warn'</code> and <code>'error'</code> events, so a page can surface problems where users will actually see them — a status banner instead of a devtools console nobody has open:</p>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><div class="bar">Example — surface problems on the page</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;warn&#39;</span><span class="p">,</span><span class="w">  </span><span class="p">({</span><span class="w"> </span><span class="nx">source</span><span class="p">,</span><span class="w"> </span><span class="nx">message</span><span class="w"> </span><span class="p">})</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">showBanner</span><span class="p">(</span><span class="sb">`</span><span class="si">${</span><span class="nx">source</span><span class="si">}</span><span class="sb">: </span><span class="si">${</span><span class="nx">message</span><span class="si">}</span><span class="sb">`</span><span class="p">));</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;error&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">({</span><span class="w"> </span><span class="nx">source</span><span class="p">,</span><span class="w"> </span><span class="nx">message</span><span class="w"> </span><span class="p">})</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">showBanner</span><span class="p">(</span><span class="sb">`</span><span class="si">${</span><span class="nx">source</span><span class="si">}</span><span class="sb">: </span><span class="si">${</span><span class="nx">message</span><span class="si">}</span><span class="sb">`</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;red&#39;</span><span class="p">));</span>
+</code></pre></div>
+<p>If you never subscribe, messages fall back to <code>console.warn</code> / <code>console.error</code> exactly as before — the events are opt-in.</p>
 <p>Any client connecting to a running system immediately sees the live state — that's what makes Pardalote multi-user by default.</p>
 <h2 id="automatic-reconnection">Automatic reconnection</h2>
 <p>Reconnection is automatic, with exponential backoff, and continues for as long as the page is open — you don't need to do anything. The first ten attempts are logged in the console; after that the library falls quiet. Subscribe to <code>'reconnecting'</code> for per-attempt updates. Silent auto-reconnect to the same Arduino preserves all state.</p>
+<h2 id="disconnect">disconnect()</h2>
+<p>Closes the connection and disables auto-reconnect.</p>
+<div class="sig sig-js">arduino.<span class="fn">disconnect</span>()</div>
 <h2 id="getstatus">getStatus()</h2>
 <p>Returns a snapshot of the connection.</p>
-<div class="sig">arduino.<span class="fn">getStatus</span>()</div>
+<div class="sig sig-js">arduino.<span class="fn">getStatus</span>()</div>
 <p><strong>Returns</strong> <code>{ connected, isReconnecting, reconnectAttempts, deviceIP, availableExtensions }</code>.</p>
 <h2 id="properties">Properties</h2>
 <table>
@@ -178,7 +258,7 @@
 <tr>
 <td><code>arduino.analogMax</code></td>
 <td>number</td>
-<td>ADC range: <code>1023</code> (UNO R4 WiFi) or <code>4095</code> (ESP32).</td>
+<td>ADC range: <code>1023</code> (UNO R4 WiFi / Minima) or <code>4095</code> (ESP32).</td>
 </tr>
 </tbody>
 </table>
@@ -188,7 +268,7 @@
   </div>
 </div>
 
-<footer class="site-footer speckled">
+<footer class="site-footer">
   <div class="wrap">
     <span>Pardalote — created by Scott Mitchell for design education and creative technology.</span>
     <span><a href="index.html">Reference</a> · <a href="https://github.com/ScottMit/Pardalote">GitHub</a> · GPL-3.0</span>

@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Coding with AI — Pardalote reference</title>
+<meta name="description" content="The whole reference in one file, built for AI assistants — paste it in and your assistant knows the entire Pardalote API.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../css/site.css">
+</head>
+<body data-nav="reference">
+
+<nav class="site-nav">
+  <a class="logo" href="../index.html">
+    <img src="../assets/logo.svg" width="26" height="26" alt="">
+    Pardalote
+  </a>
+  <div class="links">
+    <a data-nav="home" href="../index.html">Home</a>
+    <a data-nav="download" href="../download.html">Download</a>
+    <a data-nav="examples" href="../examples/index.html">Examples</a>
+    <a data-nav="reference" href="index.html">Reference</a>
+    <a href="https://github.com/ScottMit/Pardalote">GitHub</a>
+  </div>
+</nav>
+
+<div class="wrap">
+  <div class="ref-layout">
+<aside class="ref-nav">
+  <button class="ref-nav-toggle" aria-expanded="false" aria-controls="ref-nav-links">Contents</button>
+  <div class="ref-nav-links" id="ref-nav-links">
+  <h4><a href="index.html">Getting started</a></h4>
+  <a href="index.html">Overview</a>
+  <a href="installation.html">Installation</a>
+  <a href="wifi.html">WiFi configuration</a>
+  <a href="ai-coding.html">Coding with AI</a>
+  <h4><a href="connecting.html">Core — JavaScript</a></h4>
+  <a href="connecting.html#connect">connect()</a>
+  <a href="connecting.html#on">on()</a>
+  <a href="connecting.html#disconnect">disconnect()</a>
+  <a href="connecting.html#getstatus">getStatus()</a>
+  <a href="pins.html#pinmode">pinMode()</a>
+  <a href="pins.html#digitalwrite">digitalWrite()</a>
+  <a href="pins.html#analogwrite">analogWrite()</a>
+  <a href="pins.html#setwritethrottle--setwritethreshold">setWriteThrottle() / setWriteThreshold()</a>
+  <a href="pins.html#analogread">analogRead()</a>
+  <a href="pins.html#digitalread">digitalRead()</a>
+  <a href="pins.html#setreadinterval--setreadthreshold">setReadInterval() / setReadThreshold()</a>
+  <a href="pins.html#pin--the-listening-handle">pin() — the listening handle</a>
+  <a href="pins.html#end--endall">end() / endAll()</a>
+  <a href="pins.html#pin-aliases">Pin aliases</a>
+  <h4><a href="arduino.html">Core — Arduino</a></h4>
+  <a href="arduino.html#pardalotebegin">Pardalote.begin()</a>
+  <a href="arduino.html#pardaloterun">Pardalote.run()</a>
+  <a href="arduino.html#pardaloteshare">Pardalote.share()</a>
+  <a href="arduino.html#pardalotesend">Pardalote.send()</a>
+  <a href="arduino.html#when-not-to-share">When not to share</a>
+  <h4><a href="messaging.html">Core — Messaging</a></h4>
+  <a href="messaging.html#javascript-to-arduino">JavaScript to Arduino</a>
+  <a href="messaging.html#arduino-to-javascript">Arduino to JavaScript</a>
+  <a href="messaging.html#retain-and-broadcast">Retain and broadcast</a>
+  <a href="messaging.html#inspecting-all-traffic">Inspecting all traffic</a>
+  <h4><a href="extensions.html">Extensions</a></h4>
+  <a href="extensions.html">Overview</a>
+  <a href="extensions.html#creating-extension-objects-in-the-firmware">Creating extension objects in the firmware</a>
+  <a href="extensions.html#reading-and-writing-actuators-from-the-sketch">Reading and writing actuators from the sketch</a>
+  <a href="servo.html">Servo</a>
+  <a href="stepper.html">Stepper</a>
+  <a href="bus-servo.html">Bus servo</a>
+  <a href="groups.html">Groups</a>
+  <a href="neopixel.html">NeoPixel</a>
+  <a href="ultrasonic.html">Ultrasonic</a>
+  <a href="encoder.html">Rotary encoder</a>
+  <a href="imu.html">IMU</a>
+  <a href="camera.html">Camera</a>
+  <h4><a href="protocol.html">Under the hood</a></h4>
+  <a href="protocol.html">Protocol</a>
+  <a href="pin-capabilities.html">Pin capabilities</a>
+  <a href="troubleshooting.html">Troubleshooting</a>
+  </div>
+</aside>
+    <main class="ref-main">
+      <h1>Coding with AI</h1>
+      <p class="lede">The whole reference in one file, built for AI assistants — paste it in and your assistant knows the entire Pardalote API.</p>
+<p>Building a Pardalote project with an AI assistant — Claude, ChatGPT, Cursor, Copilot? Give it the reference up front and it writes real Pardalote code: setup in the right place, motion that runs on the board, the correct units — instead of guessing from the library name.</p>
+<h2 id="paste-this-in">Paste this in</h2>
+<p><strong>llms-full.txt</strong> is this entire reference site as one plain-text file, with a short preamble covering the mistakes assistants make by default. Drop it into your assistant at the start of a session — attach the file, or paste it into a Claude Project, a custom GPT, or your editor's context.</p>
+<div class="cta-row">
+  <a class="btn btn-solid" href="../llms-full.txt" download>Download llms-full.txt</a>
+  <a class="btn btn-ghost" href="../llms-full.txt">View in browser</a>
+</div>
+<p>It's about 130 KB (~32k tokens) — comfortably within any modern assistant's context window.</p>
+<h2 id="for-tools-that-fetch-on-their-own">For tools that fetch on their own</h2>
+<p>Some tools look for an <strong>llms.txt</strong> index at a site's root. Pardalote's lives at:</p>
+<p><code>https://scottmit.github.io/Pardalote/llms.txt</code></p>
+<p>It's a short map linking to every reference page and to llms-full.txt — point your tool there if it follows the <a href="https://llmstxt.org">llms.txt convention</a>.</p>
+<h2 id="what-the-preamble-covers">What the preamble covers</h2>
+<p>So you know what your assistant is being told, the file leads with the handful of things that trip up generated code:</p>
+<ul>
+<li><strong>Setup goes in <code>on('ready')</code></strong> — not at the top level.</li>
+<li><strong><code>read()</code> is a poll</strong>, not a one-shot getter.</li>
+<li><strong>Motion runs on the board</strong> — use <code>writeTimed()</code> / <code>gesture()</code>, never stream positions.</li>
+<li><strong>Native units</strong> per actuator (degrees, steps, counts), and relative-vs-absolute gestures.</li>
+<li><strong>Await real arrival</strong> with <code>whenDone()</code>.</li>
+</ul>
+<p>The rest of the file is these reference pages, verbatim.</p>
+<p>See also: <a href="index.html">Overview</a> · <a href="installation.html">Installation</a></p>
+
+    </main>
+  </div>
+</div>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <span>Pardalote — created by Scott Mitchell for design education and creative technology.</span>
+    <span><a href="index.html">Reference</a> · <a href="https://github.com/ScottMit/Pardalote">GitHub</a> · GPL-3.0</span>
+  </div>
+</footer>
+
+<script src="../js/site.js"></script>
+</body>
+</html>

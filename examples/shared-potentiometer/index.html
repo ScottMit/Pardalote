@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shared potentiometer — Pardalote</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <main>
+        <div id="top">
+            <div class="heading">Shared potentiometer</div>
+            <div id="status">set ARDUINO_IP in sketch.js — the Arduino announces the input itself</div>
+        </div>
+
+        <div id="value">—</div>
+
+        <div class="bar-track">
+            <div id="bar"></div>
+        </div>
+
+        <p class="hint">
+            Turn the potentiometer.
+            The Arduino told the browser to poll this pin —
+            no <code>pinMode</code> or <code>analogRead</code> in the JS.
+        </p>
+    </main>
+
+    <!-- Load ONE pin-alias file for your board. They declare the same
+         global consts (SDA, A0, …), so loading two throws a redeclaration
+         SyntaxError. (String pin names like 'A0' also resolve from the
+         board's HELLO handshake, so a pin file isn't strictly required.) -->
+    <script src="../../pardalote-js/pardalote.js"></script>
+    <script src="../../pardalote-js/pardalote-pins-esp32-wrover-dev.js"></script>
+    <script src="sketch.js"></script>
+</body>
+</html>

@@ -1,7 +1,7 @@
 // ==============================================================
 // ultrasonic.js
 // Pardalote Ultrasonic Sensor Extension
-// Version v1.0
+// Part of Pardalote — version in package.json
 // by Scott Mitchell
 // GPL-3.0 License
 //
@@ -14,15 +14,21 @@
 //
 //   arduino.on('ready', () => {
 //       arduino.sonar.attach(TRIG, ECHO);
-//       arduino.sonar.read(100);        // poll every 100 ms
+//       arduino.sonar.read(100);            // poll every 100 ms
+//       arduino.sonar.read(100, CM, 0.5);   // …reporting changes of 0.5+ cm
 //   });
 //
-//   arduino.sonar.on('read', ({ distance, unit }) => {
+//   arduino.sonar.on('change', ({ distance, unit }) => {
 //       console.log(distance, unit === CM ? 'cm' : 'in');
 //   });
 //
-// Distance values are returned in tenths of the requested unit
-// internally; the extension converts to a decimal before emitting.
+// The BOARD runs the poll: one measurement per interval
+// regardless of how many browsers are connected, and each browser only
+// receives readings that changed by at least its threshold (default
+// 0.3 units — the HC-SR04's noise floor).
+//
+// Distance values travel as tenths of the requested unit on the wire;
+// the extension converts to a decimal before emitting.
 // A value of -1 means the echo timed out (nothing in range).
 // ==============================================================
 
@@ -52,9 +58,11 @@ class Ultrasonic extends Extension {
         this.distance   = -1;   // last reading in user units (decimal)
         this.unit       = CM;
 
-        // Periodic read timer (JS-side)
-        this._readTimer    = null;
-        this._readInterval = 0;
+        // Periodic read registration (board-side).
+        // _readThreshold is in user units (decimal); 0 = board default
+        // (0.3 units). Survives _reset() — it's user-tuned configuration.
+        this._readInterval  = 0;
+        this._readThreshold = 0;
 
         // Set true when Arduino announces this sensor's attach state on connect.
         // _reRegister() uses this to skip re-sending CMD_ULTRASONIC_ATTACH when
@@ -66,7 +74,7 @@ class Ultrasonic extends Extension {
     // Board switch — called by Arduino.connect() to wipe per-board state.
     // -------------------------------------------------------------------
     _reset() {
-        this._stopRead();
+        this._readInterval       = 0;   // registration died with the old board — send nothing
         this.trigPin             = -1;
         this.echoPin             = -1;
         this.isAttached          = false;
@@ -87,13 +95,9 @@ class Ultrasonic extends Extension {
             if (!this._announcedByArduino) {
                 this._sendAttach();
             }
-            // Periodic read state is per-WS-client on the Arduino (cleared on
-            // disconnect), so always re-start polling if it was active.
-            if (this._readInterval > 0) {
-                const interval = this._readInterval;
-                this._readInterval = 0;   // force re-registration
-                this.read(interval, this.unit);
-            }
+            // Periodic read registrations are per-WS-client on the Arduino
+            // (cleared on disconnect), so always re-register if active.
+            if (this._readInterval > 0) this._sendRead();
         }
         this._announcedByArduino = false;  // reset for next reconnect cycle
     }
@@ -132,16 +136,20 @@ class Ultrasonic extends Extension {
     }
 
     // -------------------------------------------------------------------
-    // read(interval?, unit?)
-    // read()                 — return cached distance; start default poll if none running.
-    // read(interval)         — start/update periodic poll at interval (ms).
-    // read(interval, unit)   — periodic in CM (default) or INCH.
-    // read(END)              — stop any active periodic read.
-    // Calling again with the same interval just returns the cached value.
+    // read(interval?, unit?, threshold?)
+    // read()                    — return cached distance; start default poll if none running.
+    // read(interval)            — start/update a board-side periodic poll (ms).
+    // read(interval, unit)      — periodic in CM (default) or INCH.
+    // read(interval, CM, 0.5)   — only report changes of 0.5+ units.
+    // read(END)                 — stop this browser's periodic read.
+    // The board runs the poll and only transmits meaningful changes;
+    // threshold is in the sensor's units (decimal; 0 = board default,
+    // 0.3 units). Per-browser: other pages keep their own settings.
+    // Calling again with the same settings just returns the cached value.
     // -------------------------------------------------------------------
-    read(interval, unit = this.unit) {
+    read(interval, unit = this.unit, threshold) {
         if (!this.isAttached) {
-            console.warn(`Ultrasonic ${this.logicalId}: not attached`);
+            this._warn('not attached');
             return this.distance;
         }
 
@@ -150,28 +158,47 @@ class Ultrasonic extends Extension {
             return this.distance;
         }
 
-        // Poll already running at the requested (or default) interval — return cached
-        if (this._readTimer && (interval === undefined || interval === this._readInterval)) {
+        // Poll already running with the requested settings — return cached
+        if (this._readInterval > 0 && unit === this.unit
+            && (interval  === undefined || interval  === this._readInterval)
+            && (threshold === undefined || threshold === this._readThreshold)) {
             return this.distance;
         }
 
-        // Start or restart periodic poll
         this.unit = unit;
-        interval ??= this.arduino.defaultInterval;
-        this._stopRead();
-        this._readInterval = interval;
-        this._sendReadRequest();
-        this._readTimer = setInterval(() => this._sendReadRequest(), interval);
+        this._readInterval  = interval ?? this.arduino.defaultInterval;
+        if (threshold !== undefined) this._readThreshold = threshold;
+        this._sendRead();
         return this.distance;
     }
 
-    _sendReadRequest() {
+    // setReadInterval(ms) / setReadThreshold(units) — set poll settings
+    // directly; applied immediately if polling, stored for read() otherwise.
+    setReadInterval(ms) {
+        this._readInterval = ms;
+        if (this.isAttached && ms > 0) this._sendRead();
+        return this;
+    }
+
+    setReadThreshold(units) {
+        this._readThreshold = units;
+        if (this.isAttached && this._readInterval > 0) this._sendRead();
+        return this;
+    }
+
+    // Register (or update) this browser's poll with the board.
+    // Wire threshold is in tenths of a unit; 0 = board default.
+    _sendRead() {
         this.arduino.send(encodeFrame(CMD_ULTRASONIC_READ, DEVICE_ULTRASONIC,
-            [this.logicalId, this.unit]));
+            [this.logicalId, this.unit, this._readInterval,
+             Math.max(0, Math.round(this._readThreshold * 10))]));
     }
 
     _stopRead() {
-        if (this._readTimer) { clearInterval(this._readTimer); this._readTimer = null; }
+        if (this._readInterval > 0) {
+            this.arduino.send(encodeFrame(CMD_ULTRASONIC_READ, DEVICE_ULTRASONIC,
+                [this.logicalId, this.unit, END]));   // END = unregister
+        }
         this._readInterval = 0;
     }
 
@@ -214,16 +241,17 @@ class Ultrasonic extends Extension {
             case CMD_ULTRASONIC_READ: {
                 const raw = frame.params[1];   // tenths of unit, or -1
                 this.distance = (raw === -1) ? -1 : raw / 10;
-                this._emit('read', { distance: this.distance, unit: this.unit });
+                this._emit('change', { distance: this.distance, unit: this.unit });
                 break;
             }
         }
     }
 
     // -------------------------------------------------------------------
-    // Callback shortcut
+    // Callback shortcut — the board only transmits meaningful changes
+    // (>= threshold), so the event is 'change'.
     // -------------------------------------------------------------------
-    onRead(fn) { return this.on('read', fn); }
+    onChange(fn) { return this.on('change', fn); }
 
     // -------------------------------------------------------------------
     // State snapshot
@@ -238,6 +266,7 @@ class Ultrasonic extends Extension {
             distance:   this.distance,
             unit:       this.unit,
             interval:   this._readInterval,
+            threshold:  this._readThreshold,
         };
     }
 }

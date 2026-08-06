@@ -1,6 +1,6 @@
 # Pardalote (Arduino library)
 
-Arduino-side library for the Pardalote project — control hardware from a web browser over WiFi.
+Arduino-side library for the Pardalote project — control hardware from a web browser over WiFi or USB serial.
 
 A minimal sketch:
 

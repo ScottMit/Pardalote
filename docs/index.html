@@ -6,13 +6,16 @@
 <title>Pardalote — Arduino and JavaScript, working together</title>
 <meta name="description" content="Pardalote connects Arduino and JavaScript over WiFi. Write real code on both sides — no cables, no server, no setup maze. Built for design education and creative technology.">
 <link rel="icon" href="assets/logo.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/site.css">
 </head>
 <body data-nav="home">
 
-<nav class="site-nav speckled">
+<nav class="site-nav">
   <a class="logo" href="index.html">
-    <img src="assets/logo.svg" width="30" height="30" alt="">
+    <img src="assets/logo.svg" width="26" height="26" alt="">
     Pardalote
   </a>
   <div class="links">
@@ -24,12 +27,15 @@
   </div>
 </nav>
 
-<header class="hero speckled">
+<header class="hero">
+  <div class="shape circle c-teal"   style="width:200px; height:200px; top:-50px; right:130px;"></div>
+  <div class="shape circle c-amber"  style="width:130px; height:130px; top:40px; right:60px; transform:rotate(20deg);"></div>
+  <div class="shape circle c-orange" style="width:110px; height:110px; left:42%; bottom:-30px;"></div>
   <div class="wrap">
-    <h1>Your Arduino and your browser, <em>working together<span class="stop">.</span></em></h1>
+    <h1>Your Arduino and your browser, <span class="hl">working together</span><span class="stop">.</span></h1>
     <p class="tagline">Pardalote connects Arduino and JavaScript over WiFi. Write real code on both sides — read sensors, move motors, and build interfaces — with no cables and no server.</p>
     <div class="cta-row">
-      <a class="btn btn-yellow" href="download.html">Get started</a>
+      <a class="btn btn-solid" href="download.html">Get started</a>
       <a class="btn btn-ghost" href="examples/index.html">See examples</a>
     </div>
   </div>
@@ -37,15 +43,15 @@
 
 <div class="video-band">
   <div class="wrap">
-    <!-- To add the real videos, replace the contents of each pane with:
+    <!-- To add the real videos, replace each pane's contents with:
          <video src="assets/video-hardware.mp4" autoplay loop muted playsinline></video> -->
     <div class="split-video">
-      <div class="pane hw">
+      <div class="pane">
         <span class="chip">Hardware</span>
         <div class="play"></div>
         <span>Video placeholder — physical side</span>
       </div>
-      <div class="pane br">
+      <div class="pane">
         <span class="chip">Browser</span>
         <div class="play"></div>
         <span>Video placeholder — screen side</span>
@@ -60,44 +66,49 @@
     <div class="kicker">Why Pardalote</div>
     <h2>Made for people who think with their hands</h2>
     <p class="lede">Pardalote was built for design studios and classrooms — places where an idea moves back and forth between a breadboard and a browser tab.</p>
-    <div class="pillars">
-      <div class="pillar">
-        <div class="dot"></div>
+    <div class="grid-cards">
+      <div class="cell">
+        <div class="mark circle c-teal"></div>
         <h3>Two languages, equal partners</h3>
-        <p>You write real Arduino code and real JavaScript. Neither side is privileged — both get control of the hardware, and both can lead. Perfect when you're constantly shifting between a physical device and the screen.</p>
+        <p>You write real Arduino code and real JavaScript. Neither side is privileged — both get control of the hardware, and both can lead.</p>
       </div>
-      <div class="pillar">
-        <div class="dot"></div>
+      <div class="cell">
+        <div class="mark diamond c-amber"></div>
         <h3>Multi-user by default</h3>
-        <p>One Arduino can talk to many browsers, and one browser can talk to many Arduinos. A whole class can connect to the same device — or one interface can conduct a room full of devices.</p>
+        <p>One Arduino can talk to many browsers, and one browser to many Arduinos. A whole class can connect to the same device.</p>
       </div>
-      <div class="pillar">
-        <div class="dot"></div>
+      <div class="cell">
+        <div class="mark tri"></div>
         <h3>Always in sync</h3>
-        <p>Connect at any moment and you're up to date: the Arduino tells every new browser its current state the instant it joins. Reload the page mid-project and everything just keeps going.</p>
+        <p>Connect at any moment and you're up to date: the Arduino tells every new browser its current state the instant it joins.</p>
       </div>
-      <div class="pillar">
-        <div class="dot"></div>
-        <h3>WiFi, not wires</h3>
-        <p>The Arduino runs the connection, so any device on your network can join — laptop, tablet, phone. No USB cables, no Node.js — WebSockets make connecting and staying connected easy.</p>
+      <div class="cell">
+        <div class="mark circle c-orange"></div>
+        <h3>WiFi or wires</h3>
+        <p>Over WiFi, any device on your network can join — laptop, tablet, phone. No router handy? The same code runs over the USB cable instead. Either way, no server and no Node.js.</p>
       </div>
-      <div class="pillar">
-        <div class="dot"></div>
+      <div class="cell">
+        <div class="mark diamond c-teal"></div>
         <h3>Open source</h3>
-        <p>Pardalote is built on free and open source platforms, and it's also free. Published under an open source GPL-3.0 licence - use it, read it, fork it, — it belongs to the people that use it.</p>
+        <p>Built on free and open platforms, and free itself. Published under GPL-3.0 — use it, read it, fork it. It belongs to the people who use it.</p>
+      </div>
+      <div class="cell">
+        <div class="mark circle c-amber"></div>
+        <h3>No setup maze</h3>
+        <p>One script tag in the browser, one library on the board. No build tools, no toolchain to fight before you can blink an LED.</p>
       </div>
     </div>
   </div>
 </section>
 
-<section class="code-band speckled">
+<section class="code-band">
   <div class="wrap">
     <div class="kicker">How small is small?</div>
     <h2>A complete Pardalote project</h2>
     <div class="code-cols">
       <div class="code-card">
         <div class="bar"><b>sketch.ino</b> — the whole Arduino side</div>
-        <pre><span class="c-kw">#include</span> <span class="c-str">&lt;Pardalote.h&gt;</span>
+<pre><span class="c-kw">#include</span> <span class="c-str">&lt;Pardalote.h&gt;</span>
 
 <span class="c-kw">void</span> <span class="c-fn">setup</span>() {
   Pardalote.<span class="c-fn">begin</span>();
@@ -109,7 +120,7 @@
       </div>
       <div class="code-card">
         <div class="bar"><b>sketch.js</b> — blink from the browser</div>
-        <pre><span class="c-kw">const</span> arduino = <span class="c-kw">new</span> <span class="c-fn">Arduino</span>();
+<pre><span class="c-kw">const</span> arduino = <span class="c-kw">new</span> <span class="c-fn">Arduino</span>();
 arduino.<span class="c-fn">connect</span>(<span class="c-str">'192.168.1.42'</span>);
 
 arduino.<span class="c-fn">on</span>(<span class="c-str">'ready'</span>, () =&gt; {
@@ -118,7 +129,7 @@ arduino.<span class="c-fn">on</span>(<span class="c-str">'ready'</span>, () =&gt
 });</pre>
       </div>
     </div>
-    <p class="code-note">The JavaScript API mirrors Arduino's own function names — <code style="font-family:var(--mono)">pinMode</code>, <code style="font-family:var(--mono)">digitalWrite</code>, <code style="font-family:var(--mono)">analogRead</code> — so what you learn on one side carries straight over to the other.</p>
+    <p class="code-note">The JavaScript API mirrors Arduino's own function names — <code>pinMode</code>, <code>digitalWrite</code>, <code>analogRead</code> — so what you learn on one side carries straight over to the other.</p>
   </div>
 </section>
 
@@ -126,8 +137,12 @@ arduino.<span class="c-fn">on</span>(<span class="c-str">'ready'</span>, () =&gt
   <div class="wrap">
     <div class="kicker">In the classroom</div>
     <h2>Built for teaching, tested in studios</h2>
-    <p class="lede">Pardalote grew out of design education: students prototyping IoT ideas need to see cause and effect quickly, on both sides of the wireless link. It plays especially well with <a href="https://p5js.org/">p5.js</a>, building on Processing and Wiring's (Arduino) shared heritage.</p>
-    <a class="btn btn-dark" href="examples/index.html">Browse the examples →</a>
+    <div class="prose">
+      <p>Pardalote grew out of design education: students prototyping IoT ideas need to see cause and effect quickly, on both sides of the link. It plays especially well with <a href="https://p5js.org/">p5.js</a>, building on Processing and Wiring's (Arduino) shared heritage.</p>
+    </div>
+    <div class="cta-row" style="margin-top:24px;">
+      <a class="btn btn-ghost" href="examples/index.html">Browse the examples →</a>
+    </div>
   </div>
 </section>
 
@@ -135,14 +150,18 @@ arduino.<span class="c-fn">on</span>(<span class="c-str">'ready'</span>, () =&gt
   <div class="wrap">
     <div class="kicker">Make it yours</div>
     <h2>Extends and expands with your project</h2>
-    <p class="lede">Use the Pardalote extensions to add Servos, steppers, NeoPixels, cameras and sensors, or roll your own extension and make something all together different.</p>
-    <a class="btn btn-dark" href="reference/extensions.html">Explore the extensions →</a>
+    <div class="prose">
+      <p>Use the Pardalote extensions to add servos, steppers, NeoPixels, cameras and sensors, or roll your own extension and make something all together different.</p>
+    </div>
+    <div class="cta-row" style="margin-top:24px;">
+      <a class="btn btn-ghost" href="reference/extensions.html">Explore the extensions →</a>
+    </div>
   </div>
 </section>
 
-<footer class="site-footer speckled">
+<footer class="site-footer">
   <div class="wrap">
-    <span>Pardalote — created by Scott Mitchell for design education and creative technology.</span>
+    <span>Pardalote — created by Scott Mitchell for design education &amp; creative technology.</span>
     <span><a href="reference/index.html">Reference</a> · <a href="https://github.com/ScottMit/Pardalote">GitHub</a> · GPL-3.0</span>
   </div>
 </footer>

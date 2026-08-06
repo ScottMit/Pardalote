@@ -10,9 +10,9 @@
 </head>
 <body data-nav="reference">
 
-<nav class="site-nav speckled">
+<nav class="site-nav">
   <a class="logo" href="../index.html">
-    <img src="../assets/logo.svg" width="30" height="30" alt="">
+    <img src="../assets/logo.svg" width="26" height="26" alt="">
     Pardalote
   </a>
   <div class="links">
@@ -27,34 +27,57 @@
 <div class="wrap">
   <div class="ref-layout">
 <aside class="ref-nav">
-  <h4>Getting started</h4>
+  <button class="ref-nav-toggle" aria-expanded="false" aria-controls="ref-nav-links">Contents</button>
+  <div class="ref-nav-links" id="ref-nav-links">
+  <h4><a href="index.html">Getting started</a></h4>
   <a href="index.html">Overview</a>
   <a href="installation.html">Installation</a>
   <a href="wifi.html">WiFi configuration</a>
-  <h4>Core — JavaScript</h4>
-  <a href="connecting.html#connect">connect() / events</a>
+  <a href="ai-coding.html">Coding with AI</a>
+  <h4><a href="connecting.html">Core — JavaScript</a></h4>
+  <a href="connecting.html#connect">connect()</a>
+  <a href="connecting.html#on">on()</a>
+  <a href="connecting.html#disconnect">disconnect()</a>
+  <a href="connecting.html#getstatus">getStatus()</a>
   <a href="pins.html#pinmode">pinMode()</a>
-  <a href="pins.html#digitalwrite">digitalWrite() / analogWrite()</a>
-  <a href="pins.html#analogread">analogRead() / digitalRead()</a>
-  <a href="pins.html#onchange">onChange()</a>
+  <a href="pins.html#digitalwrite">digitalWrite()</a>
+  <a href="pins.html#analogwrite">analogWrite()</a>
+  <a href="pins.html#setwritethrottle--setwritethreshold">setWriteThrottle() / setWriteThreshold()</a>
+  <a href="pins.html#analogread">analogRead()</a>
+  <a href="pins.html#digitalread">digitalRead()</a>
+  <a href="pins.html#setreadinterval--setreadthreshold">setReadInterval() / setReadThreshold()</a>
+  <a href="pins.html#pin--the-listening-handle">pin() — the listening handle</a>
+  <a href="pins.html#end--endall">end() / endAll()</a>
   <a href="pins.html#pin-aliases">Pin aliases</a>
-  <h4>Core — Arduino</h4>
-  <a href="arduino.html#pardalotebegin">Pardalote.begin() / run()</a>
-  <a href="arduino.html#pardaloteshare">share() / send()</a>
-  <a href="arduino.html#the-actuator-objects">Reading actuators</a>
-  <h4>Extensions</h4>
+  <h4><a href="arduino.html">Core — Arduino</a></h4>
+  <a href="arduino.html#pardalotebegin">Pardalote.begin()</a>
+  <a href="arduino.html#pardaloterun">Pardalote.run()</a>
+  <a href="arduino.html#pardaloteshare">Pardalote.share()</a>
+  <a href="arduino.html#pardalotesend">Pardalote.send()</a>
+  <a href="arduino.html#when-not-to-share">When not to share</a>
+  <h4><a href="messaging.html">Core — Messaging</a></h4>
+  <a href="messaging.html#javascript-to-arduino">JavaScript to Arduino</a>
+  <a href="messaging.html#arduino-to-javascript">Arduino to JavaScript</a>
+  <a href="messaging.html#retain-and-broadcast">Retain and broadcast</a>
+  <a href="messaging.html#inspecting-all-traffic">Inspecting all traffic</a>
+  <h4><a href="extensions.html">Extensions</a></h4>
   <a href="extensions.html">Overview</a>
+  <a href="extensions.html#creating-extension-objects-in-the-firmware">Creating extension objects in the firmware</a>
+  <a href="extensions.html#reading-and-writing-actuators-from-the-sketch">Reading and writing actuators from the sketch</a>
   <a href="servo.html">Servo</a>
   <a href="stepper.html">Stepper</a>
   <a href="bus-servo.html">Bus servo</a>
   <a href="groups.html">Groups</a>
   <a href="neopixel.html">NeoPixel</a>
   <a href="ultrasonic.html">Ultrasonic</a>
-  <a href="mpu.html">MPU / IMU</a>
+  <a href="encoder.html">Rotary encoder</a>
+  <a href="imu.html">IMU</a>
   <a href="camera.html">Camera</a>
-  <h4>Under the hood</h4>
+  <h4><a href="protocol.html">Under the hood</a></h4>
   <a href="protocol.html">Protocol</a>
+  <a href="pin-capabilities.html">Pin capabilities</a>
   <a href="troubleshooting.html">Troubleshooting</a>
+  </div>
 </aside>
     <main class="ref-main">
       <h1>Troubleshooting</h1>
@@ -70,6 +93,24 @@
 <li>This is a known UNO R4 WiFi behaviour</li>
 <li>Pardalote handles reconnection automatically — your sketch keeps working</li>
 </ul>
+<h2 id="websocket-is-unstable-on-the-uno-r4--drops-freezes-or-reconnects">&quot;WebSocket is unstable on the UNO R4 — drops, freezes, or reconnects&quot;</h2>
+<ul>
+<li><strong>Keep your <code>loop()</code> tight.</strong> The UNO R4 WiFi's WebSocket stack (WiFiS3 + arduinoWebSockets) is sensitive to how often it is serviced. Anything that blocks or slows the loop — a <code>delay()</code>, a long computation, a busy blocking peripheral — starves the WebSocket of servicing, and the connection stalls, drops, or churns &quot;client connection lost / new client&quot; and reconnects. A single blocking <code>delay(100)</code> in <code>loop()</code> is enough to trigger it. (See <a href="https://github.com/Links2004/arduinoWebSockets/issues/909">arduinoWebSockets issue #909</a>.)</li>
+<li>The symptom is often <strong>indirect</strong>. For example, dragging an <code>analogWrite()</code> PWM slider may lag and then drop the socket — not because <code>analogWrite()</code> is slow, but because something else in the loop is blocking long enough that the extra slider traffic can't be serviced in time. Fix the blocking, not the slider.</li>
+<li>Fixes: remove <code>delay()</code> calls from <code>loop()</code>; move slow work off the hot path; if you must do something lengthy, call <code>Pardalote.run()</code> (which services the WebSocket) periodically while it runs. The ESP32 is far less sensitive to this.</li>
+<li>As a smaller, defensive measure, Pardalote also throttles PWM writes by default (a leading write goes out immediately, rapid follow-ups coalesce into one send carrying the final value) so a slider can't flood the loop with parse work. If you've set <code>setWriteThrottle(0)</code>, raise it — <code>arduino.setWriteThrottle(20)</code> caps the rate to ~50/s per pin; <code>arduino.setWriteThreshold(4)</code> skips sub-4 duty changes.</li>
+</ul>
+<h2 id="connectserial-cant-find-or-open-the-port">&quot;connectSerial() can't find or open the port&quot;</h2>
+<ul>
+<li>Web Serial only exists in <strong>Chrome and Edge</strong> (Chromebooks included) — Safari and Firefox can't do serial; use WiFi there.</li>
+<li><strong>Close the Arduino IDE's Serial Monitor</strong> (and Serial Plotter) first. Only one program can hold the port — if the IDE has it, the browser's picker shows the port but opening it fails, and vice versa: while the browser is connected, the IDE can't open the Serial Monitor.</li>
+<li>The first <code>connectSerial()</code> must be triggered by a click — browsers only show the port picker from a user gesture.</li>
+<li>Unplugged and replugged? Pardalote re-acquires the port automatically on the next retry; if it doesn't, click Connect again.</li>
+</ul>
+<h2 id="the-board-resets-when-the-browser-connects-over-serial-esp32">&quot;The board resets when the browser connects over serial&quot; (ESP32)</h2>
+<p>Expected. Opening the serial port toggles the DTR/RTS lines, and the auto-reset circuit on classic ESP32 dev boards restarts the chip — the same thing the IDE does before uploading. Pardalote's probe simply waits through the reboot and connects when the board comes back (a few seconds). The UNO R4's native USB doesn't reset on open.</p>
+<h2 id="serial-connection-works-then-dies-after-a-neopixel-animation">&quot;Serial connection works, then dies after a NeoPixel animation&quot;</h2>
+<p><code>show()</code> disables interrupts while it streams the strip, which can drop incoming serial bytes. Pardalote's serial framing detects the corruption (CRC) and drops that message rather than desyncing — occasional lost frames during heavy animation are expected; the link itself recovers on its own.</p>
 <h2 id="neopixels-dont-light-up">&quot;NeoPixels don't light up&quot;</h2>
 <ul>
 <li>Verify the pixel type: <code>NEO_GRB</code> works for most WS2812B strips, <code>NEO_RGB</code> for some others</li>
@@ -79,8 +120,8 @@
 <h2 id="imu-not-responding">&quot;IMU not responding&quot;</h2>
 <ul>
 <li>Check SDA and SCL wiring and confirm the I2C address (AD0/SA0 pin state)</li>
-<li>Check Serial Monitor for <code>[MPU] WHO_AM_I mismatch</code> — the model string or wiring is wrong</li>
-<li>Verify your sketch has <code>#include &lt;PardaloteMPU.h&gt;</code></li>
+<li>Check Serial Monitor for <code>IMU WHO_AM_I mismatch</code> — the model string or wiring is wrong</li>
+<li>Verify your sketch has <code>#include &lt;PardaloteIMU.h&gt;</code></li>
 </ul>
 <h2 id="imu-readings-drift-when-stationary">&quot;IMU readings drift when stationary&quot;</h2>
 <ul>
@@ -94,7 +135,7 @@
 </ul>
 <h2 id="servo-jitters">&quot;Servo jitters&quot;</h2>
 <ul>
-<li>Use <code>setThrottle()</code> to limit write frequency</li>
+<li>Use <code>setWriteThrottle()</code> to limit write frequency</li>
 <li>Make sure the servo has adequate power (not just USB)</li>
 </ul>
 <h2 id="stepper-doesnt-move--moves-the-wrong-way">&quot;Stepper doesn't move / moves the wrong way&quot;</h2>
@@ -134,7 +175,7 @@
   </div>
 </div>
 
-<footer class="site-footer speckled">
+<footer class="site-footer">
   <div class="wrap">
     <span>Pardalote — created by Scott Mitchell for design education and creative technology.</span>
     <span><a href="index.html">Reference</a> · <a href="https://github.com/ScottMit/Pardalote">GitHub</a> · GPL-3.0</span>

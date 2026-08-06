@@ -38,7 +38,7 @@ function buildControlPanel(arduino, boardName, boards) {
         const prev = pinState.get(pin);
         if (prev?.timerId) clearInterval(prev.timerId);
         arduino.end(pin);
-        arduino.offWrite(pin);
+        arduino.pin(pin).off('change');   // drop this card's old listeners
         controlsEl.innerHTML = '';
 
         const state = { mode, timerId: null, controlsEl };
@@ -66,9 +66,9 @@ function buildControlPanel(arduino, boardName, boards) {
                 const ind = el('span', 'h-indicator');
                 ind.textContent = '—';
                 controlsEl.appendChild(ind);
-                arduino.onChange(pin, val => {
-                    ind.textContent = val ? 'HIGH' : 'LOW';
-                    ind.className = 'h-indicator ' + (val ? 'h-high' : 'h-low');
+                arduino.pin(pin).on('change', ({ value }) => {
+                    ind.textContent = value ? 'HIGH' : 'LOW';
+                    ind.className = 'h-indicator ' + (value ? 'h-high' : 'h-low');
                 });
                 break;
             }
@@ -82,17 +82,15 @@ function buildControlPanel(arduino, boardName, boards) {
                 loBtn.onclick = () => arduino.digitalWrite(pin, LOW);
                 // Update indicator whenever any browser writes this pin.
                 // The Arduino echoes every CMD_DIGITAL_WRITE back as a broadcast,
-                // so this callback fires for both local and remote writes.
-                arduino.onWrite(pin, val => {
-                    ind.textContent = val ? 'HIGH' : 'LOW';
-                    ind.className   = 'h-state ' + (val ? 'h-st-hi' : 'h-st-lo');
+                // so 'change' fires for both local and remote writes.
+                arduino.pin(pin).on('change', ({ value }) => {
+                    ind.textContent = value ? 'HIGH' : 'LOW';
+                    ind.className   = 'h-state ' + (value ? 'h-st-hi' : 'h-st-lo');
                 });
-                // Sync indicator with the last known state (set before ready).
-                const known = arduino._pinValues.get(pin);
-                if (known !== undefined) {
-                    ind.textContent = known ? 'HIGH' : 'LOW';
-                    ind.className   = 'h-state ' + (known ? 'h-st-hi' : 'h-st-lo');
-                }
+                // Sync indicator with the last known (mirrored) state.
+                const known = arduino.pin(pin).value;
+                ind.textContent = known ? 'HIGH' : 'LOW';
+                ind.className   = 'h-state ' + (known ? 'h-st-hi' : 'h-st-lo');
                 // LHS: value → buttons (reads away from board: label | mode | buttons | value)
                 isLeft ? controlsEl.append(ind, hiBtn, loBtn)
                        : controlsEl.append(hiBtn, loBtn, ind);
@@ -118,12 +116,11 @@ function buildControlPanel(arduino, boardName, boards) {
                 const val = el('span', 'h-val'); val.textContent = '0';
                 isLeft ? controlsEl.append(val, bar)
                        : controlsEl.append(bar, val);
-                // Poll at 50 ms; onChange fires on every new value received from Arduino.
-                // All connected browsers get the same broadcast, so bars stay in sync.
+                // Poll at 50 ms; 'change' fires on each meaningful new value.
                 arduino.analogRead(pin, 50);
-                arduino.onChange(pin, v => {
-                    fill.style.width = (v / arduino.analogMax * 100).toFixed(1) + '%';
-                    val.textContent = v;
+                arduino.pin(pin).on('change', ({ value }) => {
+                    fill.style.width = (value / arduino.analogMax * 100).toFixed(1) + '%';
+                    val.textContent = value;
                 });
                 break;
             }
@@ -193,7 +190,7 @@ function buildControlPanel(arduino, boardName, boards) {
     // ---------------------------------------------------------------
     // Wrapper returned immediately so the caller can remove it on board change
     const wrapper = document.createElement('div');
-    document.body.appendChild(wrapper);
+    (document.querySelector('main') || document.body).appendChild(wrapper);
 
     const img = new Image();
     img.src = image;
@@ -230,10 +227,14 @@ function buildControlPanel(arduino, boardName, boards) {
 
         const totalW = CARD_W + imgW + CARD_W;
 
-        // Outer container (inside the wrapper)
+        // Outer container (inside the wrapper). EDGE_PAD keeps breathing room
+        // between the right card column and the window edge when the panel is
+        // wider than the window (margins aren't counted in scroll extent, so
+        // the padding is baked into the container width instead).
+        const EDGE_PAD = 24;
         const container = el('div', 'pinout-container');
         container.style.cssText =
-            `position:relative;width:${totalW}px;height:${imgH}px;margin-top:10px;`;
+            `position:relative;width:${totalW + EDGE_PAD}px;height:${imgH}px;margin-top:10px;`;
         wrapper.appendChild(container);
 
         // Board image, centred between the two card columns
@@ -268,14 +269,14 @@ function buildControlPanel(arduino, boardName, boards) {
             const lineX = side === 'left' ? CARD_W : CARD_W + imgW;
             addSVG('line', {
                 x1: lineX, y1: pinY, x2: pinX, y2: pinY,
-                stroke: '#4a4a4a', 'stroke-width': 1,
+                stroke: '#c9c2b2', 'stroke-width': 1,      // house hairline
             });
 
-            // Pin dot — ring + filled centre
+            // Pin dot — ring + filled centre (house amber)
             addSVG('circle', { cx: pinX, cy: pinY, r: 4.5,
-                fill: 'none', stroke: '#fa0', 'stroke-width': 1.5 });
+                fill: 'none', stroke: '#E8A33D', 'stroke-width': 1.5 });
             addSVG('circle', { cx: pinX, cy: pinY, r: 2,
-                fill: '#fa0' });
+                fill: '#E8A33D' });
 
             // Card
             const card = buildCard(pinDef, side);

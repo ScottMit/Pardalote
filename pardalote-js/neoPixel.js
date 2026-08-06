@@ -1,7 +1,7 @@
 // ==============================================================
 // neoPixel.js
 // Pardalote NeoPixel Extension
-// Version v1.0
+// Part of Pardalote — version in package.json
 // by Scott Mitchell
 // GPL-3.0 License
 //
@@ -24,12 +24,14 @@
 
 const DEVICE_NEO_PIXEL = 200;
 
-const CMD_NEO_INIT       = 0x0A;
-const CMD_NEO_SET_PIXEL  = 0x0B;
-const CMD_NEO_FILL       = 0x0C;
-const CMD_NEO_CLEAR      = 0x0D;
-const CMD_NEO_BRIGHTNESS = 0x0E;
-const CMD_NEO_SHOW       = 0x0F;
+// 0x5C+ — extension cmds must stay out of the core range 0x00–0x0F
+// (CMD_MESSAGE is routed by cmd alone; 0x0B used to swallow SET_PIXEL).
+const CMD_NEO_INIT       = 0x5C;
+const CMD_NEO_SET_PIXEL  = 0x5D;
+const CMD_NEO_FILL       = 0x5E;
+const CMD_NEO_CLEAR      = 0x5F;
+const CMD_NEO_BRIGHTNESS = 0x60;
+const CMD_NEO_SHOW       = 0x61;
 
 // Pixel type flags — match Adafruit_NeoPixel
 const NEO_RGB    = 0x06;
@@ -361,19 +363,19 @@ class NeoPixel extends Extension {
 
     // Minimum colour distance to trigger a send. Higher values send less,
     // at the cost of visible quantisation during smooth fades.
-    setThreshold(t) { this.threshold = Math.max(0, t); return this; }
+    setWriteThreshold(t) { this.threshold = Math.max(0, t); return this; }
 
     // Minimum ms between show() flushes — debounces rapid draw-loop calls.
     // Default 20 ms. Lower for snappier response on healthy networks;
     // raise to 50 ms+ if you still see queue-buildup lag on slow links.
     // Set to 0 to disable debouncing entirely (every show() flushes).
-    // (Matches the Servo extension's setThrottle() naming convention.)
-    setThrottle(ms) { this.showThrottle = Math.max(0, ms); return this; }
+    // (Matches the Servo extension's setWriteThrottle() naming convention.)
+    setWriteThrottle(ms) { this.showThrottle = Math.max(0, ms); return this; }
 
     // -------------------------------------------------------------------
     // State snapshot — returns the cached JS-side state synchronously.
     // No round-trip to the Arduino; everything here is what JS already
-    // tracks. Mirrors getState() on Servo, MPU, Ultrasonic, and Camera.
+    // tracks. Mirrors getState() on Servo, IMU, Ultrasonic, and Camera.
     // -------------------------------------------------------------------
     getState() {
         return {

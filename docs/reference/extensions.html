@@ -10,9 +10,9 @@
 </head>
 <body data-nav="reference">
 
-<nav class="site-nav speckled">
+<nav class="site-nav">
   <a class="logo" href="../index.html">
-    <img src="../assets/logo.svg" width="30" height="30" alt="">
+    <img src="../assets/logo.svg" width="26" height="26" alt="">
     Pardalote
   </a>
   <div class="links">
@@ -27,52 +27,75 @@
 <div class="wrap">
   <div class="ref-layout">
 <aside class="ref-nav">
-  <h4>Getting started</h4>
+  <button class="ref-nav-toggle" aria-expanded="false" aria-controls="ref-nav-links">Contents</button>
+  <div class="ref-nav-links" id="ref-nav-links">
+  <h4><a href="index.html">Getting started</a></h4>
   <a href="index.html">Overview</a>
   <a href="installation.html">Installation</a>
   <a href="wifi.html">WiFi configuration</a>
-  <h4>Core — JavaScript</h4>
-  <a href="connecting.html#connect">connect() / events</a>
+  <a href="ai-coding.html">Coding with AI</a>
+  <h4><a href="connecting.html">Core — JavaScript</a></h4>
+  <a href="connecting.html#connect">connect()</a>
+  <a href="connecting.html#on">on()</a>
+  <a href="connecting.html#disconnect">disconnect()</a>
+  <a href="connecting.html#getstatus">getStatus()</a>
   <a href="pins.html#pinmode">pinMode()</a>
-  <a href="pins.html#digitalwrite">digitalWrite() / analogWrite()</a>
-  <a href="pins.html#analogread">analogRead() / digitalRead()</a>
-  <a href="pins.html#onchange">onChange()</a>
+  <a href="pins.html#digitalwrite">digitalWrite()</a>
+  <a href="pins.html#analogwrite">analogWrite()</a>
+  <a href="pins.html#setwritethrottle--setwritethreshold">setWriteThrottle() / setWriteThreshold()</a>
+  <a href="pins.html#analogread">analogRead()</a>
+  <a href="pins.html#digitalread">digitalRead()</a>
+  <a href="pins.html#setreadinterval--setreadthreshold">setReadInterval() / setReadThreshold()</a>
+  <a href="pins.html#pin--the-listening-handle">pin() — the listening handle</a>
+  <a href="pins.html#end--endall">end() / endAll()</a>
   <a href="pins.html#pin-aliases">Pin aliases</a>
-  <h4>Core — Arduino</h4>
-  <a href="arduino.html#pardalotebegin">Pardalote.begin() / run()</a>
-  <a href="arduino.html#pardaloteshare">share() / send()</a>
-  <a href="arduino.html#the-actuator-objects">Reading actuators</a>
-  <h4>Extensions</h4>
+  <h4><a href="arduino.html">Core — Arduino</a></h4>
+  <a href="arduino.html#pardalotebegin">Pardalote.begin()</a>
+  <a href="arduino.html#pardaloterun">Pardalote.run()</a>
+  <a href="arduino.html#pardaloteshare">Pardalote.share()</a>
+  <a href="arduino.html#pardalotesend">Pardalote.send()</a>
+  <a href="arduino.html#when-not-to-share">When not to share</a>
+  <h4><a href="messaging.html">Core — Messaging</a></h4>
+  <a href="messaging.html#javascript-to-arduino">JavaScript to Arduino</a>
+  <a href="messaging.html#arduino-to-javascript">Arduino to JavaScript</a>
+  <a href="messaging.html#retain-and-broadcast">Retain and broadcast</a>
+  <a href="messaging.html#inspecting-all-traffic">Inspecting all traffic</a>
+  <h4><a href="extensions.html">Extensions</a></h4>
   <a href="extensions.html">Overview</a>
+  <a href="extensions.html#creating-extension-objects-in-the-firmware">Creating extension objects in the firmware</a>
+  <a href="extensions.html#reading-and-writing-actuators-from-the-sketch">Reading and writing actuators from the sketch</a>
   <a href="servo.html">Servo</a>
   <a href="stepper.html">Stepper</a>
   <a href="bus-servo.html">Bus servo</a>
   <a href="groups.html">Groups</a>
   <a href="neopixel.html">NeoPixel</a>
   <a href="ultrasonic.html">Ultrasonic</a>
-  <a href="mpu.html">MPU / IMU</a>
+  <a href="encoder.html">Rotary encoder</a>
+  <a href="imu.html">IMU</a>
   <a href="camera.html">Camera</a>
-  <h4>Under the hood</h4>
+  <h4><a href="protocol.html">Under the hood</a></h4>
   <a href="protocol.html">Protocol</a>
+  <a href="pin-capabilities.html">Pin capabilities</a>
   <a href="troubleshooting.html">Troubleshooting</a>
+  </div>
 </aside>
     <main class="ref-main">
       <h1>Extensions overview</h1>
       <p class="lede">Extensions add support for hardware devices — servos, steppers, LED strips, sensors and cameras. Register them in JS, include them in the sketch.</p>
 <h2 id="using-extensions-in-javascript">Using extensions in JavaScript</h2>
 <p>Register extensions before connecting, and use them by name:</p>
-<div class="code-ex"><div class="bar">sketch.js — register and use extensions</div><pre><code><span class="kd">const</span> <span class="nx">arduino</span> <span class="o">=</span> <span class="ow">new</span> <span class="nx">Arduino</span><span class="p">();</span>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><div class="bar">sketch.js — register and use extensions</div><pre><code><span class="kd">const</span><span class="w"> </span><span class="nx">arduino</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">Arduino</span><span class="p">();</span>
 
-<span class="nx">arduino</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;myServo&#39;</span><span class="p">,</span> <span class="ow">new</span> <span class="nx">Servo</span><span class="p">());</span>
-<span class="nx">arduino</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;strip&#39;</span><span class="p">,</span>   <span class="ow">new</span> <span class="nx">NeoPixel</span><span class="p">());</span>
-<span class="nx">arduino</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;sonar&#39;</span><span class="p">,</span>   <span class="ow">new</span> <span class="nx">Ultrasonic</span><span class="p">());</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;myServo&#39;</span><span class="p">,</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">Servo</span><span class="p">());</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;strip&#39;</span><span class="p">,</span><span class="w">   </span><span class="ow">new</span><span class="w"> </span><span class="nx">NeoPixel</span><span class="p">());</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;sonar&#39;</span><span class="p">,</span><span class="w">   </span><span class="ow">new</span><span class="w"> </span><span class="nx">Ultrasonic</span><span class="p">());</span>
 
 <span class="nx">arduino</span><span class="p">.</span><span class="nx">connect</span><span class="p">(</span><span class="s1">&#39;192.168.1.42&#39;</span><span class="p">);</span>
 
-<span class="nx">arduino</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;ready&#39;</span><span class="p">,</span> <span class="p">()</span> <span class="p">=&gt;</span> <span class="p">{</span>
-    <span class="nx">arduino</span><span class="p">.</span><span class="nx">myServo</span><span class="p">.</span><span class="nx">attach</span><span class="p">(</span><span class="mf">9</span><span class="p">);</span>
-    <span class="nx">arduino</span><span class="p">.</span><span class="nx">strip</span><span class="p">.</span><span class="nx">init</span><span class="p">(</span><span class="mf">6</span><span class="p">,</span> <span class="mf">30</span><span class="p">);</span>
-    <span class="nx">arduino</span><span class="p">.</span><span class="nx">sonar</span><span class="p">.</span><span class="nx">attach</span><span class="p">(</span><span class="mf">7</span><span class="p">,</span> <span class="mf">8</span><span class="p">);</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;ready&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">myServo</span><span class="p">.</span><span class="nx">attach</span><span class="p">(</span><span class="mf">9</span><span class="p">);</span>
+<span class="w">    </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">strip</span><span class="p">.</span><span class="nx">init</span><span class="p">(</span><span class="mf">6</span><span class="p">,</span><span class="w"> </span><span class="mf">30</span><span class="p">);</span>
+<span class="w">    </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">sonar</span><span class="p">.</span><span class="nx">attach</span><span class="p">(</span><span class="mf">7</span><span class="p">,</span><span class="w"> </span><span class="mf">8</span><span class="p">);</span>
 <span class="p">});</span>
 </code></pre></div>
 <p>Each extension automatically gets a logical ID based on its type. Multiple instances of the same type are supported.</p>
@@ -85,26 +108,160 @@
 <span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;busServo.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
 <span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;neoPixel.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
 <span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;ultrasonic.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
-<span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;mpu.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
+<span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;imu.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
 <span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;camera.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
 <span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;sketch.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
 </code></pre></div>
 <h2 id="enabling-extensions-in-the-firmware">Enabling extensions in the firmware</h2>
 <p>Extensions are opt-in on the Arduino side too. Add the headers you need to your sketch:</p>
-<div class="code-ex"><div class="bar">sketch.ino — opt-in extensions</div><pre><code><span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;Pardalote.h&gt;</span><span class="cp"></span>
-<span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;PardaloteServo.h&gt;</span><span class="cp"></span>
-<span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;PardaloteNeoPixel.h&gt;</span><span class="cp"></span>
+<div class="code-ex"><span class="lang-badge lang-arduino">Arduino</span><div class="bar">sketch.ino — opt-in extensions</div><pre><code><span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;Pardalote.h&gt;</span>
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;PardaloteServo.h&gt;</span>
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;PardaloteNeoPixel.h&gt;</span>
 <span class="c1">// #include &lt;PardaloteStepper.h&gt;</span>
 <span class="c1">// #include &lt;PardaloteBusServo.h&gt;</span>
 <span class="c1">// #include &lt;PardaloteUltrasonic.h&gt;</span>
-<span class="c1">// #include &lt;PardaloteMPU.h&gt;</span>
+<span class="c1">// #include &lt;PardaloteIMU.h&gt;</span>
 <span class="c1">// #define CAMERA_MODEL_XIAO_ESP32S3</span>
 <span class="c1">// #include &lt;PardaloteCamera.h&gt;</span>
 
-<span class="kt">void</span><span class="w"> </span><span class="nf">setup</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">begin</span><span class="p">();</span><span class="w"> </span><span class="p">}</span><span class="w"></span>
-<span class="kt">void</span><span class="w"> </span><span class="nf">loop</span><span class="p">()</span><span class="w">  </span><span class="p">{</span><span class="w"> </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">run</span><span class="p">();</span><span class="w">   </span><span class="p">}</span><span class="w"></span>
+<span class="kt">void</span><span class="w"> </span><span class="nf">setup</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">begin</span><span class="p">();</span><span class="w"> </span><span class="p">}</span>
+<span class="kt">void</span><span class="w"> </span><span class="nf">loop</span><span class="p">()</span><span class="w">  </span><span class="p">{</span><span class="w"> </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">run</span><span class="p">();</span><span class="w">   </span><span class="p">}</span>
 </code></pre></div>
 <p>Each extension self-registers when included — no other changes required. Only the extensions you <code>#include</code> get compiled into the binary.</p>
+<h2 id="creating-extension-objects-in-the-firmware">Creating extension objects in the firmware</h2>
+<p>Extension objects don't have to be created in the browser with <code>arduino.add()</code> — <strong>the sketch can create them too</strong>, and every browser receives them automatically. <code>PardaloteServo.attach(&quot;pan&quot;, 9)</code> on the Arduino makes <code>arduino.pan</code> appear in every connected browser as a full <code>Servo</code> instance, identical to one created with <code>add()</code> — present before <code>'ready'</code> fires, and pushed to browsers that connect later.</p>
+<p>Every multi-instance device supports this — Servo, Stepper, Bus servo, NeoPixel, Ultrasonic and IMU (only the singleton Camera is browser-only):</p>
+<div class="sig sig-ino">PardaloteServo.<span class="fn">attach</span>(name, pin, [minPulse], [maxPulse])</div>
+<div class="sig sig-ino">PardaloteStepper.<span class="fn">attach</span>(name, step, dir, [en]) · <span class="fn">attach4wire</span>(name, p1, p2, p3, p4)</div>
+<div class="sig sig-ino">PardaloteBusServo.<span class="fn">attach</span>(name, servoId, [series])</div>
+<div class="sig sig-ino">PardaloteNeoPixel.<span class="fn">attach</span>(name, pin, count, [type])</div>
+<div class="sig sig-ino">PardaloteUltrasonic.<span class="fn">attach</span>(name, trig, [echo])</div>
+<div class="sig sig-ino">PardaloteIMU.<span class="fn">attach</span>(name, [model], [addr], [sda], [scl])</div>
+<p><code>name</code> is the browser-side handle (<code>arduino.&lt;name&gt;</code>, max 15 chars). Each <code>attach</code> <strong>returns the logical id</strong> used by the sketch-side calls below, or −1 if no slot is free.</p>
+<div class="code-ex"><span class="lang-badge lang-arduino">Arduino</span><div class="bar">sketch.ino — the sketch creates a servo</div><pre><code><span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;Pardalote.h&gt;</span>
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;PardaloteServo.h&gt;</span>
+
+<span class="kt">int</span><span class="w"> </span><span class="n">pan</span><span class="p">;</span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">setup</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">begin</span><span class="p">();</span>
+<span class="w">    </span><span class="n">pan</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">PardaloteServo</span><span class="p">.</span><span class="n">attach</span><span class="p">(</span><span class="s">&quot;pan&quot;</span><span class="p">,</span><span class="w"> </span><span class="mi">9</span><span class="p">);</span><span class="w">   </span><span class="c1">// arduino.pan now exists in every browser</span>
+<span class="w">    </span><span class="n">PardaloteServo</span><span class="p">.</span><span class="n">write</span><span class="p">(</span><span class="n">pan</span><span class="p">,</span><span class="w"> </span><span class="mi">90</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div>
+<p><strong>Creating an extension object <em>is</em> sharing it</strong> — unlike raw pins there's no separate <code>share()</code> step, because a Pardalote extension has no life outside Pardalote. <code>arduino.on('share', ({ name, extension }) =&gt; …)</code> fires the moment it appears; calling <code>attach</code> again with the same name reuses the same object; names that would collide with the browser core API (like <code>&quot;connect&quot;</code>) are refused with a console warning. A device that should stay private to the sketch shouldn't go through Pardalote at all — drive it with the plain library directly (a raw <code>Servo</code> on its own pin, a raw <code>SCServo</code> bus on its own UART), the way unshared pins just use <code>pinMode()</code>.</p>
+<h2 id="reading-and-writing-actuators-from-the-sketch">Reading and writing actuators from the sketch</h2>
+<p><code>share</code>/<code>send</code> cover raw pins. For the <strong>extension actuators</strong> — browser-created or sketch-created — each type gives the sketch a small <strong>bus object</strong> (<code>PardaloteServo</code>, <code>PardaloteStepper</code>, <code>PardaloteBusServo</code>). The browser and the sketch share the same actuator (last writer wins), just as they share raw pins. Everything is addressed by <strong>logical id</strong> — what <code>attach</code> returns, and the same id the browser and groups use.</p>
+<table>
+<thead>
+<tr>
+<th>Object</th>
+<th><code>scan()</code> returns</th>
+<th><code>read(id)</code> returns</th>
+<th><code>id</code> is</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>PardaloteServo</code></td>
+<td>attached servo ids</td>
+<td>angle (0–180)</td>
+<td>logical id (<code>arduino.add()</code> order, or returned by sketch <code>attach</code>)</td>
+</tr>
+<tr>
+<td><code>PardaloteStepper</code></td>
+<td>attached stepper ids</td>
+<td>position (steps)</td>
+<td>logical id</td>
+</tr>
+<tr>
+<td><code>PardaloteBusServo</code></td>
+<td>responding <strong>hardware</strong> ids on the bus (discovery)</td>
+<td>position (counts)</td>
+<td>logical id (returned by <code>attach</code>)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="scan">scan()</h3>
+<p>Lists what's there.</p>
+<div class="sig sig-ino">Pardalote<i>Type</i>.<span class="fn">scan</span>(buffer, maxCount)</div>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>buffer</code></td>
+<td>int[] / uint8_t[]</td>
+<td>Array to fill with ids.</td>
+</tr>
+<tr>
+<td><code>maxCount</code></td>
+<td>int</td>
+<td>Size of the array.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns</strong> the number of ids written. For <code>PardaloteBusServo</code>, <code>scan()</code> pings the bus and reports the <strong>hardware</strong> ids that respond — that's discovery; <code>attach()</code> the ones you want to drive, then address them by the logical id it returns.</p>
+<div class="code-ex"><span class="lang-badge lang-arduino">Arduino</span><pre><code><span class="kt">int</span><span class="w"> </span><span class="n">ids</span><span class="p">[</span><span class="mi">8</span><span class="p">];</span>
+<span class="kt">int</span><span class="w"> </span><span class="n">n</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">PardaloteServo</span><span class="p">.</span><span class="n">scan</span><span class="p">(</span><span class="n">ids</span><span class="p">,</span><span class="w"> </span><span class="mi">8</span><span class="p">);</span>
+<span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">n</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="o">++</span><span class="p">)</span><span class="w"> </span><span class="n">Serial</span><span class="p">.</span><span class="n">println</span><span class="p">(</span><span class="n">PardaloteServo</span><span class="p">.</span><span class="n">read</span><span class="p">(</span><span class="n">ids</span><span class="p">[</span><span class="n">i</span><span class="p">]));</span>
+</code></pre></div>
+<h3 id="read">read()</h3>
+<p>Reads one actuator's position by logical id.</p>
+<div class="sig sig-ino">Pardalote<i>Type</i>.<span class="fn">read</span>(id)</div>
+<p><strong>Returns</strong> angle (servo), steps (stepper), or counts (bus servo); negative on failure.</p>
+<div class="code-ex"><span class="lang-badge lang-arduino">Arduino</span><pre><code><span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;Pardalote.h&gt;</span>
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;PardaloteBusServo.h&gt;</span>
+
+<span class="kt">int</span><span class="w"> </span><span class="n">wrist</span><span class="p">;</span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">setup</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">begin</span><span class="p">();</span>
+<span class="w">    </span><span class="n">wrist</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">PardaloteBusServo</span><span class="p">.</span><span class="n">attach</span><span class="p">(</span><span class="s">&quot;wrist&quot;</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">);</span><span class="w">   </span><span class="c1">// adopt bus id 1 → logical id</span>
+<span class="p">}</span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">loop</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">run</span><span class="p">();</span>
+<span class="w">    </span><span class="kt">int</span><span class="w"> </span><span class="n">pos</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">PardaloteBusServo</span><span class="p">.</span><span class="n">read</span><span class="p">(</span><span class="n">wrist</span><span class="p">);</span><span class="w">        </span><span class="c1">// logical id → position (counts)</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">pos</span><span class="w"> </span><span class="o">&gt;=</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="n">digitalWrite</span><span class="p">(</span><span class="n">LED_BUILTIN</span><span class="p">,</span><span class="w"> </span><span class="n">pos</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mi">2048</span><span class="w"> </span><span class="o">?</span><span class="w"> </span><span class="n">HIGH</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">LOW</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div>
+<h3 id="write-and-friends">write() and friends</h3>
+<p>The same objects command the actuators, all by logical id:</p>
+<div class="code-ex"><span class="lang-badge lang-arduino">Arduino</span><pre><code><span class="n">PardaloteServo</span><span class="p">.</span><span class="n">write</span><span class="p">(</span><span class="n">id</span><span class="p">,</span><span class="w"> </span><span class="mi">90</span><span class="p">);</span><span class="w">            </span><span class="c1">// angle 0–180</span>
+<span class="n">PardaloteServo</span><span class="p">.</span><span class="n">writeTimed</span><span class="p">(</span><span class="n">id</span><span class="p">,</span><span class="w"> </span><span class="mi">90</span><span class="p">,</span><span class="w"> </span><span class="mi">1000</span><span class="p">);</span><span class="w"> </span><span class="c1">// over 1 s (board-interpolated)</span>
+<span class="n">PardaloteServo</span><span class="p">.</span><span class="n">stop</span><span class="p">(</span><span class="n">id</span><span class="p">);</span>
+
+<span class="n">PardaloteStepper</span><span class="p">.</span><span class="n">moveTo</span><span class="p">(</span><span class="n">id</span><span class="p">,</span><span class="w"> </span><span class="mi">2000</span><span class="p">);</span><span class="w">       </span><span class="c1">// steps</span>
+<span class="n">PardaloteStepper</span><span class="p">.</span><span class="n">move</span><span class="p">(</span><span class="n">id</span><span class="p">,</span><span class="w"> </span><span class="mi">-400</span><span class="p">);</span>
+<span class="n">PardaloteStepper</span><span class="p">.</span><span class="n">stop</span><span class="p">(</span><span class="n">id</span><span class="p">);</span>
+
+<span class="n">PardaloteBusServo</span><span class="p">.</span><span class="n">write</span><span class="p">(</span><span class="n">id</span><span class="p">,</span><span class="w"> </span><span class="mi">2048</span><span class="p">);</span><span class="w">       </span><span class="c1">// counts (optional speed, acc)</span>
+<span class="n">PardaloteBusServo</span><span class="p">.</span><span class="n">torque</span><span class="p">(</span><span class="n">id</span><span class="p">,</span><span class="w"> </span><span class="nb">false</span><span class="p">);</span><span class="w">     </span><span class="c1">// release / hold</span>
+</code></pre></div>
+<p>All three run through the <strong>same command path the browser uses</strong> — so they respect soft limits, cancel timed moves, and auto-echo the commanded value back to the browser so its record stays in sync.</p>
+<h3 id="status-helpers">Status helpers</h3>
+<div class="code-ex"><span class="lang-badge lang-arduino">Arduino</span><pre><code><span class="n">PardaloteServo</span><span class="p">.</span><span class="n">isMoving</span><span class="p">(</span><span class="n">id</span><span class="p">);</span><span class="w">          </span><span class="c1">// timed move in progress</span>
+<span class="n">PardaloteStepper</span><span class="p">.</span><span class="n">distanceToGo</span><span class="p">(</span><span class="n">id</span><span class="p">);</span>
+<span class="n">PardaloteStepper</span><span class="p">.</span><span class="n">isRunning</span><span class="p">(</span><span class="n">id</span><span class="p">);</span>
+<span class="n">PardaloteBusServo</span><span class="p">.</span><span class="n">feedback</span><span class="p">(</span><span class="n">id</span><span class="p">);</span><span class="w">       </span><span class="c1">// position, load, voltage, temperature in one read</span>
+<span class="n">PardaloteBusServo</span><span class="p">.</span><span class="n">isMoving</span><span class="p">(</span><span class="n">id</span><span class="p">);</span><span class="w">       </span><span class="c1">// the servo&#39;s own Moving flag</span>
+<span class="n">PardaloteBusServo</span><span class="p">.</span><span class="n">arrived</span><span class="p">(</span><span class="n">id</span><span class="p">);</span>
+</code></pre></div>
+<p>For bus servos, <code>isMoving(id)</code> / <code>arrived(id)</code> read the servo's own <strong>Moving flag</strong> — its honest &quot;am I still moving?&quot;, accounting for deadband and settling. It's one bus read (the servo can't notify you — you ask when you want to know):</p>
+<div class="code-ex"><span class="lang-badge lang-arduino">Arduino</span><div class="bar">Example — wait for a bus servo to arrive</div><pre><code><span class="n">PardaloteBusServo</span><span class="p">.</span><span class="n">write</span><span class="p">(</span><span class="n">wrist</span><span class="p">,</span><span class="w"> </span><span class="mi">3000</span><span class="p">);</span>
+<span class="k">while</span><span class="w"> </span><span class="p">(</span><span class="n">PardaloteBusServo</span><span class="p">.</span><span class="n">isMoving</span><span class="p">(</span><span class="n">wrist</span><span class="p">))</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="cm">/* do other work */</span><span class="w"> </span><span class="p">}</span>
+<span class="c1">// arrived — trigger the next thing</span>
+</code></pre></div>
+<ul>
+<li>A <strong>bus servo read/scan/write is a blocking bus transaction</strong> — fine in <code>setup()</code> or a throttled <code>loop()</code>, not a tight high-rate loop competing with the browser's own polling.</li>
+<li><strong>Sketch writes update the browser's record automatically.</strong> A sketch write echoes the commanded value to the browser exactly as if the browser had issued it — a PWM servo sets the browser's <code>angle</code>, a stepper or bus servo sets its <code>target</code>. The live <code>position</code> feedback is separate — that still comes from polling.</li>
+</ul>
 <h2 id="the-extensions">The extensions</h2>
 <table>
 <thead>
@@ -141,7 +298,7 @@
 <td>4</td>
 </tr>
 <tr>
-<td><a href="mpu.html">MPU / IMU</a></td>
+<td><a href="imu.html">IMU</a></td>
 <td>InvenSense MPU and STMicro LSM6 families</td>
 <td>2</td>
 </tr>
@@ -152,7 +309,7 @@
 </tr>
 </tbody>
 </table>
-<p><a href="groups.html">Groups</a> let you drive several actuators together — one message, coordinated arrival.</p>
+<p><a href="groups.html">Groups</a> let you drive several actuators together — one message, coordinated arrival, and coordinated <a href="groups.html#gesture">gestures</a>.</p>
 <h2 id="rolling-your-own">Rolling your own</h2>
 <p>An extension is a JS file paired with an Arduino header: the JS side sends commands over the shared protocol, the Arduino side registers handlers for them. The built-in extensions are the best templates — pick the one closest to your hardware and start from its source. See <a href="protocol.html">Protocol</a> for the frame format.</p>
 
@@ -160,7 +317,7 @@
   </div>
 </div>
 
-<footer class="site-footer speckled">
+<footer class="site-footer">
   <div class="wrap">
     <span>Pardalote — created by Scott Mitchell for design education and creative technology.</span>
     <span><a href="index.html">Reference</a> · <a href="https://github.com/ScottMit/Pardalote">GitHub</a> · GPL-3.0</span>

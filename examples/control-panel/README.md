@@ -27,7 +27,7 @@ No additional components are needed to use the panel — just an Arduino with Pa
 
 ### 1. Upload the firmware
 
-1. In Arduino IDE: **File → Examples → Pardalote → basic-LED** (or any other Pardalote example that includes the extensions you need)
+1. In Arduino IDE: **File → Examples → Pardalote → minimal-pardalote** (or any other Pardalote example that includes the extensions you need)
 2. Select your board and upload
 3. Open the Serial Monitor at 115200 baud — on first boot Pardalote asks for your WiFi credentials:
    ```
@@ -53,15 +53,10 @@ No additional components are needed to use the panel — just an Arduino with Pa
    - **UNO R4 WiFi:** scrolls across the LED matrix
    - **ESP32:** printed in the Serial Monitor
 
-### 2. Set the default IP
+### 2. No code editing needed
 
-**Optional** Open `sketch.js` and update the IP address at the top:
-
-```javascript
-const IP = '192.168.1.42';
-```
-
-This pre-fills the IP field when the page loads — you can skip this step and change it in the browser.
+The IP is entered on the page, and the browser remembers it (along with the
+last board shown) — a returning visit reconnects automatically.
 
 ### 3. Open the panel
 
@@ -73,7 +68,9 @@ Open `index.html` in a browser, then click **Connect**.
 
 ### Connecting
 
-Enter your Arduino's IP address in the field at the top (if it's not already there) and click **Connect**. The status indicator turns green when the connection is ready.
+Enter your Arduino's IP address in the **Board IP** field (if it's not already there) and click **Connect**. The status line reads `ready` once the connection is up; **Disconnect** stops it and pauses auto-reconnect.
+
+**No WiFi? Use the cable.** Switch the dropdown from **WiFi** to **USB** and click **Connect** — the browser (Chrome or Edge) shows a port picker the first time and remembers your choice afterwards. The sketch side must start the serial transport: `Pardalote.begin(PARDALOTE_SERIAL)` (one commented line in `minimal-pardalote`). Everything else on the panel works identically.
 
 The board layout switches automatically to match the connected Arduino. If you want to view a different board layout, use the board selector dropdown.
 

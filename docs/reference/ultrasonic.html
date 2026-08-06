@@ -10,9 +10,9 @@
 </head>
 <body data-nav="reference">
 
-<nav class="site-nav speckled">
+<nav class="site-nav">
   <a class="logo" href="../index.html">
-    <img src="../assets/logo.svg" width="30" height="30" alt="">
+    <img src="../assets/logo.svg" width="26" height="26" alt="">
     Pardalote
   </a>
   <div class="links">
@@ -27,44 +27,67 @@
 <div class="wrap">
   <div class="ref-layout">
 <aside class="ref-nav">
-  <h4>Getting started</h4>
+  <button class="ref-nav-toggle" aria-expanded="false" aria-controls="ref-nav-links">Contents</button>
+  <div class="ref-nav-links" id="ref-nav-links">
+  <h4><a href="index.html">Getting started</a></h4>
   <a href="index.html">Overview</a>
   <a href="installation.html">Installation</a>
   <a href="wifi.html">WiFi configuration</a>
-  <h4>Core — JavaScript</h4>
-  <a href="connecting.html#connect">connect() / events</a>
+  <a href="ai-coding.html">Coding with AI</a>
+  <h4><a href="connecting.html">Core — JavaScript</a></h4>
+  <a href="connecting.html#connect">connect()</a>
+  <a href="connecting.html#on">on()</a>
+  <a href="connecting.html#disconnect">disconnect()</a>
+  <a href="connecting.html#getstatus">getStatus()</a>
   <a href="pins.html#pinmode">pinMode()</a>
-  <a href="pins.html#digitalwrite">digitalWrite() / analogWrite()</a>
-  <a href="pins.html#analogread">analogRead() / digitalRead()</a>
-  <a href="pins.html#onchange">onChange()</a>
+  <a href="pins.html#digitalwrite">digitalWrite()</a>
+  <a href="pins.html#analogwrite">analogWrite()</a>
+  <a href="pins.html#setwritethrottle--setwritethreshold">setWriteThrottle() / setWriteThreshold()</a>
+  <a href="pins.html#analogread">analogRead()</a>
+  <a href="pins.html#digitalread">digitalRead()</a>
+  <a href="pins.html#setreadinterval--setreadthreshold">setReadInterval() / setReadThreshold()</a>
+  <a href="pins.html#pin--the-listening-handle">pin() — the listening handle</a>
+  <a href="pins.html#end--endall">end() / endAll()</a>
   <a href="pins.html#pin-aliases">Pin aliases</a>
-  <h4>Core — Arduino</h4>
-  <a href="arduino.html#pardalotebegin">Pardalote.begin() / run()</a>
-  <a href="arduino.html#pardaloteshare">share() / send()</a>
-  <a href="arduino.html#the-actuator-objects">Reading actuators</a>
-  <h4>Extensions</h4>
+  <h4><a href="arduino.html">Core — Arduino</a></h4>
+  <a href="arduino.html#pardalotebegin">Pardalote.begin()</a>
+  <a href="arduino.html#pardaloterun">Pardalote.run()</a>
+  <a href="arduino.html#pardaloteshare">Pardalote.share()</a>
+  <a href="arduino.html#pardalotesend">Pardalote.send()</a>
+  <a href="arduino.html#when-not-to-share">When not to share</a>
+  <h4><a href="messaging.html">Core — Messaging</a></h4>
+  <a href="messaging.html#javascript-to-arduino">JavaScript to Arduino</a>
+  <a href="messaging.html#arduino-to-javascript">Arduino to JavaScript</a>
+  <a href="messaging.html#retain-and-broadcast">Retain and broadcast</a>
+  <a href="messaging.html#inspecting-all-traffic">Inspecting all traffic</a>
+  <h4><a href="extensions.html">Extensions</a></h4>
   <a href="extensions.html">Overview</a>
+  <a href="extensions.html#creating-extension-objects-in-the-firmware">Creating extension objects in the firmware</a>
+  <a href="extensions.html#reading-and-writing-actuators-from-the-sketch">Reading and writing actuators from the sketch</a>
   <a href="servo.html">Servo</a>
   <a href="stepper.html">Stepper</a>
   <a href="bus-servo.html">Bus servo</a>
   <a href="groups.html">Groups</a>
   <a href="neopixel.html">NeoPixel</a>
   <a href="ultrasonic.html">Ultrasonic</a>
-  <a href="mpu.html">MPU / IMU</a>
+  <a href="encoder.html">Rotary encoder</a>
+  <a href="imu.html">IMU</a>
   <a href="camera.html">Camera</a>
-  <h4>Under the hood</h4>
+  <h4><a href="protocol.html">Under the hood</a></h4>
   <a href="protocol.html">Protocol</a>
+  <a href="pin-capabilities.html">Pin capabilities</a>
   <a href="troubleshooting.html">Troubleshooting</a>
+  </div>
 </aside>
     <main class="ref-main">
       <h1>Ultrasonic</h1>
       <p class="lede">Up to 4 HC-SR04-style distance sensors, in 3-wire or 4-wire configurations, with polled reads in centimetres or inches.</p>
 <p>Requires <code>&lt;PardaloteUltrasonic.h&gt;</code> in the sketch. No third-party library needed. Examples assume:</p>
-<pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;sonar&#39;</span><span class="p">,</span> <span class="ow">new</span> <span class="nx">Ultrasonic</span><span class="p">());</span>
-</code></pre>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;sonar&#39;</span><span class="p">,</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">Ultrasonic</span><span class="p">());</span>
+</code></pre></div>
 <h2 id="attach">attach()</h2>
 <p>Attaches the sensor. Call inside <code>on('ready')</code>.</p>
-<div class="sig">arduino.sonar.<span class="fn">attach</span>(trig, [echo])</div>
+<div class="sig sig-js">arduino.sonar.<span class="fn">attach</span>(trig, [echo])</div>
 <table>
 <thead>
 <tr>
@@ -86,15 +109,15 @@
 </tr>
 </tbody>
 </table>
-<div class="code-ex"><div class="bar">Example — 3-wire and 4-wire</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">sonar</span><span class="p">.</span><span class="nx">attach</span><span class="p">(</span><span class="mf">7</span><span class="p">,</span> <span class="mf">8</span><span class="p">);</span>  <span class="c1">// 4-wire: trig 7, echo 8</span>
-<span class="nx">arduino</span><span class="p">.</span><span class="nx">sonar</span><span class="p">.</span><span class="nx">attach</span><span class="p">(</span><span class="mf">6</span><span class="p">);</span>     <span class="c1">// 3-wire: trig and echo on one pin</span>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><div class="bar">Example — 3-wire and 4-wire</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">sonar</span><span class="p">.</span><span class="nx">attach</span><span class="p">(</span><span class="mf">7</span><span class="p">,</span><span class="w"> </span><span class="mf">8</span><span class="p">);</span><span class="w">  </span><span class="c1">// 4-wire: trig 7, echo 8</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">sonar</span><span class="p">.</span><span class="nx">attach</span><span class="p">(</span><span class="mf">6</span><span class="p">);</span><span class="w">     </span><span class="c1">// 3-wire: trig and echo on one pin</span>
 </code></pre></div>
 <h2 id="detach">detach()</h2>
 <p>Releases the pins.</p>
-<div class="sig">arduino.sonar.<span class="fn">detach</span>()</div>
+<div class="sig sig-js">arduino.sonar.<span class="fn">detach</span>()</div>
 <h2 id="settimeout">setTimeout()</h2>
 <p>How long the Arduino waits for an echo before giving up. Maximum range follows from it: 30 ms ≈ 500 cm.</p>
-<div class="sig">arduino.sonar.<span class="fn">setTimeout</span>(ms)</div>
+<div class="sig sig-js">arduino.sonar.<span class="fn">setTimeout</span>(ms)</div>
 <table>
 <thead>
 <tr>
@@ -112,8 +135,8 @@
 </tbody>
 </table>
 <h2 id="read">read()</h2>
-<p>Reads the distance. Same poll-and-cache pattern as <code>analogRead()</code>: the first call starts a poll, later calls return the cached value — safe to call every frame.</p>
-<div class="sig">arduino.sonar.<span class="fn">read</span>([interval], [unit])</div>
+<p>Reads the distance. Same poll-and-cache pattern as <code>analogRead()</code>: the first call starts a poll, later calls return the cached value — safe to call every frame. The board runs the poll (one measurement per interval, however many browsers are connected) and only transmits readings that changed <strong>meaningfully</strong> — by at least the threshold.</p>
+<div class="sig sig-js">arduino.sonar.<span class="fn">read</span>([interval], [unit], [threshold])</div>
 <table>
 <thead>
 <tr>
@@ -133,19 +156,28 @@
 <td>constant</td>
 <td>Optional. <code>CM</code> or <code>INCH</code> — applies to all subsequent reads.</td>
 </tr>
+<tr>
+<td><code>threshold</code></td>
+<td>number</td>
+<td>Optional. Minimum change worth transmitting, in the sensor's units (<code>0</code> = default: <code>0.3</code> — the HC-SR04's noise floor). Per browser: other pages keep their own settings.</td>
+</tr>
 </tbody>
 </table>
 <p><strong>Returns</strong> the cached distance, or <code>-1</code> if the echo timed out (nothing in range).</p>
-<div class="code-ex"><div class="bar">Example — distance in a draw loop</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">sonar</span><span class="p">.</span><span class="nx">read</span><span class="p">(</span><span class="mf">200</span><span class="p">,</span> <span class="nx">CM</span><span class="p">);</span>   <span class="c1">// start polling every 200 ms, in cm</span>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><div class="bar">Example — distance in a draw loop</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">sonar</span><span class="p">.</span><span class="nx">read</span><span class="p">(</span><span class="mf">200</span><span class="p">,</span><span class="w"> </span><span class="nx">CM</span><span class="p">);</span><span class="w">        </span><span class="c1">// start polling every 200 ms, in cm</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">sonar</span><span class="p">.</span><span class="nx">read</span><span class="p">(</span><span class="mf">200</span><span class="p">,</span><span class="w"> </span><span class="nx">CM</span><span class="p">,</span><span class="w"> </span><span class="mf">0.5</span><span class="p">);</span><span class="w">   </span><span class="c1">// …only reporting changes of 0.5+ cm</span>
 
-<span class="kd">function</span> <span class="nx">draw</span><span class="p">()</span> <span class="p">{</span>
-    <span class="kd">let</span> <span class="nx">cm</span> <span class="o">=</span> <span class="nx">arduino</span><span class="p">.</span><span class="nx">sonar</span><span class="p">.</span><span class="nx">read</span><span class="p">();</span>          <span class="c1">// cached — no extra traffic</span>
-    <span class="k">if</span> <span class="p">(</span><span class="nx">cm</span> <span class="o">===</span> <span class="o">-</span><span class="mf">1</span><span class="p">)</span> <span class="p">{</span> <span class="cm">/* out of range */</span> <span class="p">}</span>
+<span class="kd">function</span><span class="w"> </span><span class="nx">draw</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="nx">cm</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">sonar</span><span class="p">.</span><span class="nx">read</span><span class="p">();</span><span class="w">          </span><span class="c1">// cached — no extra traffic</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nx">cm</span><span class="w"> </span><span class="o">===</span><span class="w"> </span><span class="o">-</span><span class="mf">1</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="cm">/* out of range */</span><span class="w"> </span><span class="p">}</span>
 <span class="p">}</span>
 </code></pre></div>
 <p>Point the sensor at flat, hard surfaces — fabric and foam absorb ultrasound and can read as &quot;nothing there&quot;.</p>
+<h2 id="setreadinterval--setreadthreshold">setReadInterval() / setReadThreshold()</h2>
+<p>Set the poll settings directly — applied immediately if polling, stored for the next <code>read()</code> otherwise.</p>
+<div class="sig sig-js">arduino.sonar.<span class="fn">setReadInterval</span>(ms) · arduino.sonar.<span class="fn">setReadThreshold</span>(units)</div>
 <h2 id="events">Events</h2>
-<div class="sig">arduino.sonar.<span class="fn">on</span>(event, handler)</div>
+<div class="sig sig-js">arduino.sonar.<span class="fn">on</span>(event, handler)</div>
 <table>
 <thead>
 <tr>
@@ -156,13 +188,13 @@
 </thead>
 <tbody>
 <tr>
-<td><code>'read'</code></td>
+<td><code>'change'</code></td>
 <td><code>{ distance, unit }</code></td>
-<td>A poll result arrives. <code>unit</code> is <code>CM</code> or <code>INCH</code>.</td>
+<td>The distance changed by at least the threshold. <code>unit</code> is <code>CM</code> or <code>INCH</code>.</td>
 </tr>
 </tbody>
 </table>
-<p>Shorthand: <code>onRead(fn)</code>.</p>
+<p>Shorthand: <code>onChange(fn)</code>.</p>
 <h2 id="properties-and-state">Properties and state</h2>
 <table>
 <thead>
@@ -178,15 +210,15 @@
 </tr>
 </tbody>
 </table>
-<div class="sig">arduino.sonar.<span class="fn">getState</span>()</div>
-<p><strong>Returns</strong> <code>{ trigPin, echoPin, attached, timeoutMs, distance, unit, interval }</code>.</p>
-<p>See also: <a href="../examples/ultrasonic-sensor-example.html">Ultrasonic example</a> · <a href="troubleshooting.html">Troubleshooting</a></p>
+<div class="sig sig-js">arduino.sonar.<span class="fn">getState</span>()</div>
+<p><strong>Returns</strong> <code>{ trigPin, echoPin, attached, timeoutMs, distance, unit, interval, threshold }</code>.</p>
+<p>See also: <a href="../examples/ultrasonic-sensor.html">Ultrasonic example</a> · <a href="troubleshooting.html">Troubleshooting</a></p>
 
     </main>
   </div>
 </div>
 
-<footer class="site-footer speckled">
+<footer class="site-footer">
   <div class="wrap">
     <span>Pardalote — created by Scott Mitchell for design education and creative technology.</span>
     <span><a href="index.html">Reference</a> · <a href="https://github.com/ScottMit/Pardalote">GitHub</a> · GPL-3.0</span>

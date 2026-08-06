@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Basic light switch — Pardalote</title>
+    <link rel="stylesheet" type="text/css" href="style.css">
+</head>
+<body>
+<main>
+    <div id="top">
+        <div class="heading">Basic light switch</div>
+        <div id="status">set ArduinoIP in sketch.js, then switch the board's built-in LED</div>
+    </div>
+
+    <div class="buttons">
+        <button id="led-on">Turn LED ON</button>
+        <button id="led-off">Turn LED OFF</button>
+    </div>
+
+    <p class="hint">
+        The simplest possible Pardalote page: two buttons calling
+        digitalWrite() on pin 13 over WiFi — no p5.js, no framework.
+    </p>
+</main>
+
+<script src="../../pardalote-js/pardalote.js"></script>
+<script src="sketch.js"></script>
+</body>
+</html>

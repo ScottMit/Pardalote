@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bus servos — Pardalote examples</title>
+<meta name="description" content="Drive smart serial servos — the kind used in robot arms. Pose a joint by hand, read it back, and replay it.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../css/site.css">
+</head>
+<body data-nav="examples">
+
+<nav class="site-nav">
+  <a class="logo" href="../index.html">
+    <img src="../assets/logo.svg" width="26" height="26" alt="">
+    Pardalote
+  </a>
+  <div class="links">
+    <a data-nav="home" href="../index.html">Home</a>
+    <a data-nav="download" href="../download.html">Download</a>
+    <a data-nav="examples" href="index.html">Examples</a>
+    <a data-nav="reference" href="../reference/index.html">Reference</a>
+    <a href="https://github.com/ScottMit/Pardalote">GitHub</a>
+  </div>
+</nav>
+
+<div class="page-head">
+  <div class="wrap">
+    <div class="crumb"><a href="index.html">Examples</a> / Bus servos</div>
+    <h1>Bus servos</h1>
+    <p>Drive smart serial servos — the kind used in robot arms. Pose a joint by hand, read it back, and replay it.</p>
+  </div>
+</div>
+
+<div class="wrap md-layout">
+  <div class="md-body">
+    <div class="tags" style="margin-bottom:.5rem;"><span class="tag lvl-adv">Advanced</span><span class="tag">Motion</span><span class="tag">Tool</span></div>
+    <div class="ex-meta-row">
+      <a class="btn btn-dark" href="https://github.com/ScottMit/Pardalote/tree/main/examples/bus-servos">View the code on GitHub</a>
+    </div>
+    <div class="screenshot-slot">Screenshot / video of this example — coming soon</div>
+<h1 id="bus-servos">Bus servos</h1>
+<p>Drive two Feetech ST-series serial bus servos from the browser: drag to
+command position, read live position / load / voltage / temperature back,
+and free a joint to hand-pose it (torque off) then re-hold it.</p>
+
+  </div>
+
+  <div class="md-body">
+<h2 id="hardware">Hardware</h2>
+<ul>
+<li>Arduino UNO R4 WiFi or ESP32</li>
+<li>A <strong>Waveshare Serial Bus Servo Driver</strong> board (or equivalent half-duplex
+UART adapter), wired to a hardware serial port:
+<ul>
+<li>UNO R4 WiFi → <strong>Serial1</strong> (D0 = RX, D1 = TX)</li>
+<li>ESP32 → Serial1 or Serial2 (set the pins with <code>configureBus({ rxPin, txPin })</code>)</li>
+</ul>
+</li>
+<li>Two <strong>Feetech STS3215</strong> (or other ST/SMS) servos, daisy-chained on the bus,
+set to IDs <strong>1</strong> and <strong>2</strong></li>
+<li>A servo power supply (6–7.4 V typical) — not the board's 5 V rail</li>
+</ul>
+<p>The STS3215 is the same servo used in the LeRobot SO-100/SO-101 arms.</p>
+<h3 id="setting-servo-ids">Setting servo IDs</h3>
+<p>Servos ship as ID 1. To renumber, put a <strong>single</strong> servo on the bus, attach
+it, and call <code>setId(newId)</code> — then repeat one at a time. <code>scan()</code> lists the
+IDs currently responding on the bus.</p>
+<h2 id="arduino">Arduino</h2>
+<p>Install the <strong>SCServo</strong> library (from the Waveshare Bus Servo Adapter wiki or
+the Feetech SDK — usually a ZIP, not in the Library Manager), then upload
+<strong>File → Examples → Pardalote → bus-servos</strong>. Note the IP the board reports.</p>
+<h2 id="browser">Browser</h2>
+<p>This is a <strong>tool</strong> — it works out of the box, no code editing:</p>
+<ol>
+<li>Open <code>index.html</code> in a browser.</li>
+<li>Type the board's IP into the <strong>Board IP</strong> row and press <strong>Connect</strong>.</li>
+<li>Set the two joints' bus IDs in the <strong>Servos</strong> row under the display
+(defaults 1 and 2) — changing an ID reconnects and re-attaches.</li>
+</ol>
+<p>The browser remembers the IP and IDs, so next visit it reconnects with one
+click.</p>
+<table>
+<thead>
+<tr>
+<th>Input</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Drag a dial</td>
+<td>command that joint's position</td>
+</tr>
+<tr>
+<td>Torque buttons or <code>1</code> / <code>2</code></td>
+<td>free that joint (torque off) to pose by hand; press again to re-hold</td>
+</tr>
+</tbody>
+</table>
+<h2 id="notes">Notes</h2>
+<ul>
+<li><strong>Positions are raw encoder counts</strong>, not degrees — ST series is 0–4095
+(centre 2048), SC series is 0–1023. <code>write()</code> takes counts; <code>writeDegrees()</code>
+and <code>.positionDegrees</code> convert (accurate for ST, nominal for SC).</li>
+<li><strong>Limits are enforced by the servo itself.</strong> <code>setLimits(min, max)</code> writes the
+servo's own Min/Max position registers, so the range holds even without the
+browser in the loop.</li>
+<li><strong>Torque off = teaching by demonstration.</strong> <code>disableTorque()</code> lets you move
+the joint by hand while <code>read()</code> streams the position back — the basis of the
+record-a-trajectory workflow in projects like LeRobot.</li>
+<li><strong>Calibration:</strong> move a joint to its zero pose (torque off), then
+<code>calibrate()</code> sets that as centre (like LeRobot centring on <code>resolution / 2</code>).</li>
+</ul>
+
+  </div>
+</div>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <span>Pardalote — created by Scott Mitchell for design education and creative technology.</span>
+    <span><a href="../reference/index.html">Reference</a> · <a href="https://github.com/ScottMit/Pardalote">GitHub</a> · GPL-3.0</span>
+  </div>
+</footer>
+
+<script src="../js/site.js"></script>
+</body>
+</html>

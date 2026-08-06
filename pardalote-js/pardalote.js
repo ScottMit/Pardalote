@@ -1,10 +1,19 @@
 // ==============================================================
 // pardalote.js
 // Arduino to JavaScript Binary WebSocket Communication
-// Version v1.0
+// Part of Pardalote — version in package.json
 // by Scott Mitchell
 // GPL-3.0 License
 // ==============================================================
+
+// Product version — the release humans see. Canonical copy lives in
+// package.json; mirrored here so a page can ask at runtime
+// (Arduino.version). The wire protocol versions independently below.
+const PARDALOTE_VERSION = '1.0.0';
+
+// Wire-protocol MAJOR this build speaks — compared against the
+// firmware's HELLO. A mismatch means the two sides cannot talk.
+const PROTOCOL_MAJOR_SUPPORTED = 1;
 
 // -------------------------------------------------------------------
 // Protocol constants — must match defs.h
@@ -21,6 +30,9 @@ const CMD_PING          = 0x08;
 const CMD_PONG          = 0x09;
 const CMD_SYNC_COMPLETE = 0x0A;  // Arduino → JS: all announce frames sent; triggers 'ready'
 const CMD_MESSAGE       = 0x0B;  // Both ways: user-defined key/value message (see the message channel)
+const CMD_AUTH          = 0x0C;  // JS → Arduino: connection key (payload). Arduino → JS: [reason]
+                                 // rejection (1 = key required, 2 = wrong key) — fires 'authFail'
+                                 // and stops auto-reconnect. WebSocket transport only.
 
 // Device-scoped share command — the VALUE is reserved across all extension
 // device IDs. Ar→JS: [logicalId] + payload: name. The core intercepts it
@@ -33,7 +45,7 @@ const INPUT          = 0;
 const OUTPUT         = 1;
 const INPUT_PULLUP   = 2;
 const INPUT_PULLDOWN = 3;
-const ANALOG_INPUT   = 8;
+const ANALOG_INPUT_MODE   = 8;
 
 // Digital values
 const LOW  = 0;
@@ -42,10 +54,54 @@ const HIGH = 1;
 // Pass as interval to stop a periodic read
 const END = -1;
 
+// Pass to connectSerial() to always show the port picker (vs silently reusing a
+// previously-granted port): arduino.connectSerial(PROMPT). Just { prompt: true }.
+const PROMPT = Object.freeze({ prompt: true });
+
 // Limit-switch ends — stepper.setLimitSwitch(LIMIT_MIN, pin) / (LIMIT_MAX, pin).
 // Named to match the firmware's LIMIT_MIN/LIMIT_MAX constants.
 const LIMIT_MIN = 0;
 const LIMIT_MAX = 1;
+
+// -------------------------------------------------------------------
+// Expressive motion — the shared gesture vocabulary (must match defs.h).
+//
+// A gesture is a per-actuator SEGMENT SCHEDULE the board plays locally.
+// These constants are the load-bearing shared part: the SAME numbered
+// easing table and flag bits are used by this file, every extension's
+// gesture() encoder, the firmware (shapeCurve), and the standalone
+// follower's PROGMEM gestures. Change a formula here → change it in
+// defs.h's shapeCurve() too, or authoring preview and board motion drift.
+// -------------------------------------------------------------------
+const GESTURE_FLAG_ABSOLUTE = 0x01;   // segment value is an absolute target, not a relative delta
+const GESTURE_FLAG_LOOP     = 0x02;   // repeat the schedule (reserved)
+
+// Curated easing set (0x05+ reserved for elastic/bounce later).
+const CURVE_IDS = { linear: 0, easeIn: 1, easeOut: 2, easeInOut: 3, back: 4 };
+const CURVE_NAMES = ['linear', 'easeIn', 'easeOut', 'easeInOut', 'back'];
+
+// Resolve a curve name (or raw id) to its numeric id; unknown → linear (warns via caller).
+function curveId(c) {
+    if (typeof c === 'number') return c | 0;
+    const id = CURVE_IDS[c];
+    return id === undefined ? 0 : id;
+}
+
+// The easing shapes — byte-for-byte the same math as defs.h shapeCurve().
+// For authoring PREVIEW/simulation only; the board computes the real motion.
+// `t` in [0,1]; `back` returns slightly >1 mid-flight (the overshoot).
+function curveShape(curve, t) {
+    switch (curveId(curve)) {
+        case 1: return t * t;                        // easeIn  — t^2
+        case 2: return t * (2 - t);                  // easeOut — 1-(1-t)^2
+        case 3: return t * t * (3 - 2 * t);          // easeInOut — smoothstep
+        case 4: {                                    // back (easeOutBack), s = 1.70158
+            const k = t - 1;
+            return 1 + 2.70158 * k * k * k + 1.70158 * k * k;
+        }
+        default: return t;                           // linear
+    }
+}
 
 // Message-channel value types (low byte of a CMD_MESSAGE target) and flags
 // (high byte). Must match defs.h MSG_TYPE_* / MSG_FLAG_*.
@@ -113,16 +169,17 @@ const _FRAME_NAMES = {
     'core:3':  'DIGITAL_WRITE', 'core:4': 'DIGITAL_READ', 'core:5': 'ANALOG_WRITE',
     'core:6':  'ANALOG_READ', 'core:7': 'END',           'core:8': 'PING',
     'core:9':  'PONG',       'core:10': 'SYNC_COMPLETE',  'core:11': 'MESSAGE',
-    '200:10': 'NEO_INIT', '200:11': 'NEO_SET_PIXEL', '200:12': 'NEO_FILL',
-    '200:13': 'NEO_CLEAR', '200:14': 'NEO_BRIGHTNESS', '200:15': 'NEO_SHOW',
+    'core:12': 'AUTH',
+    '200:92': 'NEO_INIT', '200:93': 'NEO_SET_PIXEL', '200:94': 'NEO_FILL',
+    '200:95': 'NEO_CLEAR', '200:96': 'NEO_BRIGHTNESS', '200:97': 'NEO_SHOW',
     '201:20': 'SERVO_ATTACH', '201:21': 'SERVO_DETACH', '201:22': 'SERVO_WRITE',
     '201:23': 'SERVO_WRITE_MICROSECONDS', '201:24': 'SERVO_READ', '201:25': 'SERVO_ATTACHED',
     '201:26': 'SERVO_WRITE_TIMED', '201:27': 'SERVO_SYNC_TIMED', '201:28': 'SERVO_STOP',
-    '201:29': 'SERVO_DONE', '201:84': 'SERVO_SET_LIMITS',
+    '201:29': 'SERVO_DONE', '201:84': 'SERVO_SET_LIMITS', '201:88': 'SERVO_GESTURE',
     '202:30': 'ULTRASONIC_ATTACH', '202:31': 'ULTRASONIC_DETACH',
     '202:32': 'ULTRASONIC_READ', '202:33': 'ULTRASONIC_SET_TIMEOUT',
-    '203:40': 'MPU_ATTACH', '203:41': 'MPU_DETACH', '203:42': 'MPU_READ',
-    '203:43': 'MPU_SET_ACCEL_RANGE', '203:44': 'MPU_SET_GYRO_RANGE', '203:45': 'MPU_CALIBRATE',
+    '203:40': 'IMU_ATTACH', '203:41': 'IMU_DETACH', '203:42': 'IMU_READ',
+    '203:43': 'IMU_SET_ACCEL_RANGE', '203:44': 'IMU_SET_GYRO_RANGE', '203:45': 'IMU_CALIBRATE',
     '204:48': 'CAMERA_INIT', '204:49': 'CAMERA_SET_RES', '204:50': 'CAMERA_SET_QUALITY',
     '205:51': 'STEPPER_ATTACH', '205:52': 'STEPPER_DETACH', '205:53': 'STEPPER_MOVE_TO',
     '205:54': 'STEPPER_MOVE', '205:55': 'STEPPER_SET_MAX_SPEED', '205:56': 'STEPPER_SET_ACCEL',
@@ -130,12 +187,15 @@ const _FRAME_NAMES = {
     '205:60': 'STEPPER_ENABLE', '205:61': 'STEPPER_SET_LIMITS', '205:62': 'STEPPER_READ',
     '205:63': 'STEPPER_DONE', '205:64': 'STEPPER_HOME', '205:79': 'STEPPER_MOVE_TIMED',
     '205:80': 'STEPPER_SYNC_MOVE', '205:82': 'STEPPER_SET_SWITCH', '205:83': 'STEPPER_LIMIT',
-    '205:85': 'STEPPER_SET_HOME', '205:87': 'STEPPER_HARD_STOP',
+    '205:85': 'STEPPER_SET_HOME', '205:87': 'STEPPER_HARD_STOP', '205:89': 'STEPPER_GESTURE',
+    '207:88': 'ENCODER_ATTACH', '207:89': 'ENCODER_DETACH',
+    '207:90': 'ENCODER_READ', '207:91': 'ENCODER_SET_POSITION',
     '206:65': 'BUSSERVO_BUS_CONFIG', '206:66': 'BUSSERVO_ATTACH', '206:67': 'BUSSERVO_DETACH',
     '206:68': 'BUSSERVO_WRITE', '206:69': 'BUSSERVO_WRITE_SPEED', '206:70': 'BUSSERVO_SET_MODE',
     '206:71': 'BUSSERVO_TORQUE', '206:72': 'BUSSERVO_READ', '206:73': 'BUSSERVO_SET_LIMITS',
     '206:74': 'BUSSERVO_CALIBRATE', '206:75': 'BUSSERVO_SET_ID', '206:76': 'BUSSERVO_PING',
     '206:77': 'BUSSERVO_SCAN', '206:78': 'BUSSERVO_SYNC_WRITE', '206:81': 'BUSSERVO_DONE',
+    '206:90': 'BUSSERVO_GESTURE',
 };
 
 // Resolve a decoded frame's command to a readable name (hex fallback).
@@ -277,7 +337,7 @@ function encodeMessage(key, value, opts = {}) {
 
     let keyBytes = new TextEncoder().encode(String(key));
     if (keyBytes.length > MAX_MESSAGE_KEY) {
-        console.warn(`Pardalote: message key "${key}" exceeds ${MAX_MESSAGE_KEY} bytes — truncated`);
+        // Silently truncated here; Arduino.send() reports it on the 'warn' channel.
         keyBytes = keyBytes.subarray(0, MAX_MESSAGE_KEY);
     }
     const kl      = keyBytes.length;
@@ -325,6 +385,229 @@ function decodeMessage(frame) {
     return { key, value, type: MSG_TYPE_NAMES[type] || `type${type}` };
 }
 
+// ===================================================================
+// Serial transport (Web Serial) — the same binary frames, carried over
+// USB serial instead of a WebSocket. Chrome/Edge only.
+//
+// A WebSocket gives the protocol message boundaries and reliability; a
+// raw byte stream has neither, so each message travels in an envelope
+// (mirrors internal/serial_transport.h on the firmware side):
+//
+//   0x00  0xA5  COBS( message bytes + CRC8 )  0x00
+//
+// COBS guarantees no 0x00 inside the body, so the decoder always
+// resyncs on the next delimiter — a corrupted byte costs one message,
+// never the link. Bytes OUTSIDE envelopes are the sketch's own
+// Serial.print output: collected line by line and surfaced as the
+// 'log' event, so students see their debug prints in the browser
+// without opening the IDE.
+// ===================================================================
+
+// CRC8, poly 0x07, init 0x00 — must match the firmware.
+function _crc8(bytes) {
+    let crc = 0;
+    for (let i = 0; i < bytes.length; i++) {
+        crc ^= bytes[i];
+        for (let b = 0; b < 8; b++)
+            crc = (crc & 0x80) ? ((crc << 1) ^ 0x07) & 0xFF : (crc << 1) & 0xFF;
+    }
+    return crc;
+}
+
+// Canonical COBS encode (each block: code byte = run+1, then the run;
+// a message ending on a zero or a full 254-run gets a final 0x01 block).
+function _cobsEncode(src) {
+    const out = [];
+    let blockStart = 0, code = 1;
+    out.push(0);   // placeholder for the first code byte
+    for (let i = 0; i < src.length; i++) {
+        if (src[i] === 0) {
+            out[blockStart] = code;
+            blockStart = out.length; out.push(0); code = 1;
+        } else {
+            out.push(src[i]); code++;
+            if (code === 0xFF) {
+                out[blockStart] = code;
+                blockStart = out.length; out.push(0); code = 1;
+            }
+        }
+    }
+    out[blockStart] = code;
+    return Uint8Array.from(out);
+}
+
+// COBS decode — null on malformed input.
+function _cobsDecode(src) {
+    const out = [];
+    let i = 0;
+    while (i < src.length) {
+        const code = src[i++];
+        if (code === 0 || i + code - 1 > src.length) return null;
+        for (let j = 1; j < code; j++) out.push(src[i++]);
+        if (code !== 0xFF && i < src.length) out.push(0);
+    }
+    return Uint8Array.from(out);
+}
+
+// Wrap one outbound message (ArrayBuffer or Uint8Array) in the envelope.
+function _serialEnvelope(msg) {
+    const bytes = msg instanceof Uint8Array ? msg : new Uint8Array(msg);
+    const withCrc = new Uint8Array(bytes.length + 1);
+    withCrc.set(bytes);
+    withCrc[bytes.length] = _crc8(bytes);
+    const body = _cobsEncode(withCrc);
+    const out  = new Uint8Array(body.length + 3);
+    out[0] = 0x00; out[1] = 0xA5;
+    out.set(body, 2);
+    out[out.length - 1] = 0x00;
+    return out;
+}
+
+// -------------------------------------------------------------------
+// _SerialLink — wraps a Web Serial port behind the same surface the
+// Arduino class uses of a WebSocket: send(buf) / close() and the
+// onopen / onclose / onerror / onmessage handler slots (plus onlog for
+// the sketch's Serial.print text). Serial has no CONNECTED event on
+// the board side, so after opening we probe with a HELLO frame every
+// 500 ms until the first valid envelope arrives — the board answers a
+// HELLO request with its full HELLO → announce → SYNC_COMPLETE sync
+// even if it never noticed the previous page go away.
+// -------------------------------------------------------------------
+class _SerialLink {
+    constructor(port) {
+        this.port      = port;
+        this.onopen    = null;
+        this.onclose   = null;
+        this.onerror   = null;
+        this.onmessage = null;
+        this.onlog     = null;
+
+        this._writer = null;
+        this._reader = null;
+        this._closed = false;
+        this._probeTimer = null;
+
+        // Envelope decoder state: 0 = text, 1 = just saw 0x00, 2 = in frame.
+        this._state = 0;
+        this._frame = [];
+        this._text  = [];
+    }
+
+    async open() {
+        // A predecessor link on this port may still be closing — wait it out.
+        if (this.port._pardaloteClosing) {
+            await this.port._pardaloteClosing.catch(() => {});
+            this.port._pardaloteClosing = null;
+        }
+        await this.port.open({ baudRate: 115200 });
+        this._writer = this.port.writable.getWriter();
+        this._readPromise = this._readLoop();   // deliberately not awaited here
+        if (this.onopen) this.onopen();
+        // Probe until the board answers (it may be rebooting — opening the
+        // port toggles DTR, which resets many boards).
+        this._probeTimer = setInterval(() => {
+            try { this.send(encodeFrame(CMD_HELLO, 0, [])); } catch (_) {}
+        }, 500);
+        try { this.send(encodeFrame(CMD_HELLO, 0, [])); } catch (_) {}
+    }
+
+    async _readLoop() {
+        try {
+            this._reader = this.port.readable.getReader();
+            for (;;) {
+                const { value, done } = await this._reader.read();
+                if (done) break;
+                if (value) this._feed(value);
+            }
+        } catch (_) {
+            // device lost mid-read — fall through to the close path
+        } finally {
+            try { if (this._reader) this._reader.releaseLock(); } catch (_) {}
+            this._reader = null;
+            if (!this._closed) {
+                this._teardown();
+                if (this.onclose) this.onclose({ code: 0 });
+            }
+        }
+    }
+
+    _feed(bytes) {
+        for (let i = 0; i < bytes.length; i++) {
+            const b = bytes[i];
+            switch (this._state) {
+                case 0:   // text — the sketch's Serial.print output
+                    if (b === 0x00)      { this._flushText(); this._state = 1; }
+                    else if (b === 0x0A) { this._flushText(); }
+                    else if (b !== 0x0D) { this._text.push(b); }
+                    break;
+                case 1:   // just consumed a delimiter
+                    if (b === 0xA5)      { this._state = 2; this._frame.length = 0; }
+                    else if (b !== 0x00) {
+                        this._state = 0;
+                        if (b === 0x0A)      { this._flushText(); }
+                        else if (b !== 0x0D) { this._text.push(b); }
+                    }
+                    break;
+                case 2:   // inside an envelope
+                    if (b === 0x00) { this._envelopeDone(); this._state = 1; }
+                    else            { this._frame.push(b); }
+                    break;
+            }
+        }
+    }
+
+    _flushText() {
+        if (!this._text.length) return;
+        const line = new TextDecoder().decode(Uint8Array.from(this._text));
+        this._text.length = 0;
+        if (this.onlog && line.trim().length) this.onlog(line);
+    }
+
+    _envelopeDone() {
+        const decoded = _cobsDecode(Uint8Array.from(this._frame));
+        this._frame.length = 0;
+        if (!decoded || decoded.length < 1) return;
+        const msg = decoded.subarray(0, decoded.length - 1);
+        if (_crc8(msg) !== decoded[decoded.length - 1]) return;   // corrupted — drop, stay synced
+        this._stopProbe();   // the board is talking — stop knocking
+        if (this.onmessage && msg.length)
+            this.onmessage({ data: msg.slice().buffer });
+    }
+
+    _stopProbe() {
+        if (this._probeTimer) { clearInterval(this._probeTimer); this._probeTimer = null; }
+    }
+
+    send(buf) {
+        if (!this._writer || this._closed) return;
+        this._writer.write(_serialEnvelope(buf)).catch(() => {});
+    }
+
+    close() {
+        if (this._closed) return;
+        this._closed = true;
+        this._stopProbe();
+        const reader = this._reader, writer = this._writer, port = this.port;
+        this._writer = null;
+        // Release both locks, then close the port. Stored on the port so
+        // the NEXT link (auto-reconnect) can await it before reopening.
+        port._pardaloteClosing = (async () => {
+            try { if (reader) await reader.cancel().catch(() => {}); } catch (_) {}
+            try { if (this._readPromise) await this._readPromise; } catch (_) {}   // read lock released
+            try { if (writer) { writer.releaseLock(); } } catch (_) {}
+            try { await port.close(); } catch (_) {}
+        })();
+    }
+
+    _teardown() {
+        this._stopProbe();
+        try { if (this._writer) this._writer.releaseLock(); } catch (_) {}
+        this._writer = null;
+        // Best-effort close so a later auto-reconnect can reopen the port.
+        try { this.port._pardaloteClosing = this.port.close().catch(() => {}); } catch (_) {}
+    }
+}
+
 // -------------------------------------------------------------------
 // Extension base class
 //
@@ -345,6 +628,7 @@ class Extension {
     constructor() {
         this.arduino   = null;   // injected by arduino.add()
         this.logicalId = null;
+        this._name     = null;   // binding name (arduino.<name>) — set by add()/share
         this._cbs      = {};
 
         // True for instances the BOARD created (sketch-side attach, announced
@@ -362,7 +646,38 @@ class Extension {
         return this;
     }
 
+    // One-shot listener — fires once, then removes itself.
+    once(event, fn) {
+        const wrap = (data) => { this.off(event, wrap); fn(data); };
+        return this.on(event, wrap);
+    }
+
     _emit(event, data) { (this._cbs[event] || []).forEach(fn => fn(data)); }
+
+    // "Servo 'pan'" / "Ultrasonic 2" — who is speaking, for warn/error events.
+    _label() {
+        const cls = this.constructor.name;
+        return this._name != null ? `${cls} '${this._name}'` : `${cls} ${this.logicalId ?? '?'}`;
+    }
+
+    // Report a problem with this device. Warnings route to the core's
+    // 'warn' channel (arduino.on('warn', …); console fallback when nobody
+    // listens). Errors additionally fire 'error' on THIS instance, so
+    // device-level code can react — an instance listener also counts as
+    // "handled" and suppresses the console fallback.
+    _warn(message) {
+        if (this.arduino) this.arduino._notify('warn', this._label(), message);
+        else console.warn(`${this._label()}: ${message}`);
+        return this;
+    }
+
+    _error(message) {
+        const local = (this._cbs['error'] || []).length > 0;
+        if (local) this._emit('error', { message });
+        if (this.arduino) this.arduino._notify('error', this._label(), message, local);
+        else if (!local) console.error(`${this._label()}: ${message}`);
+        return this;
+    }
 
     _reRegister()       {}
     handleMessage(frame) {}
@@ -374,13 +689,151 @@ class Extension {
 }
 
 // -------------------------------------------------------------------
+// Pin — a listening handle for one pin, created via arduino.pin(ref).
+//
+// Speaks the same grammar as the device extensions:
+//   pin.on('change', ({ value, pin }) => …)   input readings past the
+//                                             threshold AND output writes
+//                                             from any client or the sketch
+//   pin.off('change', fn)                     unsubscribe (fn omitted: all)
+//   pin.setReadInterval(ms) / setReadThreshold(t)
+//   pin.value                                 the mirrored value
+//   pin.read()/.write()/.mode()               conveniences over the verbs
+//
+// `ref` may be a number or an alias string. Alias handles resolve
+// LAZILY: pin('A0') created before connect() holds the name and starts
+// working when the board's alias table arrives with HELLO — no more
+// "call it inside on('ready')" footgun for listeners. Handles persist
+// across connect() to a new board (listeners survive, like extensions);
+// their polls are re-established on the new board's sync.
+// -------------------------------------------------------------------
+class Pin {
+    constructor(arduino, ref) {
+        this.arduino  = arduino;
+        this._ref     = ref;
+        this._cbs     = {};
+        this._pending = null;   // deferred intents while the alias can't resolve
+    }
+
+    // Resolved pin number, or null while an alias awaits the board's table.
+    get number() {
+        try { return this.arduino._resolvePin(this._ref); }
+        catch (_) { return null; }
+    }
+
+    // Mirrored value: last polled reading, else last known output state, else 0.
+    get value() {
+        const n = this.number;
+        if (n === null) return 0;
+        const read = this.arduino._reads.get(n);
+        if (read && read.value !== null) return read.value;
+        return this.arduino._pinValues.get(n) ?? 0;
+    }
+
+    on(event, fn) {
+        (this._cbs[event] ||= []).push(fn);
+        if (event === 'change') this._ensurePoll();
+        return this;
+    }
+
+    off(event, fn) {
+        const list = this._cbs[event];
+        if (!list) return this;
+        if (fn) { const i = list.indexOf(fn); if (i >= 0) list.splice(i, 1); }
+        else    delete this._cbs[event];
+        return this;
+    }
+
+    // One-shot listener — fires once, then removes itself.
+    once(event, fn) {
+        const wrap = (data) => { this.off(event, wrap); fn(data); };
+        return this.on(event, wrap);
+    }
+
+    _emit(event, data) { (this._cbs[event] || []).forEach(fn => fn(data)); }
+
+    // 'change' on an input pin needs a poll running; outputs get their
+    // changes from write broadcasts, and pins something else is already
+    // polling (this page, another browser, or the sketch) need nothing.
+    // Unresolved or pre-sync handles do nothing here — _onSyncComplete
+    // re-runs this for every handle with listeners once the board's alias
+    // table AND pin modes are known, so the right read kind is chosen.
+    _ensurePoll() {
+        const n = this.number;
+        if (n === null) return;
+        const mode = this.arduino._pinModes.get(n);
+        if (mode === OUTPUT) return;
+        if (this.arduino._reads.has(n)) return;
+        if (mode === ANALOG_INPUT_MODE) this.arduino.analogRead(n);
+        else                            this.arduino.digitalRead(n);
+    }
+
+    // Per-pin poll config — delegates to the core (which re-registers a
+    // live poll immediately); deferred if the alias can't resolve yet.
+    setReadInterval(ms) {
+        const n = this.number;
+        if (n === null) (this._pending ||= {}).interval = ms;
+        else this.arduino.setReadInterval(n, ms);
+        return this;
+    }
+
+    setReadThreshold(t) {
+        const n = this.number;
+        if (n === null) (this._pending ||= {}).threshold = t;
+        else this.arduino.setReadThreshold(n, t);
+        return this;
+    }
+
+    // Conveniences over the Arduino-mirroring verbs (which remain the
+    // documented way to DO things — see pinMode/digitalWrite/…Read).
+    mode(m, interval, threshold) { this.arduino.pinMode(this._ref, m, interval, threshold); return this; }
+    write(v)                     { this.arduino.digitalWrite(this._ref, v); return this; }
+    read(interval, threshold) {
+        const n = this.number;
+        const mode = n !== null ? this.arduino._pinModes.get(n) : undefined;
+        return (mode === ANALOG_INPUT_MODE)
+            ? this.arduino.analogRead(this._ref, interval, threshold)
+            : this.arduino.digitalRead(this._ref, interval, threshold);
+    }
+
+    // Alias table just arrived (HELLO) — flush config deferred while the
+    // name couldn't resolve. Still unresolvable = wrong board for this
+    // alias; report it on the warn channel and keep waiting.
+    // (Deferred poll needs are handled in _onSyncComplete instead, once
+    // pin modes are known too.)
+    _aliasesReady() {
+        if (!this._pending) return;
+        if (this.number === null) {
+            this.arduino._warn(`unknown pin alias "${this._ref}" for board "${this.arduino.board}"`);
+            return;
+        }
+        const p = this._pending;
+        this._pending = null;
+        if (p.interval  !== undefined) this.setReadInterval(p.interval);
+        if (p.threshold !== undefined) this.setReadThreshold(p.threshold);
+    }
+}
+
+// -------------------------------------------------------------------
 // Arduino class — core connection and protocol
 // -------------------------------------------------------------------
 class Arduino {
+    static version = PARDALOTE_VERSION;
+
     constructor() {
         this.socket    = null;
         this.connected = false;  // true after HELLO received
         this.deviceIP  = null;
+
+        // Transport: 'ws' (WebSocket, the default) or 'serial' (Web Serial —
+        // see connectSerial()). The socket slot holds a WebSocket or a
+        // _SerialLink; both expose the same handler surface.
+        this._transportKind = 'ws';
+        this._serialPort    = null;   // granted Web Serial port, kept for reconnects
+
+        // Connection key (WebSocket only) — sent as the first frame after
+        // the socket opens; see connect(ip, { key }).
+        this._key = null;
 
         // Reconnection state
         // Reconnects continue indefinitely (backoff capped at _maxReconnectDelay).
@@ -396,28 +849,62 @@ class Arduino {
         this._queue    = [];
         this._flushing = false;
 
-        // Active periodic reads: Map<pin, { cmd, interval, value, callbacks[] }>
+        // Active periodic reads:
+        // Map<pin, { cmd, interval, threshold, value, origin, passive }>
+        // threshold 0 = board default (1 for digital, the ADC noise floor —
+        // analogMax >> 8 — for analog). passive = the BOARD polls this pin
+        // itself (sketch share() with an interval): we sent no registration
+        // and replay none on reconnect.
         this._reads = new Map();
+
+        // Per-pin read config set via setReadInterval()/setReadThreshold(),
+        // before or after polling starts: Map<pin, { interval?, threshold? }>.
+        // Consulted by digitalRead/analogRead when the args are omitted.
+        this._readConfig = new Map();
 
         // Core pin state — tracked so _onSyncComplete can restore it after Arduino reset,
         // and updated from announce frames so multi-client sync stays correct.
         this._pinModes  = new Map();   // Map<pin, mode>  — set by pinMode() and incoming announce
         this._pinValues = new Map();   // Map<pin, value> — set by digitalWrite() and incoming announce
 
+        // Provenance: who created each pin entry — 'browser' (this page called
+        // pinMode/digitalWrite/…Read) or 'board' (the sketch share()d it and we
+        // learned of it from an inbound frame). Each side is source of truth
+        // for its own creations: on reconnect the browser replays only
+        // browser-originated state; board-originated state is refreshed by the
+        // board's own announce — and swept if the announce no longer mentions
+        // it (new firmware). 'browser' is sticky: once this page expresses
+        // intent about a pin, its state is replayed. _reads entries carry
+        // their own read.origin (a browser can poll a board-shared pin).
+        this._pinOrigins = new Map();  // Map<pin, 'browser'|'board'>
+        this._pollOrigin = null;       // set by _maybeStartPollFor while it runs
+        this._staleBoardPins = null;   // Set<pin> — board-origin pins awaiting re-announce
+
+        // Board boot id from HELLO (0 = unknown / old firmware). A changed id
+        // across a reconnect means the board rebooted — possibly with new
+        // firmware — so board-created state (shared pins, sketch-created
+        // extensions, retained messages) is dropped before the announce
+        // repopulates whatever actually exists now.
+        this._bootId = 0;
+
         // Board identity, alias table, and ADC range — populated from the HELLO handshake
         this.board    = 'unknown';
         this._aliases  = {};
         this.analogMax = 1023;   // safe default; overwritten by HELLO
 
-        // Heartbeat
+        // Heartbeat — liveness is judged by the AGE OF THE LAST PONG.
+        // A power-cycled board sends no FIN, and send() into a half-open
+        // TCP connection doesn't throw (it just buffers), so without this
+        // check the browser would sit "connected" until the rebooted
+        // board's new TCP stack resets the stale connection.
         this._pingInterval  = null;
-        this._pongTimeout   = null;
+        this._lastPong      = 0;
         this._pingMs        = 3000;   // send a ping every 3 s
-        this._pongTimeoutMs = 5000;   // force-disconnect if no pong within 5 s
+        this._pongTimeoutMs = 5000;   // declare the link dead if no pong for 5 s
 
-        // Output-pin write callbacks: fired when CMD_DIGITAL_WRITE arrives post-sync.
-        // Map<pin, fn[]> — keyed by pin number, populated via onWrite().
-        this._writeCbs = new Map();
+        // Pin handles (see arduino.pin()): Map<number|aliasString, Pin>.
+        // Permanent, like extension instances — listeners survive connect().
+        this._pinHandles = new Map();
 
         // True after CMD_SYNC_COMPLETE; false during the announce phase.
         // Guards against write callbacks firing on announce state-sync frames.
@@ -441,32 +928,137 @@ class Arduino {
         // Connection-level callbacks
         this._cbs = {};
 
-        this.defaultInterval = 200;
+        this.defaultInterval  = 200;   // min ms between updates (rate limit)
+        this.defaultThreshold = 0;     // 0 = board default: 1 for digital,
+                                       // the ADC noise floor for analog
+
+        // PWM write throttle — the OUTBOUND counterpart to the read rate
+        // limit above. analogWrite() driven from a slider or draw loop can
+        // fire dozens of times a second; an unthrottled flood overruns a
+        // slow board's inbound buffer (the UNO R4 WiFi's WiFiS3 link can't
+        // drain it), so the queue grows, latency climbs, and the socket
+        // eventually drops. This caps the send rate per pin: the first
+        // write in a burst goes out immediately, further writes inside the
+        // window are coalesced into one trailing send carrying the LATEST
+        // value, so the resting position is never lost. Mirrors the servo /
+        // neopixel throttle. 0 = off (send every value). ESP32 is fast
+        // enough that the default is imperceptible; the UNO R4 needs it.
+        this.writeThrottle  = 20;      // min ms between PWM sends per pin
+        this.writeThreshold = 0;       // min value change worth sending (0 = all)
+        this._pwmLastWrite  = new Map(); // Map<pin, ms>      — last send time
+        this._pwmLastSent   = new Map(); // Map<pin, value>   — last value sent
+        this._pwmPending     = new Map(); // Map<pin, timeoutId> — coalesced trailing send
     }
 
     // -------------------------------------------------------------------
     // Connection
+    //
+    //   connect(ip)                    — WebSocket, port 81
+    //   connect(ip, 8080)              — WebSocket, custom port
+    //   connect(ip, { key: 'k' })      — WebSocket + connection key: sent as
+    //                                    the first frame; a board started with
+    //                                    Pardalote.begin("k") refuses clients
+    //                                    whose key doesn't match ('authFail').
+    //   connectSerial()                — USB serial via Web Serial (Chrome/
+    //                                    Edge). Must be called from a user
+    //                                    gesture (a click) the first time —
+    //                                    the browser shows a port picker. A
+    //                                    previously granted port is reused
+    //                                    without a picker; pass PROMPT (i.e.
+    //                                    { prompt: true }) to force one.
+    //                                    No key concept: the cable IS access.
     // -------------------------------------------------------------------
-    connect(ip, port = 81) {
-        this.deviceIP = `ws://${ip}:${port}/`;
+    connect(ip, portOrOpts = 81) {
+        const opts = (typeof portOrOpts === 'object' && portOrOpts !== null)
+                   ? portOrOpts : { port: portOrOpts };
+        this._transportKind = 'ws';
+        this._key      = opts.key || null;
+        this.deviceIP  = `ws://${ip}:${opts.port ?? 81}/`;
         this._reconnectAttempts = 0;
         this._reconnectDisabled = false;   // re-enable after an earlier disconnect()
 
-        // Fresh session — drop any pin-keyed state from a previous board.
-        // Pin numbers (and the extensions Arduino announced) are board-specific,
-        // so replaying them on a new device would target the wrong hardware.
-        // Auto-reconnect goes through _connectSocket() directly and is unaffected.
+        this._resetSession();
+
+        // Cleanly detach and close the old socket so its events
+        // cannot fire into the new session.
+        this._closeSocket();
+
+        this._connectSocket();
+    }
+
+    async connectSerial(opts = {}) {
+        if (typeof navigator === 'undefined' || !('serial' in navigator)) {
+            this._error('Web Serial is not supported in this browser — use Chrome or Edge, or connect over WiFi');
+            return this;
+        }
+        let port = opts.port || null;
+        if (!port && !opts.prompt) {
+            // Reuse a previously granted port (works without a user gesture,
+            // so a returning visit can auto-connect).
+            const granted = await navigator.serial.getPorts();
+            if (granted.length === 1) port = granted[0];
+        }
+        if (!port) {
+            try {
+                port = await navigator.serial.requestPort();
+            } catch (_) {
+                this._error('no serial port selected');
+                return this;
+            }
+        }
+
+        this._transportKind = 'serial';
+        this._serialPort = port;
+        this._key      = null;             // serial needs no key — the cable is possession
+        this.deviceIP  = 'serial';
+        this._reconnectAttempts = 0;
+        this._reconnectDisabled = false;
+
+        this._resetSession();
+        this._closeSocket();
+        this._connectSocket();
+        return this;
+    }
+
+    // Fresh session — drop any pin-keyed state from a previous board.
+    // Pin numbers (and the extensions Arduino announced) are board-specific,
+    // so replaying them on a new device would target the wrong hardware.
+    // Auto-reconnect goes through _connectSocket() directly and is unaffected.
+    _resetSession() {
         this._pinModes.clear();
         this._pinValues.clear();
+        this._pinOrigins.clear();
+        this._staleBoardPins = null;
+        this._bootId = 0;
         this._reads.clear();
-        this._writeCbs.clear();
         this._available.clear();
         this.messages = {};                                     // cached message values are board state
         this._queue = [];                                       // drop frames queued for the old board
+        this._pwmCancelPending();                               // drop any coalesced PWM send aimed at the old board
 
         // Board-created (shared) objects belong to the previous board —
         // remove them entirely. The new board announces its own via
         // CMD_SHARE. Browser-created extensions persist and _reset().
+        this._dropBoardCreated();
+
+        Object.values(this._extensions).forEach(ext => ext._reset());
+
+        // Cancel any pending auto-reconnect timer
+        if (this._reconnectTimeout) {
+            clearTimeout(this._reconnectTimeout);
+            this._reconnectTimeout = null;
+        }
+        this._isReconnecting = false;
+    }
+
+    // Remove everything the BOARD created: sketch-created (shared)
+    // extensions, and pin state that originated from a sketch share().
+    // Called from connect() (switching boards) and from _onHello when the
+    // boot id changed (same IP, but the board rebooted — possibly with new
+    // firmware, so its old shares may no longer exist). Whatever the new
+    // board-run really has comes back via the announce that follows HELLO.
+    // Browser-created state is untouched.
+    _dropBoardCreated() {
         for (const [name, ext] of Object.entries(this._extensions)) {
             if (!ext._sharedFromBoard) continue;
             ext._reset();
@@ -479,20 +1071,17 @@ class Arduino {
             }
         }
 
-        Object.values(this._extensions).forEach(ext => ext._reset());
-
-        // Cancel any pending auto-reconnect timer
-        if (this._reconnectTimeout) {
-            clearTimeout(this._reconnectTimeout);
-            this._reconnectTimeout = null;
+        // Board-originated pin state (sketch share()d pins and their
+        // auto-polls). Reads keep their own origin — a poll the browser
+        // explicitly asked for on a board-shared pin survives.
+        for (const [pin, origin] of [...this._pinOrigins]) {
+            if (origin !== 'board') continue;
+            this._pinOrigins.delete(pin);
+            this._pinModes.delete(pin);
+            this._pinValues.delete(pin);
+            const read = this._reads.get(pin);
+            if (read && read.origin !== 'browser') this._reads.delete(pin);
         }
-        this._isReconnecting = false;
-
-        // Cleanly detach and close the old socket so its events
-        // cannot fire into the new session.
-        this._closeSocket();
-
-        this._connectSocket();
     }
 
     _closeSocket() {
@@ -504,12 +1093,18 @@ class Arduino {
         s.onclose   = null;
         s.onerror   = null;
         s.onmessage = null;
+        s.onlog     = null;   // _SerialLink only; harmless on a WebSocket
         try { s.close(); } catch (_) {}
     }
 
     _connectSocket() {
         if (this._isReconnecting) return;
         console.log(`Connecting to ${this.deviceIP}`);
+
+        if (this._transportKind === 'serial') {
+            this._connectSerialLink();
+            return;
+        }
 
         try {
             const socket = new WebSocket(this.deviceIP);
@@ -524,6 +1119,10 @@ class Arduino {
                     clearTimeout(this._reconnectTimeout);
                     this._reconnectTimeout = null;
                 }
+                // A connection key goes out FIRST — before it checks out, the
+                // board sends nothing and drops everything else we say.
+                if (this._key)
+                    socket.send(encodeFrame(CMD_AUTH, 0, [], this._key));
                 console.log('WebSocket open — waiting for HELLO');
                 this._emit('connect');
             };
@@ -549,9 +1148,63 @@ class Arduino {
             };
 
         } catch (e) {
-            console.error('WebSocket error:', e);
+            this._error(`WebSocket error: ${e.message || e}`);
             this._scheduleReconnect();
         }
+    }
+
+    // Serial counterpart of the WebSocket branch above — the link mimics
+    // the WebSocket handler surface, so everything downstream (HELLO,
+    // heartbeat, flush, reconnect backoff) is shared.
+    _connectSerialLink() {
+        const link = new _SerialLink(this._serialPort);
+        this.socket = link;
+
+        link.onopen = () => {
+            if (this.socket !== link) return;   // stale — a newer link took over
+            this._isReconnecting = false;
+            this._reconnectDelay = 1000;
+            if (this._reconnectTimeout) {
+                clearTimeout(this._reconnectTimeout);
+                this._reconnectTimeout = null;
+            }
+            console.log('Serial port open — probing for the board');
+            this._emit('connect');
+        };
+
+        link.onclose = () => {
+            if (this.socket !== link) return;
+            this.connected = false;
+            this._stopHeartbeat();
+            console.log('Serial port closed');
+            this._emit('disconnect');
+            this._scheduleReconnect();
+        };
+
+        link.onmessage = (evt) => {
+            if (this.socket !== link) return;
+            this._receive(evt.data);
+        };
+
+        // The sketch's Serial.print output, line by line. With no listener
+        // it goes to the console — students see their debug prints in the
+        // browser without opening the IDE.
+        link.onlog = (line) => {
+            if ((this._cbs['log'] || []).length) this._emit('log', line);
+            else console.log(`[board] ${line}`);
+        };
+
+        link.open().catch(async (e) => {
+            if (this.socket !== link) return;
+            // The port may have been unplugged and re-granted as a fresh
+            // SerialPort object — re-acquire before the next attempt.
+            try {
+                const granted = await navigator.serial.getPorts();
+                if (granted.length === 1) this._serialPort = granted[0];
+            } catch (_) {}
+            this._error(`serial open failed: ${e.message || e}`);
+            this._scheduleReconnect();
+        });
     }
 
     _scheduleReconnect() {
@@ -588,7 +1241,11 @@ class Arduino {
     }
 
     // -------------------------------------------------------------------
-    // Connection-level events: 'connect', 'disconnect', 'ready', 'announce'
+    // Connection-level events: 'connect', 'disconnect', 'ready', 'announce',
+    // 'warn', 'error' (see _notify), plus 'reconnecting', 'reboot', 'share',
+    // 'message', 'change', 'frame', 'authFail' (board refused this client's
+    // key — auto-reconnect stops), and 'log' (serial transport only: the
+    // sketch's Serial.print output, one line per event).
     // -------------------------------------------------------------------
     on(event, fn)  { (this._cbs[event] ||= []).push(fn); return this; }
     off(event, fn) {
@@ -598,7 +1255,42 @@ class Arduino {
         else    delete this._cbs[event];
         return this;
     }
+
+    // One-shot listener — fires once, then removes itself.
+    once(event, fn) {
+        const wrap = (data) => { this.off(event, wrap); fn(data); };
+        return this.on(event, wrap);
+    }
+
     _emit(event, data) { (this._cbs[event] || []).forEach(fn => fn(data)); }
+
+    // -------------------------------------------------------------------
+    // Problem reporting — the 'warn' and 'error' events.
+    //
+    //   arduino.on('warn',  ({ source, message }) => showBanner(message));
+    //   arduino.on('error', ({ source, message }) => showBanner(message));
+    //
+    // Every warning/error in the library funnels through here (extensions
+    // route via Extension._warn/_error with their device as `source`), so
+    // a page can surface problems in its UI instead of the console. When
+    // NO listener is registered the message falls back to console.warn /
+    // console.error — pages that never subscribe behave exactly as before.
+    // `handledLocally` suppresses that fallback when an instance-level
+    // 'error' listener already received the message.
+    // -------------------------------------------------------------------
+    _notify(level, source, message, handledLocally = false) {
+        const listeners = this._cbs[level];
+        if (listeners && listeners.length) {
+            this._emit(level, { source, message });
+        } else if (!handledLocally) {
+            (level === 'error' ? console.error : console.warn)(
+                source ? `${source}: ${message}` : message);
+        }
+        return this;
+    }
+
+    _warn(message, source = 'Pardalote')  { return this._notify('warn',  source, message); }
+    _error(message, source = 'Pardalote') { return this._notify('error', source, message); }
 
     // -------------------------------------------------------------------
     // Sending
@@ -609,6 +1301,8 @@ class Arduino {
     // A string first arg is never a valid frame, so the two never collide.
     send(frameOrArray, value, opts) {
         if (typeof frameOrArray === 'string') {
+            if (new TextEncoder().encode(frameOrArray).length > MAX_MESSAGE_KEY)
+                this._warn(`message key "${frameOrArray}" exceeds ${MAX_MESSAGE_KEY} bytes — truncated`);
             this._queueFrame(encodeMessage(frameOrArray, value, opts || {}));
             return this;
         }
@@ -635,7 +1329,7 @@ class Arduino {
             }
             this.socket.send(encodeBatch(frames));
         } catch (e) {
-            console.error('Send failed:', e);
+            this._error(`send failed: ${e.message || e}`);
         } finally {
             this._flushing = false;
         }
@@ -708,10 +1402,11 @@ class Arduino {
         // listener is registered).
         this._emitFrame('in', frame);
 
-        // These three are checked first — they carry no pin/device context.
+        // These are checked first — they carry no pin/device context.
         if (frame.cmd === CMD_HELLO)    { this._onHello(frame);    return; }
         if (frame.cmd === CMD_ANNOUNCE) { this._onAnnounce(frame); return; }
         if (frame.cmd === CMD_PONG)     { this._onPong();          return; }
+        if (frame.cmd === CMD_AUTH)     { this._onAuthFail(frame); return; }
 
         // Message channel — routed by cmd (the flags in the target high byte
         // can push it past RESERVED_START, so the range check would misroute).
@@ -736,17 +1431,38 @@ class Arduino {
         if (frame.cmd === CMD_PIN_MODE) {
             const mode = frame.params[0];
             this._pinModes.set(pin, mode);
-            this._maybeStartPollFor(pin, mode);
+            // Provenance: an inbound mode is board-originated — unless this
+            // page already claimed the pin ('browser' is sticky; the announce
+            // echoes back modes we set ourselves).
+            if (!this._pinOrigins.has(pin)) this._pinOrigins.set(pin, 'board');
+            this._staleBoardPins?.delete(pin);   // re-announced — not stale
+
+            // [mode, interval, threshold]: the BOARD polls
+            // this pin itself (sketch share() with an interval). Register a
+            // passive entry — values arrive without us sending a READ, and
+            // we replay nothing on reconnect (the board's poll outlives us).
+            const boardInterval = frame.params.length > 1 ? frame.params[1] : 0;
+            if (boardInterval > 0) {
+                const cmd = (mode === ANALOG_INPUT_MODE) ? CMD_ANALOG_READ : CMD_DIGITAL_READ;
+                const existing = this._reads.get(pin);
+                if (!existing || existing.origin !== 'browser') {
+                    this._reads.set(pin, {
+                        cmd, interval: boardInterval,
+                        threshold: frame.params[2] ?? 0,
+                        value:     existing?.value ?? null,
+                        origin: 'board', passive: true,
+                    });
+                }
+            } else {
+                this._maybeStartPollFor(pin, mode, undefined, 'board');
+            }
             return;
         }
         if (frame.cmd === CMD_DIGITAL_WRITE) {
             this._pinValues.set(pin, frame.params[0]);
-            // Post-announce: fire write callbacks so all browsers stay in sync.
-            if (this._synced) {
-                const cbs = this._writeCbs.get(pin);
-                if (cbs) cbs.forEach(fn => fn(frame.params[0], pin));
-                this._emit('change', { pin, value: frame.params[0] });
-            }
+            // Post-announce: fire change events so all browsers stay in sync
+            // (announce-phase state sync stays silent).
+            if (this._synced) this._emitPinChange(pin, frame.params[0]);
             return;
         }
 
@@ -757,56 +1473,124 @@ class Arduino {
         if (read) {
             const prev = read.value;
             read.value = value;
-            if (prev === null || value !== prev) {
-                read.callbacks.forEach(fn => fn(value, pin));
-                this._emit('change', { pin, value });
+            // Announce-phase values (board seeding a new/reconnected client)
+            // update the mirror silently — same rule as write callbacks.
+            // _forceCallback (set in _onSyncComplete) makes the first
+            // post-sync reading fire even if the value didn't change, so
+            // callbacks re-sync with actual state after a reconnect.
+            if (prev === null || value !== prev || read._forceCallback) {
+                if (this._synced) {
+                    read._forceCallback = false;
+                    this._emitPinChange(pin, value);
+                }
             }
         } else {
-            this._reads.set(pin, { cmd: frame.cmd, interval: 0, value, callbacks: [] });
+            // A reading for a poll we never registered (another client asked
+            // for it, or a board seed) — cache it, but mark it
+            // board-originated so we never replay or retain a poll this
+            // page didn't request.
+            this._reads.set(pin, { cmd: frame.cmd, interval: 0, threshold: 0,
+                                   value, origin: 'board', passive: false });
         }
     }
 
+    // Each tick: first judge liveness by how stale the last pong is,
+    // then send the next ping. Detection worst case is roughly
+    // _pongTimeoutMs + _pingMs (~8 s) after the board dies.
     _startHeartbeat() {
         this._stopHeartbeat();
+        this._lastPong = Date.now();   // HELLO just arrived — link demonstrably alive
         this._pingInterval = setInterval(() => {
-            try { this.socket.send(encodeFrame(CMD_PING, 0, [])); } catch (_) {}
-            clearTimeout(this._pongTimeout);   // clear any orphaned timeout from the previous tick
-            this._pongTimeout = setTimeout(() => {
-                console.warn('Pardalote: pong timeout — forcing disconnect');
-                const deadSocket = this.socket;
-                this.connected = false;
+            if (Date.now() - this._lastPong > this._pongTimeoutMs) {
+                this._warn(`connection lost — no pong for ${this._pongTimeoutMs} ms; reconnecting`);
                 this._stopHeartbeat();
+                this._closeSocket();   // detach + null the socket so a late
+                                       // close event can't double-fire 'disconnect'
                 this._emit('disconnect');
                 this._scheduleReconnect();
-                try { deadSocket.close(); } catch (_) {}  // best-effort, may linger
-            }, this._pongTimeoutMs);
+                return;
+            }
+            try { this.socket.send(encodeFrame(CMD_PING, 0, [])); } catch (_) {}
         }, this._pingMs);
     }
 
     _stopHeartbeat() {
         clearInterval(this._pingInterval);
-        clearTimeout(this._pongTimeout);
         this._pingInterval = null;
-        this._pongTimeout  = null;
     }
 
     _onPong() {
-        clearTimeout(this._pongTimeout);
-        this._pongTimeout = null;
+        this._lastPong = Date.now();
+    }
+
+    // The board refused this client: CMD_AUTH [reason] arrives just before
+    // it closes the socket. Reconnecting would only be refused again, so
+    // auto-reconnect stops — the student gets one clear error, not a
+    // silent retry loop that looks like a dead board.
+    _onAuthFail(frame) {
+        const reason  = frame.params[0] ?? 0;
+        const message = reason === 2
+            ? 'connection refused — wrong key for this board'
+            : 'connection refused — this board requires a key: connect(ip, { key: "…" })';
+        this._emit('authFail', { reason, message });
+        this._error(message);
+        this.disconnect();   // sets _reconnectDisabled until the next connect()
     }
 
     _onHello(frame) {
         const major   = frame.params[0];
         const minor   = frame.params[1];
-        const adcBits = frame.params[2] ?? 10;   // param added in protocol v1.0; default 10 for older firmware
+
+        // Version handshake — a protocol MAJOR mismatch means the two
+        // sides cannot talk. Report it and stop before misinterpreting
+        // frames; a MINOR difference is backward-compatible by definition.
+        if (major !== PROTOCOL_MAJOR_SUPPORTED) {
+            this._error(`firmware speaks protocol v${major}.${minor}; this pardalote.js ` +
+                        `speaks v${PROTOCOL_MAJOR_SUPPORTED}.x — update ` +
+                        (major > PROTOCOL_MAJOR_SUPPORTED ? 'pardalote.js' : 'the firmware'));
+            this.disconnect();
+            return;
+        }
+        const adcBits = frame.params[2] ?? 10;   // default 10 for firmware that omits it
+        const bootId  = frame.params[3] ?? 0;    // 0 = firmware predates boot ids
         this.board    = frame.payload ? new TextDecoder().decode(frame.payload) : 'unknown';
         this._aliases  = BOARD_ALIASES[this.board] || {};
         this.analogMax = (1 << adcBits) - 1;
+
+        // Alias table is now known — pin handles created with alias strings
+        // before connect can resolve and flush their deferred config/polls.
+        this._pinHandles.forEach(h => h._aliasesReady());
+
+        // Boot-id check: a changed id means the board REBOOTED since we last
+        // spoke to it (new firmware upload, reset button, power cycle) — its
+        // old shares/objects may not exist any more, so drop everything
+        // board-created before the announce repopulates the real state.
+        // Same id = pure network reconnect: keep everything.
+        const rebooted = this._bootId !== 0 && bootId !== 0 && bootId !== this._bootId;
+        if (rebooted) {
+            console.log('Pardalote: board rebooted (boot id changed) — dropping board-created state');
+            this._dropBoardCreated();
+            this.messages = {};        // retained messages died with the old run
+            this._available.clear();   // re-populated by the announce
+        }
+        this._bootId = bootId;
+
+        // Announce sweep (also covers firmware without boot ids): any pin we
+        // believe is board-originated must be re-announced before
+        // SYNC_COMPLETE, or it belonged to a previous board-run and is swept
+        // in _onSyncComplete. The inbound CMD_PIN_MODE handler removes pins
+        // from this set as their announce arrives.
+        this._staleBoardPins = new Set();
+        this._pinOrigins.forEach((origin, pin) => {
+            if (origin === 'board') this._staleBoardPins.add(pin);
+        });
+
         this.connected          = true;
         this._synced            = false;  // re-entering announce phase
         this._reconnectAttempts = 0;  // genuine connection established
         this._startHeartbeat();
         console.log(`Pardalote: connected to ${this.board}, protocol v${major}.${minor}, analogMax=${this.analogMax}`);
+        if (rebooted) this._emit('reboot', { bootId });
 
         // Open the send queue so announce frames from extensions can be
         // received while we wait for CMD_SYNC_COMPLETE.
@@ -820,28 +1604,66 @@ class Arduino {
     // Now replay state to the Arduino (handles the Arduino-reset case) and
     // signal 'ready' to user code.
     _onSyncComplete() {
-        // Replay core pin configuration so Arduino has the correct state if
-        // it just reset (announce would have sent nothing in that case).
-        // If the Arduino was already running, these frames are redundant but
-        // idempotent — the announce will have synced _pinModes/_pinValues to
-        // the current Arduino state, so we send back exactly what it told us.
+        // Sweep: board-originated pins the announce did NOT re-mention belong
+        // to a previous board-run (firmware swapped, or a reboot on old
+        // firmware without boot ids) — forget them, and stop their polls.
+        // A running board re-announces its shares on every reconnect, and a
+        // rebooted board re-runs setup() and re-shares, so anything missing
+        // here really is gone.
+        if (this._staleBoardPins) {
+            this._staleBoardPins.forEach(pin => {
+                this._pinOrigins.delete(pin);
+                this._pinModes.delete(pin);
+                this._pinValues.delete(pin);
+                const read = this._reads.get(pin);
+                if (read && read.origin !== 'browser') this._reads.delete(pin);
+            });
+            this._staleBoardPins = null;
+        }
+
+        // Replay BROWSER-originated pin configuration so Arduino has the
+        // correct state if it just reset (announce would have sent nothing
+        // for these in that case). If the Arduino was already running, the
+        // frames are redundant but idempotent. Board-originated entries are
+        // skipped — the board is source of truth for its own shares (the
+        // announce we just processed IS that truth), and replaying them
+        // would push a previous firmware's pin config onto a new one.
         this._pinModes.forEach((mode, pin) => {
+            if (this._pinOrigins.get(pin) === 'board') return;
             this.send(encodeFrame(CMD_PIN_MODE, pin, [mode]));
         });
         this._pinValues.forEach((value, pin) => {
+            if (this._pinOrigins.get(pin) === 'board') return;
             this.send(encodeFrame(CMD_DIGITAL_WRITE, pin, [value]));
         });
 
-        // Re-register all active periodic reads.
-        // The Arduino clears its action table on every disconnect, so these
-        // always need to be re-sent regardless of whether it reset.
-        // Reset cached value to null so the first post-reconnect reading
-        // always fires callbacks, keeping the UI in sync with actual state.
+        // Re-register our periodic reads. The Arduino clears THIS CLIENT's
+        // registrations on disconnect (per-client), so
+        // they always need re-sending; only JS knows the interval/threshold,
+        // and the announce path deliberately doesn't re-send a poll for an
+        // entry that already exists (analogRead/digitalRead early-return on
+        // a cached read). Passive entries are skipped — the BOARD owns those
+        // polls (share() with an interval) and they survive on their own;
+        // the announce re-created them above. Stale board polls were swept,
+        // so nothing here targets a pin the current firmware doesn't share.
+        // The mirror keeps its seeded value; _forceCallback makes the first
+        // post-sync reading fire callbacks even if the value is unchanged,
+        // keeping the UI in sync with actual state.
         this._reads.forEach((read, pin) => {
-            if (read.interval > 0) {
-                read.value = null;
-                this.send(encodeFrame(read.cmd, pin, [read.interval]));
-            }
+            read._forceCallback = true;
+            if (!read.passive && read.interval > 0)
+                this.send(encodeFrame(read.cmd, pin, [read.interval, read.threshold ?? 0]));
+        });
+
+        // Pin handles with 'change' listeners need a poll on this board —
+        // alias table and pin modes are both known now, so the right read
+        // kind is chosen; _ensurePoll is a no-op when a poll (ours, another
+        // client's, or the board's own) already covers the pin.
+        this._pinHandles.forEach(h => {
+            if (!(h._cbs['change'] || []).length) return;
+            if (h.number === null)
+                this._warn(`pin handle "${h._ref}" — unknown alias for board "${this.board}"`);
+            else h._ensurePoll();
         });
 
         // Let extensions restore their state.
@@ -872,7 +1694,7 @@ class Arduino {
 
         const exts = this._extByDevice.get(frame.target);
         if (!exts) {
-            console.warn(`No extension registered for deviceId ${frame.target}`);
+            this._warn(`no extension registered for deviceId ${frame.target}`);
             return;
         }
         const instanceId = frame.params[0];
@@ -880,7 +1702,7 @@ class Arduino {
         if (ext) {
             ext.handleMessage(frame);
         } else {
-            console.warn(`No instance ${instanceId} for deviceId ${frame.target}`);
+            this._warn(`no instance ${instanceId} for deviceId ${frame.target}`);
         }
     }
 
@@ -908,13 +1730,14 @@ class Arduino {
         const exts     = this._extByDevice.get(deviceId);
         const existing = exts ? exts.find(e => e.logicalId === id) : null;
         if (existing) {
+            existing._name = name;
             if (!existing._sharedFromBoard) {
                 // A browser-created extension already holds this id — the two
                 // allocation directions (browser 0-up, board top-down) have
                 // met, i.e. the id space for this device is exhausted.
-                console.warn(`Pardalote: the board created '${name}' with id ${id}, but a ` +
-                             `browser-created extension already uses that id — too many ` +
-                             `instances for deviceId ${deviceId}`);
+                this._warn(`the board created '${name}' with id ${id}, but a ` +
+                           `browser-created extension already uses that id — too many ` +
+                           `instances for deviceId ${deviceId}`);
                 return;
             }
             if (this._extensions[name] !== existing) {
@@ -926,9 +1749,9 @@ class Arduino {
 
         const cls = _extensionTypes.get(deviceId);
         if (!cls) {
-            console.warn(`Pardalote: the board created '${name}' (deviceId ${deviceId}), ` +
-                         `but no extension file for that device is loaded — include it ` +
-                         `(e.g. <script src="servo.js">) to use arduino.${name}`);
+            this._warn(`the board created '${name}' (deviceId ${deviceId}), ` +
+                       `but no extension file for that device is loaded — include it ` +
+                       `(e.g. <script src="servo.js">) to use arduino.${name}`);
             return;
         }
 
@@ -936,17 +1759,18 @@ class Arduino {
         // (e.g. a servo named "connect"). Extension re-binds are allowed —
         // last one wins, with a warning, same as add() overwriting.
         if ((name in this) && !this._extensions[name]) {
-            console.warn(`Pardalote: the board created '${name}', but arduino.${name} ` +
-                         `is part of the core API — rename it in the sketch`);
+            this._warn(`the board created '${name}', but arduino.${name} ` +
+                       `is part of the core API — rename it in the sketch`);
             return;
         }
         if (this._extensions[name]) {
-            console.warn(`Pardalote: the board created '${name}' — replacing the existing arduino.${name}`);
+            this._warn(`the board created '${name}' — replacing the existing arduino.${name}`);
         }
 
         const ext = new cls();
         ext.arduino          = this;
         ext.logicalId        = id;
+        ext._name            = name;
         ext._sharedFromBoard = true;
         this._extensions[name] = ext;
         this[name] = ext;
@@ -970,6 +1794,7 @@ class Arduino {
         }));
         while (taken.has(this._nextId)) this._nextId++;
         extension.logicalId = this._nextId++;
+        extension._name = name;
         this._extensions[name] = extension;
         this[name] = extension;  // shorthand: arduino.servo
 
@@ -1016,123 +1841,218 @@ class Arduino {
         );
     }
 
-    pinMode(pin, mode, interval) {
+    pinMode(pin, mode, interval, threshold) {
         pin = this._resolvePin(pin);
         this._pinModes.set(pin, mode);   // stored for announce sync and _onSyncComplete replay
+        this._pinOrigins.set(pin, 'browser');   // this page claims the pin — replayed on reconnect
         this.end(pin);                   // cancel any active periodic read before changing mode
         this.send(encodeFrame(CMD_PIN_MODE, pin, [mode]));
-        // For input modes, auto-start polling. If `interval` is given use it,
-        // otherwise the underlying digitalRead / analogRead falls back to
-        // this.defaultInterval (200 ms). OUTPUT modes never auto-poll.
-        this._maybeStartPollFor(pin, mode, interval);
+        // For input modes, auto-start polling. If `interval` / `threshold`
+        // are given use them, otherwise the underlying digitalRead /
+        // analogRead falls back to setReadInterval()/setReadThreshold()
+        // values, then to defaultInterval (200 ms) / defaultThreshold
+        // (0 = board default). OUTPUT modes never auto-poll.
+        this._maybeStartPollFor(pin, mode, interval, 'browser', threshold);
         return this;
     }
 
     // Shared helper used by pinMode() and by the incoming CMD_PIN_MODE handler.
     // For input-type modes, kick off a periodic read at the given interval
     // (or defaultInterval if undefined). No-op for OUTPUT or unknown modes.
-    _maybeStartPollFor(pin, mode, interval) {
-        if (mode === ANALOG_INPUT) {
-            this.analogRead(pin, interval);
-        } else if (mode === INPUT || mode === INPUT_PULLUP || mode === INPUT_PULLDOWN) {
-            this.digitalRead(pin, interval);
+    // `origin` tags any read entry this creates ('board' when called from the
+    // inbound handler — a sketch share()'s auto-poll — else 'browser'), via
+    // _pollOrigin, which digitalRead/analogRead consult while it's set.
+    _maybeStartPollFor(pin, mode, interval, origin = 'browser', threshold) {
+        this._pollOrigin = origin;
+        try {
+            if (mode === ANALOG_INPUT_MODE) {
+                this.analogRead(pin, interval, threshold);
+            } else if (mode === INPUT || mode === INPUT_PULLUP || mode === INPUT_PULLDOWN) {
+                this.digitalRead(pin, interval, threshold);
+            }
+        } finally {
+            this._pollOrigin = null;
         }
     }
 
     digitalWrite(pin, value) {
         pin = this._resolvePin(pin);
         this._pinValues.set(pin, value);  // stored for announce sync and _onSyncComplete replay
+        this._pinOrigins.set(pin, 'browser');   // this page claims the pin — replayed on reconnect
         this.send(encodeFrame(CMD_DIGITAL_WRITE, pin, [value]));
         return this;
     }
 
+    // analogWrite(pin, value) — write a PWM duty (0–255).
+    // Rate-limited per pin by writeThrottle (see the constructor): the first
+    // write in a burst is sent immediately, rapid follow-ups (a slider drag,
+    // a draw loop) are coalesced into a single trailing send that carries the
+    // final value. Tune with setWriteThrottle()/setWriteThreshold(); set the
+    // throttle to 0 to send every value (the old behaviour).
     analogWrite(pin, value) {
         pin = this._resolvePin(pin);
-        this.send(encodeFrame(CMD_ANALOG_WRITE, pin, [Math.round(value)]));
+        this._pwmScheduleWrite(pin, Math.round(value));
         return this;
     }
 
-    // Returns the most recently received value from the Arduino.
-    // digitalRead(pin, interval) — registers a periodic read at the given interval (ms).
-    // digitalRead(pin)           — returns the cached value only; no network traffic.
-    // digitalRead(pin, END)      — stops any active periodic read.
+    // Leading-edge-immediate, trailing-edge-coalesced scheduler. Keeps the
+    // documented "individual writes flush immediately" feel for a single
+    // write while capping a fast stream. The latest value always wins the
+    // trailing slot, so the resting position is never dropped.
+    _pwmScheduleWrite(pin, value) {
+        if (this.writeThrottle <= 0) { this._pwmSend(pin, value); return; }
+        const now  = Date.now();
+        const wait = this.writeThrottle - (now - (this._pwmLastWrite.get(pin) || 0));
+        if (wait > 0) {
+            const t = this._pwmPending.get(pin);
+            if (t) clearTimeout(t);
+            this._pwmPending.set(pin, setTimeout(() => {
+                this._pwmPending.delete(pin);
+                this._pwmSend(pin, value);
+            }, wait));
+        } else {
+            this._pwmSend(pin, value);
+        }
+    }
+
+    _pwmSend(pin, value) {
+        if (this.writeThreshold > 0 && this._pwmLastSent.has(pin) &&
+            Math.abs(value - this._pwmLastSent.get(pin)) < this.writeThreshold) {
+            return;
+        }
+        this.send(encodeFrame(CMD_ANALOG_WRITE, pin, [value]));
+        this._pwmLastWrite.set(pin, Date.now());
+        this._pwmLastSent.set(pin, value);
+    }
+
+    // Cancel every coalesced trailing send and forget the per-pin history.
+    // Called on (re)connect so a value queued for the old board never lands
+    // on the new one.
+    _pwmCancelPending() {
+        for (const t of this._pwmPending.values()) clearTimeout(t);
+        this._pwmPending.clear();
+        this._pwmLastWrite.clear();
+        this._pwmLastSent.clear();
+    }
+
+    // setWriteThrottle(ms) — minimum ms between PWM sends on a pin (0 = off,
+    //   send every value). Applies to all analogWrite() pins. Default 20.
+    // setWriteThreshold(v) — minimum duty change worth sending (0 = send all).
+    // Both chainable. Useful when driving analogWrite() from mouse movement
+    // or a draw loop, especially on the UNO R4 WiFi.
+    setWriteThrottle(ms)  { this.writeThrottle  = Math.max(0, ms); return this; }
+    setWriteThreshold(v)  { this.writeThreshold = Math.max(0, v);  return this; }
+
+    // digitalRead(pin, interval, threshold) — start/update a board-side watch.
+    // digitalRead(pin)      — return cached value; no network traffic.
+    // digitalRead(pin, END) — stop this browser's watch.
+    // interval: minimum ms between updates to this browser (default:
+    //   setReadInterval() value, else defaultInterval, 200 ms). Digital
+    //   edges transmit immediately regardless — the interval never delays
+    //   a button press; analog pins are sampled every 10 ms on the board
+    //   and rate-limited per browser by the interval.
+    // threshold: minimum change worth transmitting (default:
+    //   setReadThreshold() value, else defaultThreshold; 0 = board default —
+    //   1 for digital, the ADC noise floor for analog). Per-browser: other
+    //   pages polling the same pin keep their own interval and threshold.
+    // Calling again with the same settings just returns the cached value.
     // If the pin was previously registered as analogRead, that read is cancelled first.
-    // digitalRead(pin, interval) — start/update periodic read at interval (ms).
-    // digitalRead(pin)           — return cached value; start default poll if none running.
-    // digitalRead(pin, END)      — stop any active periodic read.
-    // Calling again with the same interval just returns the cached value.
-    // If the pin was previously registered as analogRead, that read is cancelled first.
-    digitalRead(pin, interval) {
+    digitalRead(pin, interval, threshold) {
+        return this._read(CMD_DIGITAL_READ, pin, interval, threshold);
+    }
+
+    // analogRead(pin, interval, threshold) — same contract as digitalRead().
+    analogRead(pin, interval, threshold) {
+        return this._read(CMD_ANALOG_READ, pin, interval, threshold);
+    }
+
+    // Shared implementation of digitalRead / analogRead.
+    _read(cmd, pin, interval, threshold) {
         pin = this._resolvePin(pin);
         if (interval === END) { this.end(pin); return 0; }
         let read = this._reads.get(pin);
-        if (read && read.cmd !== CMD_DIGITAL_READ) { this.end(pin); read = null; }
-        if (read && (interval === undefined || read.interval === interval)) return read.value ?? 0;
-        interval ??= this.defaultInterval;
+        if (read && read.cmd !== cmd) { this.end(pin); read = null; }
+        // Fast path — nothing new requested: return the mirror.
+        if (read && (interval  === undefined || read.interval  === interval)
+                 && (threshold === undefined || read.threshold === threshold))
+            return read.value ?? 0;
+        const cfg = this._readConfig.get(pin);
+        interval  ??= cfg?.interval  ?? this.defaultInterval;
+        threshold ??= cfg?.threshold ?? this.defaultThreshold;
         if (!read) {
-            read = { cmd: CMD_DIGITAL_READ, interval, value: null, callbacks: [] };
+            read = { cmd, interval, threshold, value: null,
+                     origin: this._pollOrigin ?? 'browser', passive: false };
             this._reads.set(pin, read);
-            this.send(encodeFrame(CMD_DIGITAL_READ, pin, [interval]));
         } else {
-            read.interval = interval;
-            this.send(encodeFrame(CMD_DIGITAL_READ, pin, [interval]));
+            read.interval  = interval;
+            read.threshold = threshold;
+            read.passive   = false;   // we now hold our own registration
+            if (!this._pollOrigin) read.origin = 'browser';   // explicit user call claims the poll
         }
+        this.send(encodeFrame(cmd, pin, [interval, threshold]));
         return read.value ?? 0;
     }
 
-    // analogRead(pin, interval) — start/update periodic read at interval (ms).
-    // analogRead(pin)           — return cached value; start default poll if none running.
-    // analogRead(pin, END)      — stop any active periodic read.
-    // Calling again with the same interval just returns the cached value.
-    // If the pin was previously registered as digitalRead, that read is cancelled first.
-    analogRead(pin, interval) {
+    // setReadInterval(pin, ms) / setReadThreshold(pin, t)
+    // Set a pin's poll interval / change threshold directly — before polling
+    // starts (stored, applied when the read registers) or while it runs
+    // (re-registers immediately). threshold 0 = board default. Chainable.
+    setReadInterval(pin, ms)  { return this._setReadConfig(pin, 'interval',  ms); }
+    setReadThreshold(pin, t)  { return this._setReadConfig(pin, 'threshold', t);  }
+
+    _setReadConfig(pin, key, value) {
         pin = this._resolvePin(pin);
-        if (interval === END) { this.end(pin); return 0; }
-        let read = this._reads.get(pin);
-        if (read && read.cmd !== CMD_ANALOG_READ) { this.end(pin); read = null; }
-        if (read && (interval === undefined || read.interval === interval)) return read.value ?? 0;
-        interval ??= this.defaultInterval;
-        if (!read) {
-            read = { cmd: CMD_ANALOG_READ, interval, value: null, callbacks: [] };
-            this._reads.set(pin, read);
-            this.send(encodeFrame(CMD_ANALOG_READ, pin, [interval]));
-        } else {
-            read.interval = interval;
-            this.send(encodeFrame(CMD_ANALOG_READ, pin, [interval]));
+        const cfg = this._readConfig.get(pin) || {};
+        cfg[key] = value;
+        this._readConfig.set(pin, cfg);
+        const read = this._reads.get(pin);
+        if (read) {
+            // Live poll (ours or one we're passively following): register
+            // our own settings with the board. Per-client on the board, so
+            // this never disturbs another browser's poll.
+            read[key] = value;
+            if (!read.interval) read.interval = this.defaultInterval;   // was a passive cache entry
+            read.threshold ??= this.defaultThreshold;
+            read.passive = false;
+            read.origin  = 'browser';
+            this.send(encodeFrame(read.cmd, pin, [read.interval, read.threshold]));
         }
-        return read.value ?? 0;
-    }
-
-    // Register a callback fired whenever pin's value changes.
-    // Can be called before or after digitalRead / analogRead.
-    onChange(pin, callback) {
-        pin = this._resolvePin(pin);
-        let read = this._reads.get(pin);
-        if (!read) {
-            read = { cmd: CMD_DIGITAL_READ, interval: this.defaultInterval, value: null, callbacks: [] };
-            this._reads.set(pin, read);
-            this.send(encodeFrame(CMD_DIGITAL_READ, pin, [read.interval]));
-        }
-        read.callbacks.push(callback);
         return this;
     }
 
-    // Register a callback fired whenever an output pin's value changes.
-    // The callback receives (value, pin) — value is HIGH (1) or LOW (0).
-    // Callbacks fire for writes from any connected browser (including this one),
-    // but only after the announce phase is complete (not during state sync).
-    onWrite(pin, callback) {
-        pin = this._resolvePin(pin);
-        if (!this._writeCbs.has(pin)) this._writeCbs.set(pin, []);
-        this._writeCbs.get(pin).push(callback);
-        return this;
+    // -------------------------------------------------------------------
+    // pin(ref) — the handle for LISTENING to a pin. Same grammar as the
+    // device extensions: on/off with object payloads, setRead* config.
+    // The Arduino-mirroring verbs (digitalRead, digitalWrite, pinMode)
+    // remain the way you DO things; the handle carries the invented
+    // surface — events and per-pin configuration.
+    //
+    //   const knob = arduino.pin('A0');
+    //   knob.on('change', ({ value }) => circle(value));
+    //   knob.setReadInterval(25).setReadThreshold(4);
+    //
+    // Handles are cached (pin(9) twice → same object) and permanent:
+    // listeners survive connect() to a new board, like device extensions.
+    // Alias handles resolve lazily — arduino.pin('A0') works before
+    // 'ready', even though the board's alias table hasn't arrived yet.
+    // -------------------------------------------------------------------
+    pin(ref) {
+        let key;
+        try { key = this._resolvePin(ref); }      // pin('A0') and pin(14) share a handle…
+        catch (_) { key = String(ref); }          // …unresolvable alias: keyed by name for now
+        let p = this._pinHandles.get(key);
+        if (!p) { p = new Pin(this, ref); this._pinHandles.set(key, p); }
+        return p;
     }
 
-    // Remove all onWrite callbacks for a pin.
-    offWrite(pin) {
-        pin = this._resolvePin(pin);
-        this._writeCbs.delete(pin);
-        return this;
+    // Deliver a pin-state change (input reading past threshold, or an
+    // output write from any client/the sketch) to the 'change' event and
+    // to every matching pin handle.
+    _emitPinChange(pin, value) {
+        this._emit('change', { pin, value });
+        this._pinHandles.forEach(h => {
+            if (h.number === pin) h._emit('change', { value, pin });
+        });
     }
 
     // Stop periodic reads for a pin.
@@ -1226,7 +2146,7 @@ class Group {
         const loose   = [];          // [[member, value], ...]
         for (const [key, v] of Object.entries(values)) {
             const m = this.members[key];
-            if (!m) { console.warn(`Group '${this.name}': no member '${key}'`); continue; }
+            if (!m) { this.arduino._notify('warn', `Group '${this.name}'`, `no member '${key}'`); continue; }
             if (typeof v === 'number') this._commanded[key] = Math.round(v);
             this._lastMoved.push(m);
             const sk = (typeof m._memberSyncKey === 'function') ? m._memberSyncKey() : null;
@@ -1276,7 +2196,7 @@ class Group {
         const loose   = [];          // [[m, target], ...]
         for (const [key, raw] of Object.entries(targets)) {
             const m = this.members[key];
-            if (!m) { console.warn(`Group '${this.name}': no member '${key}'`); continue; }
+            if (!m) { this.arduino._notify('warn', `Group '${this.name}'`, `no member '${key}'`); continue; }
             const target  = Math.round(raw);
             const current = (this._commanded[key] !== undefined) ? this._commanded[key] : (m.memberValue || 0);
             this._commanded[key] = target;
@@ -1297,6 +2217,74 @@ class Group {
         for (const [m, target] of loose) frames.push(...m._memberWrite(target));
 
         if (frames.length) this.arduino.send(frames);
+        return this;
+    }
+
+    // gesture({ name: segments, ... }, opts?)
+    // Coordinated expressive motion — each named member plays its own SEGMENT
+    // SCHEDULE (see the per-actuator gesture()), all pushed in ONE batched
+    // message and played on the board's own clock. Lanes are per-member, so a
+    // member's segments overlap its neighbours' → coordination and follow-
+    // through. Uneven lanes are padded with a trailing hold so every member
+    // still ARRIVES TOGETHER (the group counterpart of writeTimed()).
+    //
+    //   arm.gesture({
+    //       shoulder: [{ by: 300, dur: 400, curve: 'easeOut'   },
+    //                  { by:-300, dur: 600, curve: 'easeInOut' }],   // 1000 ms
+    //       wrist:    [{ by:  20, dur: 250, curve: 'back'       }],   // 250 ms → padded to 1000
+    //   });
+    //   await arm.gesture({ ... }).whenDone();
+    //
+    // Each lane is relative by default (infers absolute from `to`, or opts.absolute).
+    // Members without gesture support, and empty/unknown lanes, are skipped with a warn.
+    gesture(lanes, opts = {}) {
+        if (!lanes || typeof lanes !== 'object') return this;
+        this._lastMoved = [];
+
+        // 1. Resolve lanes → per-member items; infer reference frame + total duration.
+        const items = [];
+        for (const [key, segs] of Object.entries(lanes)) {
+            const m = this.members[key];
+            if (!m) { this.arduino._notify('warn', `Group '${this.name}'`, `no member '${key}'`); continue; }
+            if (typeof m._memberGestureEncode !== 'function' || typeof m._gestureBlock !== 'function') {
+                this.arduino._notify('warn', `Group '${this.name}'`, `member '${key}' doesn't support gesture()`); continue;
+            }
+            if (!Array.isArray(segs) || segs.length === 0) {
+                this.arduino._notify('warn', `Group '${this.name}'`, `lane '${key}' needs a non-empty array of segments`); continue;
+            }
+            const absolute = (opts.absolute !== undefined) ? !!opts.absolute : segs.some(s => s.to !== undefined);
+            const total    = segs.reduce((n, s) => n + Math.max(1, Math.round(s.dur ?? 0)), 0);
+            items.push({ m, segments: segs.slice(), total, absolute });
+        }
+        if (!items.length) return this;
+
+        // 2. Pad short lanes with a trailing hold so all arrive together. Hold in
+        //    place: relative → zero delta; absolute → the lane's last target.
+        const maxTotal = items.reduce((mx, it) => Math.max(mx, it.total), 0);
+        for (const it of items) {
+            const padMs = maxTotal - it.total;
+            if (padMs <= 0) continue;
+            const last = it.segments[it.segments.length - 1];
+            it.segments = it.segments.concat([ it.absolute
+                ? { to: (last.to ?? it.m.memberValue ?? 0), dur: padMs, curve: 'linear' }
+                : { by: 0, dur: padMs, curve: 'linear' } ]);
+        }
+
+        // 3. Bucket by actuator TYPE — one CMD_*_GESTURE frame per type, each
+        //    carrying every member's channel block, all in one batched message.
+        const buckets = new Map();   // deviceId → [[member, segments], ...]
+        for (const it of items) {
+            const dev = it.m.constructor.deviceId;
+            if (!buckets.has(dev)) buckets.set(dev, []);
+            buckets.get(dev).push([it.m, it.segments]);
+            this._lastMoved.push(it.m);
+        }
+
+        const frames = [];
+        for (const entries of buckets.values())
+            frames.push(...entries[0][0]._memberGestureEncode(entries));
+        if (frames.length) this.arduino.send(frames);   // single batched message
+        this._lastDuration = maxTotal;
         return this;
     }
 

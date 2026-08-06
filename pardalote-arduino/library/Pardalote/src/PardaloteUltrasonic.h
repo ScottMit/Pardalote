@@ -1,7 +1,7 @@
 // ==============================================================
 // PardaloteUltrasonic.h
 // Pardalote Ultrasonic Sensor Extension
-// Version v1.0
+// Part of Pardalote — version in library.properties
 // by Scott Mitchell
 // GPL-3.0 License
 //
@@ -43,7 +43,20 @@ private:
     inline static bool     _sketchOwned[MAX_ULTRASONIC] = {};
     inline static char     _names[MAX_ULTRASONIC][MAX_SHARE_NAME + 1] = {};
 
+    // Periodic reads — per-client registration + gating.
+    // Default threshold 3 tenths (≈3 mm): the HC-SR04's noise floor.
+    inline static ExtReadPoll _polls[MAX_ULTRASONIC] = {};
+    static constexpr uint16_t DEFAULT_THRESHOLD = 3;
+
     static bool validId(int id) { return id >= 0 && id < MAX_ULTRASONIC; }
+
+    static void sendReadTo(uint8_t clientNum, int id, int32_t dist) {
+        FrameBuilder fb;
+        fb.begin(CMD_ULTRASONIC_READ, DEVICE_ULTRASONIC);
+        fb.addInt(id);
+        fb.addInt(dist);
+        Pardalote.sendFrame(clientNum, fb);
+    }
 
     // Returns distance in tenths of the requested unit, or -1 on timeout.
     static int32_t measure(int id, uint8_t unit) {
@@ -185,24 +198,44 @@ public:
                 break;
             }
 
-            case CMD_ULTRASONIC_DETACH:
+            case CMD_ULTRASONIC_DETACH: {
                 _attached[id] = false;
                 _trigPins[id] = -1;
                 _echoPins[id] = -1;
+                ExtReadPoll* p = extPollFind(_polls, MAX_ULTRASONIC, id);
+                if (p) p->instance = -1;   // stop any periodic read
                 Serial.print(F("Ultrasonic ")); Serial.print(id);
                 Serial.println(F(" detached"));
                 break;
+            }
 
+            // READ — params [id, unit?, interval?, threshold?].
+            // Always answers the requester immediately. interval > 0
+            // registers a board-side per-client periodic read; interval < 0
+            // (JS END) removes this client's registration; absent/0 = one-shot.
             case CMD_ULTRASONIC_READ: {
                 if (!_attached[id]) return;
                 uint8_t unit = (nparams > 1) ? (uint8_t)paramInt(params, 1) : UNIT_CM;
-                int32_t dist = measure(id, unit);
+                long ms  = (nparams > 2) ? paramInt(params, 2) : 0;
+                long thr = (nparams > 3) ? paramInt(params, 3) : 0;
 
-                FrameBuilder fb;
-                fb.begin(CMD_ULTRASONIC_READ, DEVICE_ULTRASONIC);
-                fb.addInt(id);
-                fb.addInt(dist);
-                Pardalote.broadcastFrame(fb);
+                if (ms < 0) {   // END — unregister this client
+                    ExtReadPoll* p = extPollFind(_polls, MAX_ULTRASONIC, id);
+                    if (p) p->removeClient(clientNum);
+                    break;
+                }
+
+                int32_t dist = measure(id, unit);
+                sendReadTo(clientNum, id, dist);
+
+                if (ms > 0) {
+                    ExtReadPoll* p = extPollGet(_polls, MAX_ULTRASONIC, id);
+                    if (!p) break;
+                    p->unit = unit;   // last registration's unit wins
+                    p->setClient(clientNum, (uint16_t)constrain(ms, 1, 65535),
+                                 thr > 0 ? (uint16_t)thr : DEFAULT_THRESHOLD);
+                    p->seed(clientNum, dist, millis());
+                }
                 break;
             }
 
@@ -261,6 +294,27 @@ public:
             Pardalote.sendFrame(clientNum, ft);
         }
     }
+
+    // -------------------------------------------------------------------
+    // Loop hook — board-side periodic reads. One blocking measure per due
+    // registration (at the fastest requested rate), then per-client gating.
+    // -------------------------------------------------------------------
+    static void loop() {
+        const unsigned long now = millis();
+        for (int i = 0; i < MAX_ULTRASONIC; i++) {
+            ExtReadPoll& p = _polls[i];
+            if (!p.due(now)) continue;
+            if (!validId(p.instance) || !_attached[p.instance]) { p.instance = -1; continue; }
+            const int32_t dist = measure(p.instance, p.unit);
+            for (uint8_t c = 0; c < PARDALOTE_MAX_CLIENTS; c++)
+                if (p.gate(c, dist, now)) sendReadTo(c, p.instance, dist);
+        }
+    }
+
+    // Client disconnect — drop its read registrations.
+    static void disconnect(uint8_t clientNum) {
+        extPollDropClient(_polls, MAX_ULTRASONIC, clientNum);
+    }
 };
 
 // -------------------------------------------------------------------
@@ -304,6 +358,7 @@ public:
 };
 inline PardaloteUltrasonicAccess PardaloteUltrasonic;
 
-INSTALL_EXTENSION(DEVICE_ULTRASONIC, UltrasonicExt::handle, UltrasonicExt::announce)
+INSTALL_EXTENSION(DEVICE_ULTRASONIC, UltrasonicExt::handle, UltrasonicExt::announce,
+                  UltrasonicExt::disconnect, UltrasonicExt::loop)
 
 #endif

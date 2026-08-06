@@ -5,11 +5,16 @@
 
 #include "wifi_config.h"
 #include "platform.h"
-#include <EEPROM.h>
 
 // Owns the compile-time-secrets struct. Pardalote.h's binder writes
 // into this from the user's TU at static-init time, before begin().
 PardaloteSecrets _pardaloteSecrets = { nullptr, nullptr };
+
+// On no-WiFi boards (UNO R4 Minima) the whole credential manager
+// compiles out — the serial transport needs none of it.
+#ifndef PARDALOTE_NO_WIFI
+
+#include <EEPROM.h>
 
 // -------------------------------------------------------------------
 // EEPROM layout
@@ -276,3 +281,5 @@ void wifiConfigConnect(WifiStore& s) {
         _wifiEnterConfig(s);
     }
 }
+
+#endif   // PARDALOTE_NO_WIFI

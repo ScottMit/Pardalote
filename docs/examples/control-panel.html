@@ -10,9 +10,9 @@
 </head>
 <body data-nav="examples">
 
-<nav class="site-nav speckled">
+<nav class="site-nav">
   <a class="logo" href="../index.html">
-    <img src="../assets/logo.svg" width="30" height="30" alt="">
+    <img src="../assets/logo.svg" width="26" height="26" alt="">
     Pardalote
   </a>
   <div class="links">
@@ -24,7 +24,7 @@
   </div>
 </nav>
 
-<div class="page-head speckled">
+<div class="page-head">
   <div class="wrap">
     <div class="crumb"><a href="index.html">Examples</a> / Control panel</div>
     <h1>Control panel</h1>
@@ -66,7 +66,7 @@
 <h3 id="1-upload-the-firmware">1. Upload the firmware</h3>
 <ol>
 <li>
-<p>In Arduino IDE: <strong>File → Examples → Pardalote → basic-LED</strong> (or any other Pardalote example that includes the extensions you need)</p>
+<p>In Arduino IDE: <strong>File → Examples → Pardalote → minimal-pardalote</strong> (or any other Pardalote example that includes the extensions you need)</p>
 </li>
 <li>
 <p>Select your board and upload</p>
@@ -85,9 +85,9 @@ Saved: YourWiFiName
 </code></pre>
 <p>Credentials are saved to EEPROM and survive re-uploads. Press <code>w</code> within 5 seconds of any boot to update them.</p>
 <p><strong>Prefer compile-time credentials?</strong> Uncomment the two lines in <code>secrets.h</code>:</p>
-<pre><code><span class="cp">#define SECRET_SSID &quot;YourWiFiName&quot;</span>
+<div class="code-ex"><span class="lang-badge lang-arduino">Arduino</span><pre><code><span class="cp">#define SECRET_SSID &quot;YourWiFiName&quot;</span>
 <span class="cp">#define SECRET_PASS &quot;YourWiFiPassword&quot;</span>
-</code></pre>
+</code></pre></div>
 </li>
 <li>
 <p>Find your Arduino's IP address:</p>
@@ -97,17 +97,16 @@ Saved: YourWiFiName
 </ul>
 </li>
 </ol>
-<h3 id="2-set-the-default-ip">2. Set the default IP</h3>
-<p><strong>Optional</strong> Open <code>sketch.js</code> and update the IP address at the top:</p>
-<pre><code><span class="kd">const</span> <span class="nx">IP</span> <span class="o">=</span> <span class="s1">&#39;192.168.1.42&#39;</span><span class="p">;</span>
-</code></pre>
-<p>This pre-fills the IP field when the page loads — you can skip this step and change it in the browser.</p>
+<h3 id="2-no-code-editing-needed">2. No code editing needed</h3>
+<p>The IP is entered on the page, and the browser remembers it (along with the
+last board shown) — a returning visit reconnects automatically.</p>
 <h3 id="3-open-the-panel">3. Open the panel</h3>
 <p>Open <code>index.html</code> in a browser, then click <strong>Connect</strong>.</p>
 <hr />
 <h2 id="using-the-panel">Using the Panel</h2>
 <h3 id="connecting">Connecting</h3>
-<p>Enter your Arduino's IP address in the field at the top (if it's not already there) and click <strong>Connect</strong>. The status indicator turns green when the connection is ready.</p>
+<p>Enter your Arduino's IP address in the <strong>Board IP</strong> field (if it's not already there) and click <strong>Connect</strong>. The status line reads <code>ready</code> once the connection is up; <strong>Disconnect</strong> stops it and pauses auto-reconnect.</p>
+<p><strong>No WiFi? Use the cable.</strong> Switch the dropdown from <strong>WiFi</strong> to <strong>USB</strong> and click <strong>Connect</strong> — the browser (Chrome or Edge) shows a port picker the first time and remembers your choice afterwards. The sketch side must start the serial transport: <code>Pardalote.begin(PARDALOTE_SERIAL)</code> (one commented line in <code>minimal-pardalote</code>). Everything else on the panel works identically.</p>
 <p>The board layout switches automatically to match the connected Arduino. If you want to view a different board layout, use the board selector dropdown.</p>
 <h3 id="board-selector">Board selector</h3>
 <p>Three boards are included:</p>
@@ -219,7 +218,7 @@ Saved: YourWiFiName
   </div>
 </div>
 
-<footer class="site-footer speckled">
+<footer class="site-footer">
   <div class="wrap">
     <span>Pardalote — created by Scott Mitchell for design education and creative technology.</span>
     <span><a href="../reference/index.html">Reference</a> · <a href="https://github.com/ScottMit/Pardalote">GitHub</a> · GPL-3.0</span>

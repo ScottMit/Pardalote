@@ -1,7 +1,7 @@
 // ==============================================================
 // stepper.js
 // Pardalote Stepper Motor Extension
-// Version v1.0
+// Part of Pardalote — version in package.json
 // by Scott Mitchell
 // GPL-3.0 License
 //
@@ -50,6 +50,12 @@ const CMD_STEPPER_LIMIT         = 0x53;  // Ar→JS: [id, which, position] — s
 const CMD_STEPPER_SET_SWITCH_POS = 0x54; // [id, which, coord] — coordinate a switch sits at (independent of limits)
 const CMD_STEPPER_SET_HOME      = 0x55;  // [id, value?] — re-zero the frame; board echoes shifted pos/limits/switchPos
 const CMD_STEPPER_HARD_STOP     = 0x57;  // [id] — instant halt, no decel ramp (0x56 = CMD_SHARE)
+const CMD_STEPPER_GESTURE       = 0x59;  // global: payload = stepper channel blocks (segment schedules).
+                                         // See pardalote.js CURVE_IDS / GESTURE_FLAG_* and defs.h.
+
+// Board-side cap (PardaloteStepper.h MAX_STEPPER_SEGMENTS) — mirrored so JS
+// can warn instead of silently overrunning. Extra segments are dropped.
+const MAX_STEPPER_SEGMENTS = 16;
 
 // Interface types — match AccelStepper (and PardaloteStepper.h).
 const STEPPER_DRIVER    = 1;   // STEP/DIR
@@ -102,9 +108,11 @@ class Stepper extends Extension {
         this.limitMax     = 0;
         this.limitEnabled = false;
 
-        // Periodic read
-        this._readTimer    = null;
-        this._readInterval = 0;
+        // Periodic read registration (board-side).
+        // _readThreshold is in steps; 0 = board default (1 step).
+        // Survives _reset() — it's user-tuned configuration.
+        this._readInterval  = 0;
+        this._readThreshold = 0;
 
         // Pending _whenDone() resolvers, drained on 'done'.
         this._doneResolvers = [];
@@ -123,7 +131,7 @@ class Stepper extends Extension {
     // Board switch — wipe per-board state, keep user-tuned config.
     // -------------------------------------------------------------------
     _reset() {
-        this._stopRead();
+        this._readInterval = 0;  // registration died with the old board — send nothing
         this._resolveDone();             // don't leave awaiters hanging
         this._movePromise  = null;
         this._moveDuration = 0;
@@ -171,11 +179,9 @@ class Stepper extends Extension {
             }
             this._raw(CMD_STEPPER_SET_POSITION, [this.logicalId, this.position]);
         }
-        if (this.isAttached && this._readInterval > 0) {
-            const interval = this._readInterval;
-            this._readInterval = 0;
-            this.read(interval);
-        }
+        // Periodic read registrations are per-WS-client on the Arduino
+        // (cleared on disconnect), so always re-register if active.
+        if (this.isAttached && this._readInterval > 0) this._sendRead();
         this._announcedByArduino = false;
     }
 
@@ -263,7 +269,7 @@ class Stepper extends Extension {
         this.target = this.position + rel;   // estimate; refined by the next read poll
         this.arduino.send(encodeFrame(CMD_STEPPER_MOVE, DEVICE_STEPPER,
             [this.logicalId, rel]));
-        this._emit('move', { relative: rel });
+        this._emit('move', { target: this.target });
         return this;
     }
 
@@ -278,6 +284,100 @@ class Stepper extends Extension {
             [this.logicalId, this.target, Math.max(0, Math.round(duration))]));
         this._emit('move', { target: this.target });
         return this;
+    }
+
+    // -------------------------------------------------------------------
+    // gesture(segments, opts?) — play an authored SEGMENT SCHEDULE on-board.
+    //
+    // The stepper counterpart of servo.gesture(): an ordered list of eased
+    // segments the board plays back-to-back on its own clock (MODE_EASED —
+    // each tick follows the segment's eased position at a curve-derived
+    // speed). Values are in STEPS. Each segment is { dur, curve, and either
+    // `by` (relative step delta) or `to` (absolute position) }:
+    //
+    //   lift.gesture([                       // a lead-screw bounce, no homing
+    //       { by:  800, dur: 350, curve: 'easeOut'   },
+    //       { by: -800, dur: 550, curve: 'easeInOut' },
+    //       { by:  120, dur: 200, curve: 'back'      },  // small overshoot settle
+    //   ]);
+    //   await lift.gesture([...]).whenDone();
+    //
+    // Relative by default — the portable primitive, honest on an open-loop
+    // stepper (the board captures `from` from its live position at each
+    // segment, so nothing accumulates and no absolute truth is needed). Use
+    // `to`/opts.absolute for absolute targets (soft limits clamp the ends).
+    // An eased move's velocity peaks above its average, so the board briefly
+    // raises the speed cap to hit the authored duration, then restores it.
+    // Fires 'done' (resolves whenDone()) when the last segment lands.
+    // -------------------------------------------------------------------
+    gesture(segments, opts = {}) {
+        const blk = this._gestureBlock(segments, opts);
+        if (!blk) return this;
+        this.arduino.send(encodeFrame(CMD_STEPPER_GESTURE, DEVICE_STEPPER, [], blk.bytes));
+        return this;
+    }
+
+    // Encode ONE gesture channel block — shared by gesture() (wrap + send) and
+    // the group adapter _memberGestureEncode() (batched, no send). Arms
+    // whenDone(), mirrors the commanded target, emits 'move'. Returns
+    // { bytes, total } or null when there's nothing to play.
+    _gestureBlock(segments, opts = {}) {
+        if (!this._requireAttached('gesture')) return null;
+        if (!Array.isArray(segments) || segments.length === 0) {
+            this._warn('gesture: needs a non-empty array of segments');
+            return null;
+        }
+
+        const usesTo = segments.some(s => s.to !== undefined);
+        const usesBy = segments.some(s => s.by !== undefined || s.value !== undefined);
+        const absolute = (opts.absolute !== undefined) ? !!opts.absolute : usesTo;
+        if (usesTo && usesBy)
+            this._warn(`gesture: mixes 'to' (absolute) and 'by' (relative) — treating whole gesture as ${absolute ? 'absolute' : 'relative'}`);
+
+        if (segments.length > MAX_STEPPER_SEGMENTS)
+            this._warn(`gesture: ${segments.length} segments exceeds board max ${MAX_STEPPER_SEGMENTS} — extra segments dropped`);
+        const count = Math.min(segments.length, MAX_STEPPER_SEGMENTS);
+
+        const flags = absolute ? GESTURE_FLAG_ABSOLUTE : 0;
+
+        // Encode: [logicalId u8, flags u8, count u8] + count × {curve u8, dur u16, value i32}.
+        const bytes = new Uint8Array(3 + count * 7);
+        const dv    = new DataView(bytes.buffer);
+        dv.setUint8(0, this.logicalId & 0xFF);
+        dv.setUint8(1, flags & 0xFF);
+        dv.setUint8(2, count & 0xFF);
+        let total = 0, rest = this.position;   // predicted end (board uses its true live position)
+        for (let i = 0; i < count; i++) {
+            const s   = segments[i];
+            const off = 3 + i * 7;
+            const dur = Math.max(1, Math.round(s.dur ?? 0));
+            const val = absolute ? Math.round(s.to ?? rest)
+                                 : Math.round(s.by ?? s.value ?? 0);
+            dv.setUint8(off, curveId(s.curve));
+            dv.setUint16(off + 1, dur & 0xFFFF, false);
+            dv.setInt32(off + 3, val, false);
+            total += dur;
+            rest = absolute ? Math.round(s.to ?? rest) : rest + Math.round(s.by ?? s.value ?? 0);
+        }
+
+        this._armDone(total);
+        this.target = rest;   // mirror commanded target; read polls refine position
+        this._emit('move', { target: rest });
+        return { bytes, total };
+    }
+
+    // Group adapter (group.gesture()). entries: [[member, segments], ...], all
+    // Steppers → one CMD_STEPPER_GESTURE frame carrying every member's channel
+    // block; the board plays them phase-locked on its own clock. Returns
+    // frame(s) WITHOUT sending, so the group batches all types into one message.
+    _memberGestureEncode(entries) {
+        const blocks = [];
+        for (const [m, segs] of entries) { const b = m._gestureBlock(segs); if (b) blocks.push(b.bytes); }
+        if (!blocks.length) return [];
+        const payload = new Uint8Array(blocks.reduce((n, b) => n + b.length, 0));
+        let off = 0;
+        for (const b of blocks) { payload.set(b, off); off += b.length; }
+        return [encodeFrame(CMD_STEPPER_GESTURE, DEVICE_STEPPER, [], payload)];
     }
 
     // -------------------------------------------------------------------
@@ -360,7 +460,7 @@ class Stepper extends Extension {
     // -------------------------------------------------------------------
     setLimitSwitch(which, pin, trigger = LOW) {
         const key = this._swKey(which);
-        if (!key) { console.warn(`Stepper ${this.logicalId}: setLimitSwitch — which must be LIMIT_MIN or LIMIT_MAX`); return this; }
+        if (!key) { this._warn('setLimitSwitch — which must be LIMIT_MIN or LIMIT_MAX'); return this; }
         if (pin === -1 || pin === undefined || pin === null) return this.clearLimitSwitch(which);
         pin     = this.arduino._resolvePin(pin);
         trigger = trigger ? 1 : 0;
@@ -373,7 +473,7 @@ class Stepper extends Extension {
 
     clearLimitSwitch(which) {
         const key = this._swKey(which);
-        if (!key) { console.warn(`Stepper ${this.logicalId}: clearLimitSwitch — which must be LIMIT_MIN or LIMIT_MAX`); return this; }
+        if (!key) { this._warn('clearLimitSwitch — which must be LIMIT_MIN or LIMIT_MAX'); return this; }
         this.switches[key] = null;
         if (this.limitHit === key) this.limitHit = null;
         if (this.isAttached) {
@@ -399,7 +499,7 @@ class Stepper extends Extension {
     // -------------------------------------------------------------------
     setSwitchPosition(which, coord) {
         const key = this._swKey(which);
-        if (!key) { console.warn(`Stepper ${this.logicalId}: setSwitchPosition — which must be LIMIT_MIN or LIMIT_MAX`); return this; }
+        if (!key) { this._warn('setSwitchPosition — which must be LIMIT_MIN or LIMIT_MAX'); return this; }
         this.switchPos[key] = Math.round(coord);
         if (this.isAttached) {
             this._raw(CMD_STEPPER_SET_SWITCH_POS,
@@ -439,7 +539,7 @@ class Stepper extends Extension {
     //   speed   — seek speed in steps/sec (default maxSpeed/4, board-side).
     //   timeout — ms cap on the seek/back-off legs (default 30 s, board-side).
     //             If the switch never trips or never releases, the board
-    //             hard-stops, fires 'homeFail', then 'done' (motion settled).
+    //             hard-stops, fires 'home:fail', then 'done' (motion settled).
     // A bare number is ignored (it's a duration when group.home(duration)
     // fans out — the routine has no duration).
     home(opts = {}) {
@@ -458,34 +558,59 @@ class Stepper extends Extension {
     }
 
     // -------------------------------------------------------------------
-    // read(interval?) — poll live state.
-    // read()          — return cached position; start default poll if none running.
-    // read(interval)  — start/update periodic poll at interval (ms).
-    // read(END)       — stop the poll.
+    // read(interval?, threshold?) — poll live state.
+    // read()             — return cached position; no network traffic.
+    // read(interval)     — board-side periodic poll (ms); 'change' fires
+    //                      when the position moved by threshold+ steps.
+    // read(interval, 10) — only report changes of 10+ steps.
+    // read(END)          — stop this browser's periodic read.
+    // The board runs the poll and gates per browser ;
+    // threshold 0 = board default (1 step). Calling again with the same
+    // settings just returns the cached value.
     // -------------------------------------------------------------------
-    read(interval) {
+    read(interval, threshold) {
         if (!this.isAttached) {
-            console.warn(`Stepper ${this.logicalId}: not attached`);
+            this._warn('not attached');
             return this.position;
         }
         if (interval === END) { this._stopRead(); return this.position; }
-        if (this._readTimer && (interval === undefined || interval === this._readInterval)) {
+        if (this._readInterval > 0
+            && (interval  === undefined || interval  === this._readInterval)
+            && (threshold === undefined || threshold === this._readThreshold)) {
             return this.position;
         }
-        interval ??= this.arduino.defaultInterval;
-        this._stopRead();
-        this._readInterval = interval;
-        this._sendReadRequest();
-        this._readTimer = setInterval(() => this._sendReadRequest(), interval);
+        this._readInterval = interval ?? this.arduino.defaultInterval;
+        if (threshold !== undefined) this._readThreshold = threshold;
+        this._sendRead();
         return this.position;
     }
 
-    _sendReadRequest() {
-        this.arduino.send(encodeFrame(CMD_STEPPER_READ, DEVICE_STEPPER, [this.logicalId]));
+    // setReadInterval(ms) / setReadThreshold(steps) — set poll settings
+    // directly; applied immediately if polling, stored for read() otherwise.
+    setReadInterval(ms) {
+        this._readInterval = ms;
+        if (this.isAttached && ms > 0) this._sendRead();
+        return this;
+    }
+
+    setReadThreshold(steps) {
+        this._readThreshold = steps;
+        if (this.isAttached && this._readInterval > 0) this._sendRead();
+        return this;
+    }
+
+    // Register (or update) this browser's poll with the board.
+    _sendRead() {
+        this.arduino.send(encodeFrame(CMD_STEPPER_READ, DEVICE_STEPPER,
+            [this.logicalId, this._readInterval,
+             Math.max(0, Math.round(this._readThreshold))]));
     }
 
     _stopRead() {
-        if (this._readTimer) { clearInterval(this._readTimer); this._readTimer = null; }
+        if (this._readInterval > 0) {
+            this.arduino.send(encodeFrame(CMD_STEPPER_READ, DEVICE_STEPPER,
+                [this.logicalId, END]));   // END = unregister
+        }
         this._readInterval = 0;
     }
 
@@ -504,11 +629,11 @@ class Stepper extends Extension {
     // -------------------------------------------------------------------
     // Callback shortcuts
     // -------------------------------------------------------------------
-    onRead(fn)     { return this.on('read',     fn); }
+    onChange(fn)   { return this.on('change',   fn); }
     onDone(fn)     { return this.on('done',     fn); }
     onMove(fn)     { return this.on('move',     fn); }
     onLimit(fn)    { return this.on('limit',    fn); }
-    onHomeFail(fn) { return this.on('homeFail', fn); }
+    onHomeFail(fn) { return this.on('home:fail', fn); }
 
     // -------------------------------------------------------------------
     // Incoming frames from Arduino.
@@ -549,7 +674,7 @@ class Stepper extends Extension {
                 this.speed        = frame.params[3];
                 this.isRunning    = frame.params[4] === 1;
                 this.target       = this.position + this.distanceToGo;   // the board's real target
-                this._emit('read', {
+                this._emit('change', {
                     position: this.position, distanceToGo: this.distanceToGo,
                     speed: this.speed, isRunning: this.isRunning,
                 });
@@ -583,7 +708,7 @@ class Stepper extends Extension {
                 this.distanceToGo = 0;
                 this.isRunning    = false;
                 this.target       = this.position;
-                this._emit('homeFail', { position: this.position });
+                this._emit('home:fail', { position: this.position });
                 break;
             }
 
@@ -683,7 +808,7 @@ class Stepper extends Extension {
     _raw(cmd, params) { this.arduino.send(encodeFrame(cmd, DEVICE_STEPPER, params)); }
 
     _requireAttached(who) {
-        if (!this.isAttached) { console.warn(`Stepper ${this.logicalId}: not attached (${who})`); return false; }
+        if (!this.isAttached) { this._warn(`not attached (${who})`); return false; }
         return true;
     }
 

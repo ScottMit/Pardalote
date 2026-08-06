@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Coordinated motion — Pardalote examples</title>
+<meta name="description" content="Two different motors — mix a servo, stepper, or bus servo — sweep in perfect unison using a group.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../css/site.css">
+</head>
+<body data-nav="examples">
+
+<nav class="site-nav">
+  <a class="logo" href="../index.html">
+    <img src="../assets/logo.svg" width="26" height="26" alt="">
+    Pardalote
+  </a>
+  <div class="links">
+    <a data-nav="home" href="../index.html">Home</a>
+    <a data-nav="download" href="../download.html">Download</a>
+    <a data-nav="examples" href="index.html">Examples</a>
+    <a data-nav="reference" href="../reference/index.html">Reference</a>
+    <a href="https://github.com/ScottMit/Pardalote">GitHub</a>
+  </div>
+</nav>
+
+<div class="page-head">
+  <div class="wrap">
+    <div class="crumb"><a href="index.html">Examples</a> / Coordinated motion</div>
+    <h1>Coordinated motion</h1>
+    <p>Two different motors — mix a servo, stepper, or bus servo — sweep in perfect unison using a group.</p>
+  </div>
+</div>
+
+<div class="wrap md-layout">
+  <div class="md-body">
+    <div class="tags" style="margin-bottom:.5rem;"><span class="tag lvl-adv">Advanced</span><span class="tag">Motion</span><span class="tag">Tool</span></div>
+    <div class="ex-meta-row">
+      <a class="btn btn-dark" href="https://github.com/ScottMit/Pardalote/tree/main/examples/coordinated-motion">View the code on GitHub</a>
+    </div>
+    <div class="screenshot-slot">Screenshot / video of this example — coming soon</div>
+<h1 id="coordinated-motion">Coordinated motion</h1>
+<p>Two motors sweep <strong>in unison</strong> using a Pardalote <a href="../reference/groups.html">group</a>.
+Each motor's type — <strong>PWM servo</strong>, <strong>serial bus servo</strong>, or <strong>stepper</strong> — is
+chosen independently from the popup under its dial, so the pair can be <strong>mixed</strong>
+(the default is a servo + a stepper). Both motors ping-pong between two positions,
+arriving together on every leg. Each dial visualises the motion — a <strong>180° gauge</strong>
+for PWM servos, a <strong>360° dial</strong> for bus servos and steppers.</p>
+<p>This is the p5.js demonstration of <code>group.writeTimed()</code> / <code>whenDone()</code>: one call
+moves both motors, and each motor type reaches its target its own way (bus
+servos via matched-speed SyncWrite, PWM servos via on-board interpolation,
+steppers via a board-timed constant-speed move) — all in one WebSocket message.</p>
+
+  </div>
+
+  <div class="md-body">
+<h2 id="hardware">Hardware</h2>
+<p>Any Pardalote board (UNO R4 WiFi or ESP32) plus <strong>two motors of any type</strong>:</p>
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>Wiring (defaults — editable under each dial)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Servo (PWM)</td>
+<td>two servos on pins <strong>5</strong> and <strong>6</strong></td>
+</tr>
+<tr>
+<td>Bus Servo (ST)</td>
+<td>two Feetech ST servos, IDs <strong>1</strong> and <strong>2</strong>, on the serial bus</td>
+</tr>
+<tr>
+<td>Stepper (driver)</td>
+<td>two STEP/DIR drivers on pins <strong>2,3</strong> and <strong>8,9</strong></td>
+</tr>
+<tr>
+<td>Stepper (4-wire)</td>
+<td>e.g. 28BYJ-48 via ULN2003 — IN1–IN4 on <strong>8,9,10,11</strong> and <strong>4,5,6,7</strong></td>
+</tr>
+</tbody>
+</table>
+<p>The Arduino sketch just needs the matching extension(s) included — the simplest
+is to include all three so you can switch type without re-flashing:</p>
+<div class="code-ex"><span class="lang-badge lang-arduino">Arduino</span><pre><code><span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;Pardalote.h&gt;</span>
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;PardaloteServo.h&gt;</span>
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;PardaloteBusServo.h&gt;</span>
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;PardaloteStepper.h&gt;</span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">setup</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">begin</span><span class="p">();</span><span class="w"> </span><span class="p">}</span>
+<span class="kt">void</span><span class="w"> </span><span class="nf">loop</span><span class="p">()</span><span class="w">  </span><span class="p">{</span><span class="w"> </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">run</span><span class="p">();</span><span class="w">   </span><span class="p">}</span>
+</code></pre></div>
+<h2 id="browser">Browser</h2>
+<p>This is a <strong>tool</strong> — it works out of the box, no code editing:</p>
+<ol>
+<li>Open <code>index.html</code> in a browser.</li>
+<li>Type the board's IP into the field at the top and press <strong>Connect</strong>.</li>
+<li>Pick each motor's type from the popup under its dial and set its pin(s)
+(or bus ID) in the fields below — changes rebuild the group and reconnect.</li>
+</ol>
+<p>The browser remembers the IP, motor types, and pins for next time. Without a
+connection the dials still preview the sweep.</p>
+<table>
+<thead>
+<tr>
+<th>Control</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Popup + pin fields under each dial</td>
+<td>choose Servo / Bus Servo / Stepper and its pins/ID for that motor (rebuilds the group)</td>
+</tr>
+<tr>
+<td>Pause / Resume</td>
+<td>stop and start the sweep</td>
+</tr>
+<tr>
+<td>Duration slider</td>
+<td>time per leg — both motors still arrive together</td>
+</tr>
+</tbody>
+</table>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>The dials animate a <strong>display interpolation</strong> of the commanded sweep, so they
+move smoothly even before the board connects (you'll see <code>status: reconnecting…</code> until it does). The <code>feedback</code> readout shows each motor's real
+position once polling returns values (bus servo / stepper).</li>
+<li>The sweep starts each leg from the last commanded position, so the motors are
+snapped to the low pose once on connect (<code>group.write</code>) to establish a known
+start — see the note on first moves in the <a href="../reference/groups.html">Groups docs</a>.</li>
+<li>Edit the <code>low</code> / <code>high</code> values in <code>TYPES</code> to change each type's sweep range.</li>
+</ul>
+
+  </div>
+</div>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <span>Pardalote — created by Scott Mitchell for design education and creative technology.</span>
+    <span><a href="../reference/index.html">Reference</a> · <a href="https://github.com/ScottMit/Pardalote">GitHub</a> · GPL-3.0</span>
+  </div>
+</footer>
+
+<script src="../js/site.js"></script>
+</body>
+</html>

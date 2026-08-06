@@ -1,0 +1,59 @@
+// ==============================================================
+// Camera Example
+// Streams MJPEG video from an ESP32-S3 camera into a p5.js canvas.
+// by Scott Mitchell
+// GPL-3.0 License
+// ==============================================================
+
+const ARDUINO_IP  = '192.168.x.x';   // Change this to your Arduino's IP
+const CAMERA_PORT = 82;
+
+let arduino;
+let camEl = null;   // <img> element pointing at the MJPEG stream
+
+function setup() {
+    createCanvas(640, 480);
+    textFont('Poppins');
+
+    arduino = new Arduino();
+    arduino.add('cam', new Camera());
+    arduino.connect(ARDUINO_IP);
+
+    arduino.on('ready', () => {
+        arduino.cam.attach(CAMERA_PORT);
+    });
+
+    arduino.cam.on('stream', ({ url }) => {
+        if (camEl) camEl.remove();
+        camEl = createImg(url, '');
+        camEl.hide();
+    });
+}
+
+function draw() {
+    background(255);
+
+    if (camEl) {
+        try {
+            image(camEl, 0, 0, width, height);
+        } catch (e) {
+            // img entered broken state (stream dropped) — clear and show placeholder
+            camEl.remove();
+            camEl = null;
+        }
+    } else {
+        // Waiting for stream — show a placeholder message (house cream card)
+        fill('#F2E9D8');
+        noStroke();
+        rect(0, 0, width, height);
+        fill('#6d6a5f');
+        textAlign(CENTER, CENTER);
+        textSize(16);
+        text(arduino.connected ? 'Starting camera…' : 'Connecting…', width / 2, height / 2);
+    }
+
+    // Connection status dot — top-right corner (teal = connected)
+    noStroke();
+    fill(arduino.connected ? '#3FA9A0' : '#D3542B');
+    circle(width - 16, 16, 12);
+}

@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rotary encoder — Pardalote reference</title>
+<meta name="description" content="Quadrature encoders — KY-040 knobs and motor shaft encoders, counted in interrupts on the board.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../css/site.css">
+</head>
+<body data-nav="reference">
+
+<nav class="site-nav">
+  <a class="logo" href="../index.html">
+    <img src="../assets/logo.svg" width="26" height="26" alt="">
+    Pardalote
+  </a>
+  <div class="links">
+    <a data-nav="home" href="../index.html">Home</a>
+    <a data-nav="download" href="../download.html">Download</a>
+    <a data-nav="examples" href="../examples/index.html">Examples</a>
+    <a data-nav="reference" href="index.html">Reference</a>
+    <a href="https://github.com/ScottMit/Pardalote">GitHub</a>
+  </div>
+</nav>
+
+<div class="wrap">
+  <div class="ref-layout">
+<aside class="ref-nav">
+  <button class="ref-nav-toggle" aria-expanded="false" aria-controls="ref-nav-links">Contents</button>
+  <div class="ref-nav-links" id="ref-nav-links">
+  <h4><a href="index.html">Getting started</a></h4>
+  <a href="index.html">Overview</a>
+  <a href="installation.html">Installation</a>
+  <a href="wifi.html">WiFi configuration</a>
+  <a href="ai-coding.html">Coding with AI</a>
+  <h4><a href="connecting.html">Core — JavaScript</a></h4>
+  <a href="connecting.html#connect">connect()</a>
+  <a href="connecting.html#on">on()</a>
+  <a href="connecting.html#disconnect">disconnect()</a>
+  <a href="connecting.html#getstatus">getStatus()</a>
+  <a href="pins.html#pinmode">pinMode()</a>
+  <a href="pins.html#digitalwrite">digitalWrite()</a>
+  <a href="pins.html#analogwrite">analogWrite()</a>
+  <a href="pins.html#setwritethrottle--setwritethreshold">setWriteThrottle() / setWriteThreshold()</a>
+  <a href="pins.html#analogread">analogRead()</a>
+  <a href="pins.html#digitalread">digitalRead()</a>
+  <a href="pins.html#setreadinterval--setreadthreshold">setReadInterval() / setReadThreshold()</a>
+  <a href="pins.html#pin--the-listening-handle">pin() — the listening handle</a>
+  <a href="pins.html#end--endall">end() / endAll()</a>
+  <a href="pins.html#pin-aliases">Pin aliases</a>
+  <h4><a href="arduino.html">Core — Arduino</a></h4>
+  <a href="arduino.html#pardalotebegin">Pardalote.begin()</a>
+  <a href="arduino.html#pardaloterun">Pardalote.run()</a>
+  <a href="arduino.html#pardaloteshare">Pardalote.share()</a>
+  <a href="arduino.html#pardalotesend">Pardalote.send()</a>
+  <a href="arduino.html#when-not-to-share">When not to share</a>
+  <h4><a href="messaging.html">Core — Messaging</a></h4>
+  <a href="messaging.html#javascript-to-arduino">JavaScript to Arduino</a>
+  <a href="messaging.html#arduino-to-javascript">Arduino to JavaScript</a>
+  <a href="messaging.html#retain-and-broadcast">Retain and broadcast</a>
+  <a href="messaging.html#inspecting-all-traffic">Inspecting all traffic</a>
+  <h4><a href="extensions.html">Extensions</a></h4>
+  <a href="extensions.html">Overview</a>
+  <a href="extensions.html#creating-extension-objects-in-the-firmware">Creating extension objects in the firmware</a>
+  <a href="extensions.html#reading-and-writing-actuators-from-the-sketch">Reading and writing actuators from the sketch</a>
+  <a href="servo.html">Servo</a>
+  <a href="stepper.html">Stepper</a>
+  <a href="bus-servo.html">Bus servo</a>
+  <a href="groups.html">Groups</a>
+  <a href="neopixel.html">NeoPixel</a>
+  <a href="ultrasonic.html">Ultrasonic</a>
+  <a href="encoder.html">Rotary encoder</a>
+  <a href="imu.html">IMU</a>
+  <a href="camera.html">Camera</a>
+  <h4><a href="protocol.html">Under the hood</a></h4>
+  <a href="protocol.html">Protocol</a>
+  <a href="pin-capabilities.html">Pin capabilities</a>
+  <a href="troubleshooting.html">Troubleshooting</a>
+  </div>
+</aside>
+    <main class="ref-main">
+      <h1>Rotary encoder</h1>
+      <p class="lede">Quadrature encoders — KY-040 knobs and motor shaft encoders, counted in interrupts on the board.</p>
+<p>Quadrature encoders can't be read by polling: direction lives in the <em>order</em> the two pins change, and a hand-flicked knob produces ~1,600 edges a second. The board counts them in interrupt handlers with a 4x state-table decoder — invalid transitions (contact bounce) sum to zero, so the count never drifts and no debounce tuning is needed. The browser receives the <strong>absolute position</strong>, rate-limited per browser.</p>
+<p>Positions are <strong>raw quadrature steps</strong> — a KY-040 detent is 4 steps. Use <code>setStepsPerDetent()</code> to scale the <code>detents</code> convenience.</p>
+<h2 id="attach">attach()</h2>
+<div class="sig sig-js">arduino.knob.<span class="fn">attach</span>(pinA, pinB)</div>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>pinA</code>, <code>pinB</code></td>
+<td>number | string</td>
+<td>The two quadrature signal pins (CLK/DT on a KY-040). The board enables pullups and attaches CHANGE interrupts on both.</td>
+</tr>
+</tbody>
+</table>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;knob&#39;</span><span class="p">,</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">Encoder</span><span class="p">());</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;ready&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">knob</span><span class="p">.</span><span class="nx">attach</span><span class="p">(</span><span class="nx">D2</span><span class="p">,</span><span class="w"> </span><span class="nx">D3</span><span class="p">);</span>
+<span class="w">    </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">knob</span><span class="p">.</span><span class="nx">read</span><span class="p">(</span><span class="mf">50</span><span class="p">);</span><span class="w">          </span><span class="c1">// stream, at most every 50 ms</span>
+<span class="p">});</span>
+</code></pre></div>
+<p><strong>The push button</strong> on a KY-040 is not part of this extension — it's just a switch. Wire it to any pin and use a <a href="pins.html#pin--the-listening-handle">pin handle</a>, which delivers debounced edges instantly:</p>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">pin</span><span class="p">(</span><span class="nx">SW</span><span class="p">).</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;change&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">({</span><span class="w"> </span><span class="nx">value</span><span class="w"> </span><span class="p">})</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="nx">value</span><span class="p">)</span><span class="w"> </span><span class="nx">togglePlayback</span><span class="p">();</span><span class="w"> </span><span class="p">});</span>
+</code></pre></div>
+<h2 id="read">read()</h2>
+<p>Streams the position. The board counts continuously either way (interrupts); <code>interval</code> is purely a per-browser rate limit, and because position is absolute the latest value always carries the full state — a fast spin can't overflow the channel or lose track.</p>
+<div class="sig sig-js">arduino.knob.<span class="fn">read</span>([interval], [threshold])</div>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>interval</code></td>
+<td>number</td>
+<td>Optional. Minimum ms between updates to this browser (default <code>200</code>). Pass <code>END</code> to stop.</td>
+</tr>
+<tr>
+<td><code>threshold</code></td>
+<td>number</td>
+<td>Optional. Minimum change worth transmitting, in steps (<code>0</code> = default <code>1</code>; use <code>4</code> for one KY-040 detent per update). Also settable via <code>setReadInterval(ms)</code> / <code>setReadThreshold(steps)</code>.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Returns</strong> the cached position (raw steps).</p>
+<h2 id="setposition--zero">setPosition() / zero()</h2>
+<p>Re-declares the current physical position. The board sets its counter and echoes the new position to <strong>every</strong> browser, so all mirrors adopt the new frame together.</p>
+<div class="sig sig-js">arduino.knob.<span class="fn">setPosition</span>(value) · arduino.knob.<span class="fn">zero</span>()</div>
+<h2 id="events">Events</h2>
+<div class="sig sig-js">arduino.knob.<span class="fn">on</span>(event, handler)</div>
+<table>
+<thead>
+<tr>
+<th>Event</th>
+<th>Payload</th>
+<th>Fires when</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>'change'</code></td>
+<td><code>{ position, delta, detents }</code></td>
+<td>The position changed by at least the threshold. <code>delta</code> is the movement since the last event this browser saw (sign = direction).</td>
+</tr>
+</tbody>
+</table>
+<p>Shorthand: <code>onChange(fn)</code>.</p>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><div class="bar">Example — a volume knob</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">knob</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;change&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">({</span><span class="w"> </span><span class="nx">delta</span><span class="w"> </span><span class="p">})</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">volume</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">constrain</span><span class="p">(</span><span class="nx">volume</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="nx">delta</span><span class="p">,</span><span class="w"> </span><span class="mf">0</span><span class="p">,</span><span class="w"> </span><span class="mf">100</span><span class="p">);</span>
+<span class="p">});</span>
+</code></pre></div>
+<h2 id="properties-and-state">Properties and state</h2>
+<table>
+<thead>
+<tr>
+<th>Property</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>arduino.knob.position</code></td>
+<td>Current position in raw steps (draw()-loop safe).</td>
+</tr>
+<tr>
+<td><code>arduino.knob.detents</code></td>
+<td>Position scaled by <code>stepsPerDetent</code> (default 4).</td>
+</tr>
+</tbody>
+</table>
+<div class="sig sig-js">arduino.knob.<span class="fn">setStepsPerDetent</span>(n) · arduino.knob.<span class="fn">getState</span>()</div>
+<h2 id="from-the-sketch">From the sketch</h2>
+<p>Create an encoder in the sketch and every browser sees it as <code>arduino.&lt;name&gt;</code> automatically — same pattern as the other extensions:</p>
+<div class="code-ex"><span class="lang-badge lang-arduino">Arduino</span><pre><code><span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;Pardalote.h&gt;</span>
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;PardaloteEncoder.h&gt;</span>
+
+<span class="kt">int</span><span class="w"> </span><span class="n">knob</span><span class="p">;</span>
+<span class="kt">void</span><span class="w"> </span><span class="nf">setup</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">begin</span><span class="p">();</span>
+<span class="w">    </span><span class="n">knob</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">PardaloteEncoder</span><span class="p">.</span><span class="n">attach</span><span class="p">(</span><span class="s">&quot;knob&quot;</span><span class="p">,</span><span class="w"> </span><span class="mi">2</span><span class="p">,</span><span class="w"> </span><span class="mi">3</span><span class="p">);</span><span class="w">   </span><span class="c1">// name, pinA, pinB</span>
+<span class="p">}</span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">loop</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">run</span><span class="p">();</span>
+<span class="w">    </span><span class="kt">long</span><span class="w"> </span><span class="n">pos</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">PardaloteEncoder</span><span class="p">.</span><span class="n">read</span><span class="p">(</span><span class="n">knob</span><span class="p">);</span><span class="w">          </span><span class="c1">// raw steps, from the ISR counter</span>
+<span class="w">    </span><span class="c1">// PardaloteEncoder.zero(knob);                  // re-zero (echoed to browsers)</span>
+<span class="p">}</span>
+</code></pre></div>
+<p>Up to 4 encoders (<code>MAX_ENCODERS</code>). Motor shaft encoders up to ~10–20 kHz edge rates are fine; beyond that (high-resolution encoders on fast spindles), a hardware pulse-counter backend would be the next step — ask if you need it.</p>
+<p>See also: <a href="pins.html">Pins and reading</a> · <a href="extensions.html">Extensions overview</a></p>
+
+    </main>
+  </div>
+</div>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <span>Pardalote — created by Scott Mitchell for design education and creative technology.</span>
+    <span><a href="index.html">Reference</a> · <a href="https://github.com/ScottMit/Pardalote">GitHub</a> · GPL-3.0</span>
+  </div>
+</footer>
+
+<script src="../js/site.js"></script>
+</body>
+</html>

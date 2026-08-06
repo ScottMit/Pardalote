@@ -10,9 +10,9 @@
 </head>
 <body data-nav="reference">
 
-<nav class="site-nav speckled">
+<nav class="site-nav">
   <a class="logo" href="../index.html">
-    <img src="../assets/logo.svg" width="30" height="30" alt="">
+    <img src="../assets/logo.svg" width="26" height="26" alt="">
     Pardalote
   </a>
   <div class="links">
@@ -27,34 +27,57 @@
 <div class="wrap">
   <div class="ref-layout">
 <aside class="ref-nav">
-  <h4>Getting started</h4>
+  <button class="ref-nav-toggle" aria-expanded="false" aria-controls="ref-nav-links">Contents</button>
+  <div class="ref-nav-links" id="ref-nav-links">
+  <h4><a href="index.html">Getting started</a></h4>
   <a href="index.html">Overview</a>
   <a href="installation.html">Installation</a>
   <a href="wifi.html">WiFi configuration</a>
-  <h4>Core — JavaScript</h4>
-  <a href="connecting.html#connect">connect() / events</a>
+  <a href="ai-coding.html">Coding with AI</a>
+  <h4><a href="connecting.html">Core — JavaScript</a></h4>
+  <a href="connecting.html#connect">connect()</a>
+  <a href="connecting.html#on">on()</a>
+  <a href="connecting.html#disconnect">disconnect()</a>
+  <a href="connecting.html#getstatus">getStatus()</a>
   <a href="pins.html#pinmode">pinMode()</a>
-  <a href="pins.html#digitalwrite">digitalWrite() / analogWrite()</a>
-  <a href="pins.html#analogread">analogRead() / digitalRead()</a>
-  <a href="pins.html#onchange">onChange()</a>
+  <a href="pins.html#digitalwrite">digitalWrite()</a>
+  <a href="pins.html#analogwrite">analogWrite()</a>
+  <a href="pins.html#setwritethrottle--setwritethreshold">setWriteThrottle() / setWriteThreshold()</a>
+  <a href="pins.html#analogread">analogRead()</a>
+  <a href="pins.html#digitalread">digitalRead()</a>
+  <a href="pins.html#setreadinterval--setreadthreshold">setReadInterval() / setReadThreshold()</a>
+  <a href="pins.html#pin--the-listening-handle">pin() — the listening handle</a>
+  <a href="pins.html#end--endall">end() / endAll()</a>
   <a href="pins.html#pin-aliases">Pin aliases</a>
-  <h4>Core — Arduino</h4>
-  <a href="arduino.html#pardalotebegin">Pardalote.begin() / run()</a>
-  <a href="arduino.html#pardaloteshare">share() / send()</a>
-  <a href="arduino.html#the-actuator-objects">Reading actuators</a>
-  <h4>Extensions</h4>
+  <h4><a href="arduino.html">Core — Arduino</a></h4>
+  <a href="arduino.html#pardalotebegin">Pardalote.begin()</a>
+  <a href="arduino.html#pardaloterun">Pardalote.run()</a>
+  <a href="arduino.html#pardaloteshare">Pardalote.share()</a>
+  <a href="arduino.html#pardalotesend">Pardalote.send()</a>
+  <a href="arduino.html#when-not-to-share">When not to share</a>
+  <h4><a href="messaging.html">Core — Messaging</a></h4>
+  <a href="messaging.html#javascript-to-arduino">JavaScript to Arduino</a>
+  <a href="messaging.html#arduino-to-javascript">Arduino to JavaScript</a>
+  <a href="messaging.html#retain-and-broadcast">Retain and broadcast</a>
+  <a href="messaging.html#inspecting-all-traffic">Inspecting all traffic</a>
+  <h4><a href="extensions.html">Extensions</a></h4>
   <a href="extensions.html">Overview</a>
+  <a href="extensions.html#creating-extension-objects-in-the-firmware">Creating extension objects in the firmware</a>
+  <a href="extensions.html#reading-and-writing-actuators-from-the-sketch">Reading and writing actuators from the sketch</a>
   <a href="servo.html">Servo</a>
   <a href="stepper.html">Stepper</a>
   <a href="bus-servo.html">Bus servo</a>
   <a href="groups.html">Groups</a>
   <a href="neopixel.html">NeoPixel</a>
   <a href="ultrasonic.html">Ultrasonic</a>
-  <a href="mpu.html">MPU / IMU</a>
+  <a href="encoder.html">Rotary encoder</a>
+  <a href="imu.html">IMU</a>
   <a href="camera.html">Camera</a>
-  <h4>Under the hood</h4>
+  <h4><a href="protocol.html">Under the hood</a></h4>
   <a href="protocol.html">Protocol</a>
+  <a href="pin-capabilities.html">Pin capabilities</a>
   <a href="troubleshooting.html">Troubleshooting</a>
+  </div>
 </aside>
     <main class="ref-main">
       <h1>Stepper</h1>
@@ -62,11 +85,11 @@
 <p>Requires the <code>AccelStepper</code> library and <code>&lt;PardaloteStepper.h&gt;</code> in the sketch. Works with STEP/DIR drivers (<strong>TMC2208</strong>, <strong>TMC2209</strong>, <strong>A4988</strong>, <strong>EasyDriver</strong>) and 4-wire coil drivers (28BYJ-48 via ULN2003, bipolar via H-bridge).</p>
 <p><strong>Motion runs on the Arduino.</strong> You send targets and motion profiles; the board generates the step pulses via <code>AccelStepper::run()</code>. You never stream individual steps over WiFi — that's why the API mirrors AccelStepper (non-blocking) rather than the built-in <code>Stepper</code> library, whose <code>step()</code> blocks and would stall the connection mid-move.</p>
 <p>Give the motor its own power supply — don't run the coils off the board's 5 V rail. Examples assume:</p>
-<div class="code-ex"><div class="bar">sketch.js — register a stepper</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;x&#39;</span><span class="p">,</span> <span class="ow">new</span> <span class="nx">Stepper</span><span class="p">());</span>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><div class="bar">sketch.js — register a stepper</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;x&#39;</span><span class="p">,</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">Stepper</span><span class="p">());</span>
 </code></pre></div>
 <h2 id="attach">attach()</h2>
 <p>Attaches a STEP/DIR driver. Call inside <code>on('ready')</code>.</p>
-<div class="sig">arduino.x.<span class="fn">attach</span>(step, dir, [en], [options])</div>
+<div class="sig sig-js">arduino.x.<span class="fn">attach</span>(step, dir, [en], [options])</div>
 <table>
 <thead>
 <tr>
@@ -98,13 +121,13 @@
 </tr>
 </tbody>
 </table>
-<div class="code-ex"><div class="bar">Example — attach a driver</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">attach</span><span class="p">(</span><span class="mf">2</span><span class="p">,</span> <span class="mf">3</span><span class="p">);</span>                                    <span class="c1">// no enable pin</span>
-<span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">attach</span><span class="p">(</span><span class="mf">2</span><span class="p">,</span> <span class="mf">3</span><span class="p">,</span> <span class="mf">4</span><span class="p">);</span>                                 <span class="c1">// with enable pin</span>
-<span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">attach</span><span class="p">(</span><span class="mf">2</span><span class="p">,</span> <span class="mf">3</span><span class="p">,</span> <span class="mf">4</span><span class="p">,</span> <span class="p">{</span> <span class="nx">invertDir</span><span class="o">:</span> <span class="kc">true</span> <span class="p">});</span>            <span class="c1">// runs backwards? flip it</span>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><div class="bar">Example — attach a driver</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">attach</span><span class="p">(</span><span class="mf">2</span><span class="p">,</span><span class="w"> </span><span class="mf">3</span><span class="p">);</span><span class="w">                                    </span><span class="c1">// no enable pin</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">attach</span><span class="p">(</span><span class="mf">2</span><span class="p">,</span><span class="w"> </span><span class="mf">3</span><span class="p">,</span><span class="w"> </span><span class="mf">4</span><span class="p">);</span><span class="w">                                 </span><span class="c1">// with enable pin</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">attach</span><span class="p">(</span><span class="mf">2</span><span class="p">,</span><span class="w"> </span><span class="mf">3</span><span class="p">,</span><span class="w"> </span><span class="mf">4</span><span class="p">,</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">invertDir</span><span class="o">:</span><span class="w"> </span><span class="kc">true</span><span class="w"> </span><span class="p">});</span><span class="w">            </span><span class="c1">// runs backwards? flip it</span>
 </code></pre></div>
 <h2 id="attach4wire">attach4wire()</h2>
 <p>Attaches a 4-wire coil driver (28BYJ-48 via ULN2003, or bipolar via H-bridge).</p>
-<div class="sig">arduino.x.<span class="fn">attach4wire</span>(in1, in2, in3, in4)</div>
+<div class="sig sig-js">arduino.x.<span class="fn">attach4wire</span>(in1, in2, in3, in4)</div>
 <table>
 <thead>
 <tr>
@@ -123,10 +146,10 @@
 </table>
 <h2 id="detach">detach()</h2>
 <p>Releases the pins.</p>
-<div class="sig">arduino.x.<span class="fn">detach</span>()</div>
+<div class="sig sig-js">arduino.x.<span class="fn">detach</span>()</div>
 <h2 id="setmaxspeed--setacceleration">setMaxSpeed() / setAcceleration()</h2>
 <p>Sets the motion profile. Both must be non-zero before any move happens.</p>
-<div class="sig">arduino.x.<span class="fn">setMaxSpeed</span>(stepsPerSec) · arduino.x.<span class="fn">setAcceleration</span>(stepsPerSec2)</div>
+<div class="sig sig-js">arduino.x.<span class="fn">setMaxSpeed</span>(stepsPerSec) · arduino.x.<span class="fn">setAcceleration</span>(stepsPerSec2)</div>
 <table>
 <thead>
 <tr>
@@ -150,7 +173,7 @@
 </table>
 <h2 id="moveto--move">moveTo() / move()</h2>
 <p>Accel-limited moves to an absolute or relative target.</p>
-<div class="sig">arduino.x.<span class="fn">moveTo</span>(target) · arduino.x.<span class="fn">move</span>(delta)</div>
+<div class="sig sig-js">arduino.x.<span class="fn">moveTo</span>(target) · arduino.x.<span class="fn">move</span>(delta)</div>
 <table>
 <thead>
 <tr>
@@ -174,13 +197,13 @@
 </table>
 <h2 id="whendone">whenDone()</h2>
 <p>Promise for the most recent move — resolves <code>true</code> when the board reports <code>done</code> (or immediately if the move already finished), <code>false</code> on the safety timeout (default <code>max(duration × 2, 10000)</code> ms; pass <code>{ timeout }</code> or a bare number to override, <code>0</code> to wait forever). Handy for sequencing. The same method exists on servos, bus servos, and groups.</p>
-<div class="sig">await arduino.x.<span class="fn">whenDone</span>([{ timeout }])</div>
-<div class="code-ex"><div class="bar">Example — sequence moves</div><pre><code><span class="k">await</span> <span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">moveTo</span><span class="p">(</span><span class="mf">2000</span><span class="p">).</span><span class="nx">whenDone</span><span class="p">();</span>
-<span class="k">await</span> <span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">moveTo</span><span class="p">(</span><span class="mf">0</span><span class="p">).</span><span class="nx">whenDone</span><span class="p">();</span>
+<div class="sig sig-js">await arduino.x.<span class="fn">whenDone</span>([{ timeout }])</div>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><div class="bar">Example — sequence moves</div><pre><code><span class="k">await</span><span class="w"> </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">moveTo</span><span class="p">(</span><span class="mf">2000</span><span class="p">).</span><span class="nx">whenDone</span><span class="p">();</span>
+<span class="k">await</span><span class="w"> </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">moveTo</span><span class="p">(</span><span class="mf">0</span><span class="p">).</span><span class="nx">whenDone</span><span class="p">();</span>
 </code></pre></div>
 <h2 id="movetotimed">moveToTimed()</h2>
 <p>Runs a <strong>constant-speed</strong> move sized to arrive in about <code>duration</code> ms — the board computes the speed from its own exact position. This is what lets steppers <strong>arrive together</strong> inside a <a href="groups.html">group</a>. Constant speed skips the acceleration ramp, so keep the speed reasonable to avoid stalling; use <code>moveTo()</code> when arrival timing doesn't matter.</p>
-<div class="sig">arduino.x.<span class="fn">moveToTimed</span>(target, duration)</div>
+<div class="sig sig-js">arduino.x.<span class="fn">moveToTimed</span>(target, duration)</div>
 <table>
 <thead>
 <tr>
@@ -202,18 +225,65 @@
 </tr>
 </tbody>
 </table>
+<h2 id="gesture">gesture()</h2>
+<p>Plays an authored <strong>segment schedule</strong> — an ordered list of eased moves the board runs back-to-back on its own clock. Where <code>moveToTimed()</code> is one constant-speed move, a gesture is a sequence of <em>eased</em> ones: the primitive for expressive motion. Each segment's velocity follows its curve (a dedicated on-board eased mode, not AccelStepper's fixed ramp), so you get anticipation, overshoot, and holds a plain ramp can't produce. Values are in <strong>steps</strong>. Fires <code>done</code> when the last segment lands.</p>
+<div class="sig sig-js">arduino.x.<span class="fn">gesture</span>(segments, [opts])</div>
+<p>Each segment carries a duration, a curve, and a displacement expressed <strong>either</strong> relatively (<code>by</code>) <strong>or</strong> absolutely (<code>to</code>):</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>dur</code></td>
+<td>number</td>
+<td>Segment duration in ms.</td>
+</tr>
+<tr>
+<td><code>curve</code></td>
+<td>string</td>
+<td><code>'linear'</code>, <code>'easeIn'</code>, <code>'easeOut'</code>, <code>'easeInOut'</code>, or <code>'back'</code> (overshoot). Default <code>'linear'</code>.</td>
+</tr>
+<tr>
+<td><code>by</code></td>
+<td>number</td>
+<td><strong>Relative</strong> displacement in steps — the default, portable frame.</td>
+</tr>
+<tr>
+<td><code>to</code></td>
+<td>number</td>
+<td><strong>Absolute</strong> target in steps — use in place of <code>by</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>Relative by default (the board captures its live position at the start of each segment). <strong>No homing needed</strong> — a relative bounce works on an open-loop stepper with no position truth, which is the point: a <code>back</code> segment drives <em>past</em> the target then reverses, a real over-travel (e.g. a lead-screw bounce). Absolute targets are clamped to <code>setLimits()</code>. Up to <strong>16</strong> segments. An eased move's velocity peaks above its average, so the board briefly raises the speed cap to hit the authored duration, then restores your <code>setMaxSpeed()</code> value.</p>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><div class="bar">Example — a lead-screw bounce, no homing</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">gesture</span><span class="p">([</span>
+<span class="w">    </span><span class="p">{</span><span class="w"> </span><span class="nx">by</span><span class="o">:</span><span class="w">  </span><span class="mf">800</span><span class="p">,</span><span class="w"> </span><span class="nx">dur</span><span class="o">:</span><span class="w"> </span><span class="mf">350</span><span class="p">,</span><span class="w"> </span><span class="nx">curve</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;easeOut&#39;</span><span class="w">   </span><span class="p">},</span>
+<span class="w">    </span><span class="p">{</span><span class="w"> </span><span class="nx">by</span><span class="o">:</span><span class="w"> </span><span class="o">-</span><span class="mf">800</span><span class="p">,</span><span class="w"> </span><span class="nx">dur</span><span class="o">:</span><span class="w"> </span><span class="mf">550</span><span class="p">,</span><span class="w"> </span><span class="nx">curve</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;easeInOut&#39;</span><span class="w"> </span><span class="p">},</span>
+<span class="w">    </span><span class="p">{</span><span class="w"> </span><span class="nx">by</span><span class="o">:</span><span class="w">  </span><span class="mf">120</span><span class="p">,</span><span class="w"> </span><span class="nx">dur</span><span class="o">:</span><span class="w"> </span><span class="mf">200</span><span class="p">,</span><span class="w"> </span><span class="nx">curve</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;back&#39;</span><span class="w">      </span><span class="p">},</span><span class="w">   </span><span class="c1">// small overshoot settle</span>
+<span class="p">]);</span>
+<span class="k">await</span><span class="w"> </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">gesture</span><span class="p">([</span><span class="w"> </span><span class="cm">/* … */</span><span class="w"> </span><span class="p">]).</span><span class="nx">whenDone</span><span class="p">();</span>
+</code></pre></div>
+<p>Any explicit move (<code>moveTo</code>, <code>move</code>, <code>runSpeed</code>, <code>stop</code>, <code>hardStop</code>, <code>home</code>) cancels a running gesture. To coordinate several actuators at once, see <a href="groups.html#gesture">group.gesture()</a>.</p>
 <h2 id="runspeed">runSpeed()</h2>
 <p>Continuous rotation at a constant speed until stopped. Sign sets direction.</p>
-<div class="sig">arduino.x.<span class="fn">runSpeed</span>(stepsPerSec)</div>
-<div class="code-ex"><div class="bar">Example — continuous rotation</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">runSpeed</span><span class="p">(</span><span class="mf">600</span><span class="p">);</span>              <span class="c1">// spin at 600 steps/sec</span>
-<span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">runSpeed</span><span class="p">(</span><span class="o">-</span><span class="mf">600</span><span class="p">);</span>             <span class="c1">// reverse</span>
+<div class="sig sig-js">arduino.x.<span class="fn">runSpeed</span>(stepsPerSec)</div>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><div class="bar">Example — continuous rotation</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">runSpeed</span><span class="p">(</span><span class="mf">600</span><span class="p">);</span><span class="w">              </span><span class="c1">// spin at 600 steps/sec</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">runSpeed</span><span class="p">(</span><span class="o">-</span><span class="mf">600</span><span class="p">);</span><span class="w">             </span><span class="c1">// reverse</span>
 </code></pre></div>
 <h2 id="stop">stop()</h2>
-<p>Decelerates to a stop (position mode) or stops a velocity-mode spin.</p>
-<div class="sig">arduino.x.<span class="fn">stop</span>()</div>
+<p>Decelerates to a stop (position mode) or stops a velocity-mode spin. The motor keeps its coordinate and a <code>done</code> follows, so <code>whenDone()</code> settles.</p>
+<div class="sig sig-js">arduino.x.<span class="fn">stop</span>()</div>
+<h2 id="hardstop">hardStop()</h2>
+<p>Instant halt with <strong>no deceleration ramp</strong> — unlike <code>stop()</code>, the board zeroes speed and distance-to-go in one call. The current position is kept and a <code>done</code> follows. Use it for an e-stop, or to end a <code>runSpeed()</code> spin without the decel travel. An abrupt stop above the acceleration limit can lose steps, so re-zero afterwards (<code>setPosition()</code>) or home if the coordinate matters.</p>
+<div class="sig sig-js">arduino.x.<span class="fn">hardStop</span>()</div>
 <h2 id="read">read()</h2>
-<p>Starts polling position and status. Same poll-and-cache pattern as everywhere else.</p>
-<div class="sig">arduino.x.<span class="fn">read</span>([interval])</div>
+<p>Starts polling position and status. Same poll-and-cache pattern as everywhere else. The board runs the poll (per-browser interval and threshold) and only transmits changes of threshold+ steps.</p>
+<div class="sig sig-js">arduino.x.<span class="fn">read</span>([interval], [threshold])</div>
 <table>
 <thead>
 <tr>
@@ -228,19 +298,24 @@
 <td>number</td>
 <td>Optional. Poll interval in ms. Pass <code>END</code> to stop.</td>
 </tr>
+<tr>
+<td><code>threshold</code></td>
+<td>number</td>
+<td>Optional. Minimum position change worth transmitting, in steps (<code>0</code> = default: <code>1</code>). Also settable via <code>setReadInterval(ms)</code> / <code>setReadThreshold(steps)</code>.</td>
+</tr>
 </tbody>
 </table>
 <h2 id="setposition">setPosition()</h2>
-<p>Declares the current physical position to be a given value — steppers have no absolute feedback, so move to a reference point (by hand or against a stop) and zero there. Limit-switch homing is planned for a future version.</p>
-<div class="sig">arduino.x.<span class="fn">setPosition</span>(steps)</div>
-<div class="code-ex"><div class="bar">Example — declare home</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">setPosition</span><span class="p">(</span><span class="mf">0</span><span class="p">);</span>             <span class="c1">// &quot;here is home&quot;</span>
+<p>Declares the current physical position to be a given value — steppers have no absolute feedback, so move to a reference point (by hand or against a stop) and zero there. For automatic zeroing against an end-stop, see <code>home()</code> below.</p>
+<div class="sig sig-js">arduino.x.<span class="fn">setPosition</span>(steps)</div>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><div class="bar">Example — declare home</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">setPosition</span><span class="p">(</span><span class="mf">0</span><span class="p">);</span><span class="w">             </span><span class="c1">// &quot;here is home&quot;</span>
 </code></pre></div>
 <h2 id="enable--disable">enable() / disable()</h2>
 <p>Drives the enable pin: energise the coils to hold position, or release them so the shaft turns freely by hand (and stops heating up).</p>
-<div class="sig">arduino.x.<span class="fn">enable</span>() · arduino.x.<span class="fn">disable</span>()</div>
+<div class="sig sig-js">arduino.x.<span class="fn">enable</span>() · arduino.x.<span class="fn">disable</span>()</div>
 <h2 id="setlimits--clearlimits">setLimits() / clearLimits()</h2>
 <p>Soft limits, enforced <strong>on the Arduino</strong> — every target is clamped to the range before the board acts on it. The browser (or an LLM driving it) can't send the motor past the set bounds.</p>
-<div class="sig">arduino.x.<span class="fn">setLimits</span>(min, max) · arduino.x.<span class="fn">clearLimits</span>()</div>
+<div class="sig sig-js">arduino.x.<span class="fn">setLimits</span>(min, max) · arduino.x.<span class="fn">clearLimits</span>()</div>
 <table>
 <thead>
 <tr>
@@ -259,7 +334,7 @@
 </table>
 <h2 id="setlimitswitch--clearlimitswitch">setLimitSwitch() / clearLimitSwitch()</h2>
 <p>Hardware end-stops — none, one, or two, one call per switch. The trip happens <strong>on the board</strong> (no WiFi round-trip): moving into a pressed switch stops the motor <em>instantly</em> (no deceleration ramp); moving away is always allowed, so you can back off. When a switch trips, a <code>'limit'</code> event fires, <code>limitHit</code> is set (<code>'min'</code>/<code>'max'</code>, cleared by the next move), and the normal <code>'done'</code> follows — <code>whenDone()</code> still settles.</p>
-<div class="sig">arduino.x.<span class="fn">setLimitSwitch</span>(which, pin, [trigger]) · arduino.x.<span class="fn">clearLimitSwitch</span>(which)</div>
+<div class="sig sig-js">arduino.x.<span class="fn">setLimitSwitch</span>(which, pin, [trigger]) · arduino.x.<span class="fn">clearLimitSwitch</span>(which)</div>
 <table>
 <thead>
 <tr>
@@ -286,38 +361,66 @@
 </tr>
 </tbody>
 </table>
-<div class="code-ex"><div class="bar">Example — two end-stops</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">setLimitSwitch</span><span class="p">(</span><span class="nx">LIMIT_MIN</span><span class="p">,</span> <span class="mf">9</span><span class="p">);</span>          <span class="c1">// active LOW</span>
-<span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">setLimitSwitch</span><span class="p">(</span><span class="nx">LIMIT_MAX</span><span class="p">,</span> <span class="mf">10</span><span class="p">,</span> <span class="nx">HIGH</span><span class="p">);</span>   <span class="c1">// active HIGH</span>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><div class="bar">Example — two end-stops</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">setLimitSwitch</span><span class="p">(</span><span class="nx">LIMIT_MIN</span><span class="p">,</span><span class="w"> </span><span class="mf">9</span><span class="p">);</span><span class="w">          </span><span class="c1">// active LOW</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">setLimitSwitch</span><span class="p">(</span><span class="nx">LIMIT_MAX</span><span class="p">,</span><span class="w"> </span><span class="mf">10</span><span class="p">,</span><span class="w"> </span><span class="nx">HIGH</span><span class="p">);</span><span class="w">   </span><span class="c1">// active HIGH</span>
 
-<span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;limit&#39;</span><span class="p">,</span> <span class="p">({</span> <span class="nx">which</span><span class="p">,</span> <span class="nx">position</span> <span class="p">})</span> <span class="p">=&gt;</span> <span class="p">{</span>
-    <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="sb">`hit the </span><span class="si">${</span><span class="nx">which</span><span class="si">}</span><span class="sb"> switch at </span><span class="si">${</span><span class="nx">position</span><span class="si">}</span><span class="sb">`</span><span class="p">);</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;limit&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">({</span><span class="w"> </span><span class="nx">which</span><span class="p">,</span><span class="w"> </span><span class="nx">position</span><span class="w"> </span><span class="p">})</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="sb">`hit the </span><span class="si">${</span><span class="nx">which</span><span class="si">}</span><span class="sb"> switch at </span><span class="si">${</span><span class="nx">position</span><span class="si">}</span><span class="sb">`</span><span class="p">);</span>
 <span class="p">});</span>
 </code></pre></div>
 <p>After a trip the step counter is suspect (an instant stop above the acceleration limit can lose steps) — that's what homing is for.</p>
-<h2 id="sethome--home">setHome() / home()</h2>
-<p><code>setHome(value)</code> declares where home is (no-arg: &quot;right here is home&quot; — the board resolves it from its own counter). Home is just a coordinate, not the origin. <code>home()</code> goes home:</p>
-<ul>
-<li><strong>With a limit switch</strong> — a board-side routine: seek the switch (MIN if configured, else MAX) at a homing speed (default <code>maxSpeed/4</code>, override with <code>{ speed }</code>), set the counter to <code>0</code> when it trips (<strong>the homing switch is the origin</strong> by definition), back off until it releases, then travel to the home position. Re-establishes the counter from the switch, so it works even when the counter is wrong. With only a MAX switch, that switch reads <code>0</code> and travel is in negative coordinates.</li>
-<li><strong>Without a switch</strong> — a plain accel move to the home position (counter trusted).</li>
-</ul>
-<p>The seek/back-off legs are <strong>capped</strong> (default 30 s, <code>{ timeout }</code> to override): if the switch never trips or never releases, the board hard-stops, fires <code>'homeFail'</code> <code>{ position }</code>, then <code>'done'</code> — nothing spins forever, and <code>whenDone()</code> still settles. <code>done</code> fires when the travel leg arrives; any explicit move cancels an in-progress routine.</p>
-<div class="sig">arduino.x.<span class="fn">setHome</span>([value]) · arduino.x.<span class="fn">home</span>([{ speed, timeout }])</div>
-<div class="code-ex"><div class="bar">Example — home against the min switch</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">setLimitSwitch</span><span class="p">(</span><span class="nx">LIMIT_MIN</span><span class="p">,</span> <span class="mf">9</span><span class="p">);</span>   <span class="c1">// the switch is 0 by definition</span>
-<span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">setHome</span><span class="p">(</span><span class="mf">800</span><span class="p">);</span>                   <span class="c1">// home is step 800 from the switch</span>
-
-<span class="k">await</span> <span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">home</span><span class="p">().</span><span class="nx">whenDone</span><span class="p">({</span> <span class="nx">timeout</span><span class="o">:</span> <span class="mf">30000</span> <span class="p">});</span>
+<h2 id="setswitchposition">setSwitchPosition()</h2>
+<p>Declares where a limit switch physically sits, <strong>as a coordinate</strong>, independent of the soft limits. Homing adopts this value the moment the switch trips, so you can re-establish an accurate counter even after lost steps. The default is <code>0</code> — i.e. the switch <em>is</em> the origin — so you only need this when home should sit somewhere other than the switch.</p>
+<div class="sig sig-js">arduino.x.<span class="fn">setSwitchPosition</span>(which, coord)</div>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>which</code></td>
+<td>constant</td>
+<td><code>LIMIT_MIN</code> or <code>LIMIT_MAX</code> — which switch this coordinate belongs to.</td>
+</tr>
+<tr>
+<td><code>coord</code></td>
+<td>number</td>
+<td>The step position the switch sits at.</td>
+</tr>
+</tbody>
+</table>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><div class="bar">Example — switch 500 steps below home</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">setLimitSwitch</span><span class="p">(</span><span class="nx">LIMIT_MIN</span><span class="p">,</span><span class="w"> </span><span class="mf">9</span><span class="p">);</span><span class="w">      </span><span class="c1">// min-end switch on pin 9</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">setSwitchPosition</span><span class="p">(</span><span class="nx">LIMIT_MIN</span><span class="p">,</span><span class="w"> </span><span class="o">-</span><span class="mf">500</span><span class="p">);</span><span class="c1">// it sits 500 steps below home (0)</span>
 </code></pre></div>
+<h2 id="sethome--home">setHome() / home()</h2>
+<p><strong>Home is the origin (<code>0</code>).</strong> <code>setHome()</code> <strong>re-zeros the frame</strong>: the current spot becomes <code>0</code> and the enabled soft limits and switch positions all shift by the same offset, so they keep pointing at the same physical places. <code>setHome(value)</code> re-zeros to <code>value</code> instead of <code>0</code> (rarely needed). <code>home()</code> travels back to the origin:</p>
+<ul>
+<li><strong>With a limit switch</strong> — a board-side routine: seek the switch (MIN if configured, else MAX) at a homing speed (default <code>maxSpeed/4</code>, override with <code>{ speed }</code>), set the counter to the switch's coordinate (<code>setSwitchPosition</code>, default <code>0</code>) when it trips, back off until it releases, then travel to the origin. Re-establishes the counter from the switch, so it works even when the counter is wrong.</li>
+<li><strong>Without a switch</strong> — a plain accel move to the origin (counter trusted).</li>
+</ul>
+<p>The seek/back-off legs are <strong>capped</strong> (default 30 s, <code>{ timeout }</code> to override): if the switch never trips or never releases, the board hard-stops, fires <code>'home:fail'</code> <code>{ position }</code>, then <code>'done'</code> — nothing spins forever, and <code>whenDone()</code> still settles. <code>done</code> fires when the travel leg arrives; any explicit move cancels an in-progress routine.</p>
+<div class="sig sig-js">arduino.x.<span class="fn">setHome</span>([value]) · arduino.x.<span class="fn">home</span>([{ speed, timeout }])</div>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><div class="bar">Example — home against the min switch</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">setLimitSwitch</span><span class="p">(</span><span class="nx">LIMIT_MIN</span><span class="p">,</span><span class="w"> </span><span class="mf">9</span><span class="p">);</span><span class="w">       </span><span class="c1">// min-end switch on pin 9</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">setSwitchPosition</span><span class="p">(</span><span class="nx">LIMIT_MIN</span><span class="p">,</span><span class="w"> </span><span class="o">-</span><span class="mf">500</span><span class="p">);</span><span class="w"> </span><span class="c1">// it sits 500 steps below home</span>
+
+<span class="k">await</span><span class="w"> </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">home</span><span class="p">().</span><span class="nx">whenDone</span><span class="p">({</span><span class="w"> </span><span class="nx">timeout</span><span class="o">:</span><span class="w"> </span><span class="mf">30000</span><span class="w"> </span><span class="p">});</span><span class="w">   </span><span class="c1">// seeks it, then travels to 0</span>
+</code></pre></div>
+<p>This is the CNC/work-coordinate split: the switch is a fixed physical reference, home is your <code>0</code> at a known offset from it. With the default switch position (<code>0</code>) the switch simply <em>is</em> home.</p>
 <h2 id="degrees-and-revolutions">Degrees and revolutions</h2>
 <p>Convenience helpers convert to raw steps on the JS side. Set steps-per-revolution to match your microstepping first (a 1.8° motor at 16 microsteps = 200 × 16 = 3200):</p>
-<div class="sig">arduino.x.<span class="fn">setStepsPerRev</span>(steps)</div>
-<div class="code-ex"><div class="bar">Example — work in degrees</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">setStepsPerRev</span><span class="p">(</span><span class="mf">200</span> <span class="o">*</span> <span class="mf">16</span><span class="p">);</span>
-<span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">moveToDegrees</span><span class="p">(</span><span class="mf">90</span><span class="p">);</span>          <span class="c1">// absolute</span>
-<span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">moveDegrees</span><span class="p">(</span><span class="o">-</span><span class="mf">45</span><span class="p">);</span>           <span class="c1">// relative</span>
+<div class="sig sig-js">arduino.x.<span class="fn">setStepsPerRev</span>(steps)</div>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><div class="bar">Example — work in degrees</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">setStepsPerRev</span><span class="p">(</span><span class="mf">200</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mf">16</span><span class="p">);</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">moveToDegrees</span><span class="p">(</span><span class="mf">90</span><span class="p">);</span><span class="w">          </span><span class="c1">// absolute</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">moveDegrees</span><span class="p">(</span><span class="o">-</span><span class="mf">45</span><span class="p">);</span><span class="w">           </span><span class="c1">// relative</span>
 <span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">moveToRevolutions</span><span class="p">(</span><span class="mf">2</span><span class="p">);</span>
 <span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">moveRevolutions</span><span class="p">(</span><span class="mf">0.5</span><span class="p">);</span>
 </code></pre></div>
 <h2 id="events">Events</h2>
-<div class="sig">arduino.x.<span class="fn">on</span>(event, handler)</div>
+<div class="sig sig-js">arduino.x.<span class="fn">on</span>(event, handler)</div>
 <table>
 <thead>
 <tr>
@@ -328,19 +431,19 @@
 </thead>
 <tbody>
 <tr>
-<td><code>'read'</code></td>
+<td><code>'change'</code></td>
 <td><code>{ position, distanceToGo, speed, isRunning }</code></td>
-<td>A poll result arrives.</td>
+<td>The position changed by at least the threshold.</td>
 </tr>
 <tr>
 <td><code>'done'</code></td>
 <td><code>{ position }</code></td>
-<td>A position-mode target is reached (or motion ends at a limit switch).</td>
+<td>A position-mode target, timed move, or gesture finishes (or motion ends at a limit switch).</td>
 </tr>
 <tr>
 <td><code>'move'</code></td>
 <td><code>{ target }</code></td>
-<td>A move is issued.</td>
+<td>THIS page issued a move (including group moves it participates in) — a command echo, like servo <code>'write'</code>. Other browsers' moves arrive via the read stream and <code>'done'</code>/<code>'limit'</code>, not <code>'move'</code>. <code>runSpeed()</code> emits nothing (continuous rotation has no destination).</td>
 </tr>
 <tr>
 <td><code>'limit'</code></td>
@@ -348,13 +451,13 @@
 <td>A limit switch tripped and the board hard-stopped the motor.</td>
 </tr>
 <tr>
-<td><code>'homeFail'</code></td>
+<td><code>'home:fail'</code></td>
 <td><code>{ position }</code></td>
 <td>Homing gave up (seek/back-off timeout) — the switch never responded.</td>
 </tr>
 </tbody>
 </table>
-<p>Shorthand: <code>onRead(fn)</code>, <code>onDone(fn)</code>, <code>onMove(fn)</code>.</p>
+<p>Shorthand: <code>onChange(fn)</code>, <code>onDone(fn)</code>, <code>onMove(fn)</code>, <code>onLimit(fn)</code>, <code>onHomeFail(fn)</code>.</p>
 <h2 id="properties-and-state">Properties and state</h2>
 <table>
 <thead>
@@ -387,15 +490,15 @@
 </tbody>
 </table>
 <p><code>target</code> vs <code>position</code>: <code>moveTo(n)</code> sets <code>target</code> to <code>n</code> <strong>right away</strong>, so you can show where it's headed without waiting for a poll; <code>position</code> is real feedback and only advances toward <code>target</code> as read polls (or the <code>done</code> event) arrive. <code>target</code> also self-corrects from read feedback — so it stays right even when the <em>Arduino sketch</em> issued the move.</p>
-<div class="sig">arduino.x.<span class="fn">getState</span>()</div>
+<div class="sig sig-js">arduino.x.<span class="fn">getState</span>()</div>
 <p><strong>Returns</strong> <code>{ logicalId, interface, pins, enPin, attached, maxSpeed, acceleration, stepsPerRev, target, position, distanceToGo, speed, isRunning, limits, interval }</code>.</p>
-<p>See also: <a href="groups.html">Groups</a> · <a href="../examples/stepper-example.html">Stepper example</a> · <a href="troubleshooting.html">Troubleshooting</a></p>
+<p>See also: <a href="groups.html">Groups</a> · <a href="../examples/stepper-motor.html">Stepper example</a> · <a href="troubleshooting.html">Troubleshooting</a></p>
 
     </main>
   </div>
 </div>
 
-<footer class="site-footer speckled">
+<footer class="site-footer">
   <div class="wrap">
     <span>Pardalote — created by Scott Mitchell for design education and creative technology.</span>
     <span><a href="index.html">Reference</a> · <a href="https://github.com/ScottMit/Pardalote">GitHub</a> · GPL-3.0</span>

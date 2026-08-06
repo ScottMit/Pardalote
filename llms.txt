@@ -1,0 +1,38 @@
+# Pardalote
+
+> Pardalote is a JavaScript ↔ Arduino library: browser JavaScript (p5.js-friendly) drives Arduino hardware — pins, PWM and serial-bus servos, steppers, NeoPixels, and sensors — over WiFi or USB, with no server and no Node.js. Motion and reads run on the board.
+
+The complete API reference as a single file for AI-assisted coding: [llms-full.txt](https://scottmit.github.io/Pardalote/llms-full.txt).
+
+## Getting started
+- [Overview](https://scottmit.github.io/Pardalote/reference/index.html): The full technical documentation — every function on both sides of the wire, the protocol, and the fine print.
+- [Installation](https://scottmit.github.io/Pardalote/reference/installation.html): What you need and where to put it — hardware, software, and the two Pardalote libraries.
+- [WiFi configuration](https://scottmit.github.io/Pardalote/reference/wifi.html): Two ways to give Pardalote your network details — use either, or both.
+
+## Core
+- [Connecting](https://scottmit.github.io/Pardalote/reference/connecting.html): Opening the connection from JavaScript — WiFi or USB serial — plus connection keys, events, reconnection, and status.
+- [Pins and reading](https://scottmit.github.io/Pardalote/reference/pins.html): The core pin API — modes, writes, polled reads, change callbacks, and pin aliases.
+- [The Arduino sketch](https://scottmit.github.io/Pardalote/reference/arduino.html): Writing Arduino code alongside the browser — sharing pins, sending values, and driving actuators from the sketch.
+- [Messaging](https://scottmit.github.io/Pardalote/reference/messaging.html): A key/value channel for everything that isn't a pin or a device — symmetric between the browser and the sketch, plus a frame monitor that sees all traffic.
+
+## Actuators
+- [Extensions overview](https://scottmit.github.io/Pardalote/reference/extensions.html): Extensions add support for hardware devices — servos, steppers, LED strips, sensors and cameras. Register them in JS, include them in the sketch.
+- [Servo](https://scottmit.github.io/Pardalote/reference/servo.html): Drive up to 8 PWM hobby servos from the browser — with smooth sweeps, timed moves, and angle read-back.
+- [Stepper](https://scottmit.github.io/Pardalote/reference/stepper.html): Up to 6 stepper motors with accel-limited moves, continuous rotation, soft limits and live position — motion runs on the Arduino.
+- [Bus servo](https://scottmit.github.io/Pardalote/reference/bus-servo.html): Up to 16 smart serial servos on one shared UART — position, speed, torque control and rich feedback, Feetech ST and SC series.
+- [Groups](https://scottmit.github.io/Pardalote/reference/groups.html): Drive several actuators as one — a single message moves every member, and coordinated moves arrive together.
+
+## Sensors & output
+- [NeoPixel](https://scottmit.github.io/Pardalote/reference/neopixel.html): Up to 4 addressable LED strips — buffered pixel changes, brightness control, and throttled updates for smooth animation.
+- [Ultrasonic](https://scottmit.github.io/Pardalote/reference/ultrasonic.html): Up to 4 HC-SR04-style distance sensors, in 3-wire or 4-wire configurations, with polled reads in centimetres or inches.
+- [Rotary encoder](https://scottmit.github.io/Pardalote/reference/encoder.html): Quadrature encoders — KY-040 knobs and motor shaft encoders, counted in interrupts on the board.
+- [IMU](https://scottmit.github.io/Pardalote/reference/imu.html): Up to 2 inertial measurement units — accelerometer, gyroscope and temperature at up to 50 Hz, with on-board calibration. No third-party library required.
+- [Camera](https://scottmit.github.io/Pardalote/reference/camera.html): MJPEG video and JPEG snapshots from ESP32 camera boards, served over HTTP so video never competes with control messages.
+
+## Under the hood
+- [Protocol](https://scottmit.github.io/Pardalote/reference/protocol.html): The compact binary WebSocket protocol underneath everything — for the curious, and for anyone building their own extension.
+- [Pin capabilities](https://scottmit.github.io/Pardalote/reference/pin-capabilities.html): What each pin can actually do on the supported boards — analog in, digital in/out, PWM — and the gotchas that come from the silicon, not from Pardalote.
+- [Troubleshooting](https://scottmit.github.io/Pardalote/reference/troubleshooting.html): Common issues and their usual fixes, roughly in the order people hit them.
+
+## Source
+- [GitHub repository](https://github.com/ScottMit/Pardalote): source code, examples, and the Arduino library.

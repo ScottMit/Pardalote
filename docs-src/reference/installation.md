@@ -3,8 +3,8 @@ lede: What you need and where to put it — hardware, software, and the two Pard
 ---
 ## Hardware
 
-- **Arduino UNO R4 WiFi** or **ESP32 development board**
-- The Arduino and your browser must be on the same WiFi network
+- **Arduino UNO R4 WiFi**, **ESP32 development board**, or **Arduino UNO R4 Minima** (USB serial only — it has no radio)
+- Over WiFi: the Arduino and your browser must be on the same network. Over USB serial: just the cable, using Chrome or Edge ([details](connecting.html#connectserial))
 
 ## Software
 
@@ -18,13 +18,13 @@ Install via Arduino IDE → Tools → Manage Libraries. Only install what your h
 
 | Library | Needed for |
 |---|---|
-| `WebSocketsServer` (Markus Sattler) | Always required |
+| `WebSocketsServer` (Markus Sattler) | Always required on WiFi boards (not needed on the UNO R4 Minima — its serial-only build compiles the WiFi path out) |
 | `Adafruit NeoPixel` | LED strips |
 | `ESP32Servo` | Servos on ESP32 |
 | `AccelStepper` (Mike McCauley) | Stepper motors |
-| `SCServo` (Feetech/Waveshare) | Serial bus servos — usually a ZIP from the Waveshare wiki or Feetech SDK, not in the Library Manager |
+| `SCServo` (Feetech/Waveshare) | Serial bus servos — install **"SCServo" by FT&WS** from the Library Manager, or a ZIP from the Waveshare wiki / Feetech SDK |
 
-No extra library is needed for the MPU / IMU extension — it reads sensor registers directly over I2C. The camera extension needs only the ESP32 Arduino core.
+No extra library is needed for the IMU extension — it reads sensor registers directly over I2C. The camera extension needs only the ESP32 Arduino core.
 
 ## The Pardalote Arduino library
 

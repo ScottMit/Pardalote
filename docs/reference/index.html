@@ -10,9 +10,9 @@
 </head>
 <body data-nav="reference">
 
-<nav class="site-nav speckled">
+<nav class="site-nav">
   <a class="logo" href="../index.html">
-    <img src="../assets/logo.svg" width="30" height="30" alt="">
+    <img src="../assets/logo.svg" width="26" height="26" alt="">
     Pardalote
   </a>
   <div class="links">
@@ -27,65 +27,95 @@
 <div class="wrap">
   <div class="ref-layout">
 <aside class="ref-nav">
-  <h4>Getting started</h4>
+  <button class="ref-nav-toggle" aria-expanded="false" aria-controls="ref-nav-links">Contents</button>
+  <div class="ref-nav-links" id="ref-nav-links">
+  <h4><a href="index.html">Getting started</a></h4>
   <a href="index.html">Overview</a>
   <a href="installation.html">Installation</a>
   <a href="wifi.html">WiFi configuration</a>
-  <h4>Core — JavaScript</h4>
-  <a href="connecting.html#connect">connect() / events</a>
+  <a href="ai-coding.html">Coding with AI</a>
+  <h4><a href="connecting.html">Core — JavaScript</a></h4>
+  <a href="connecting.html#connect">connect()</a>
+  <a href="connecting.html#on">on()</a>
+  <a href="connecting.html#disconnect">disconnect()</a>
+  <a href="connecting.html#getstatus">getStatus()</a>
   <a href="pins.html#pinmode">pinMode()</a>
-  <a href="pins.html#digitalwrite">digitalWrite() / analogWrite()</a>
-  <a href="pins.html#analogread">analogRead() / digitalRead()</a>
-  <a href="pins.html#onchange">onChange()</a>
+  <a href="pins.html#digitalwrite">digitalWrite()</a>
+  <a href="pins.html#analogwrite">analogWrite()</a>
+  <a href="pins.html#setwritethrottle--setwritethreshold">setWriteThrottle() / setWriteThreshold()</a>
+  <a href="pins.html#analogread">analogRead()</a>
+  <a href="pins.html#digitalread">digitalRead()</a>
+  <a href="pins.html#setreadinterval--setreadthreshold">setReadInterval() / setReadThreshold()</a>
+  <a href="pins.html#pin--the-listening-handle">pin() — the listening handle</a>
+  <a href="pins.html#end--endall">end() / endAll()</a>
   <a href="pins.html#pin-aliases">Pin aliases</a>
-  <h4>Core — Arduino</h4>
-  <a href="arduino.html#pardalotebegin">Pardalote.begin() / run()</a>
-  <a href="arduino.html#pardaloteshare">share() / send()</a>
-  <a href="arduino.html#the-actuator-objects">Reading actuators</a>
-  <h4>Extensions</h4>
+  <h4><a href="arduino.html">Core — Arduino</a></h4>
+  <a href="arduino.html#pardalotebegin">Pardalote.begin()</a>
+  <a href="arduino.html#pardaloterun">Pardalote.run()</a>
+  <a href="arduino.html#pardaloteshare">Pardalote.share()</a>
+  <a href="arduino.html#pardalotesend">Pardalote.send()</a>
+  <a href="arduino.html#when-not-to-share">When not to share</a>
+  <h4><a href="messaging.html">Core — Messaging</a></h4>
+  <a href="messaging.html#javascript-to-arduino">JavaScript to Arduino</a>
+  <a href="messaging.html#arduino-to-javascript">Arduino to JavaScript</a>
+  <a href="messaging.html#retain-and-broadcast">Retain and broadcast</a>
+  <a href="messaging.html#inspecting-all-traffic">Inspecting all traffic</a>
+  <h4><a href="extensions.html">Extensions</a></h4>
   <a href="extensions.html">Overview</a>
+  <a href="extensions.html#creating-extension-objects-in-the-firmware">Creating extension objects in the firmware</a>
+  <a href="extensions.html#reading-and-writing-actuators-from-the-sketch">Reading and writing actuators from the sketch</a>
   <a href="servo.html">Servo</a>
   <a href="stepper.html">Stepper</a>
   <a href="bus-servo.html">Bus servo</a>
   <a href="groups.html">Groups</a>
   <a href="neopixel.html">NeoPixel</a>
   <a href="ultrasonic.html">Ultrasonic</a>
-  <a href="mpu.html">MPU / IMU</a>
+  <a href="encoder.html">Rotary encoder</a>
+  <a href="imu.html">IMU</a>
   <a href="camera.html">Camera</a>
-  <h4>Under the hood</h4>
+  <h4><a href="protocol.html">Under the hood</a></h4>
   <a href="protocol.html">Protocol</a>
+  <a href="pin-capabilities.html">Pin capabilities</a>
   <a href="troubleshooting.html">Troubleshooting</a>
+  </div>
 </aside>
     <main class="ref-main">
       <h1>Reference</h1>
       <p class="lede">The full technical documentation — every function on both sides of the wire, the protocol, and the fine print.</p>
 <h2 id="getting-started">Getting started</h2>
-<p>Setting up boards, libraries and WiFi:</p>
+<p>Setting up boards, libraries and the connection:</p>
 <ul>
 <li><a href="installation.html">Installation</a> — hardware, software, and where the two libraries go</li>
-<li><a href="wifi.html">WiFi configuration</a> — compile-time credentials or the Serial Monitor menu</li>
+<li><a href="wifi.html">WiFi configuration</a> — compile-time credentials or the Serial Monitor menu (skip this page for USB serial)</li>
+<li><a href="ai-coding.html">Coding with AI</a> — the whole reference as one file to paste into an AI assistant</li>
 </ul>
 <h2 id="core--javascript">Core — JavaScript</h2>
 <p>The browser side of every Pardalote project:</p>
 <ul>
-<li><a href="connecting.html">Connecting</a> — <code>connect()</code>, events, reconnection, and status</li>
+<li><a href="connecting.html">Connecting</a> — <code>connect()</code> and <code>connectSerial()</code> (WiFi or USB), connection keys, events, reconnection, and status</li>
 <li><a href="pins.html">Pins and reading</a> — <code>pinMode</code>, <code>digitalWrite</code>, polled reads, callbacks, and pin aliases</li>
 </ul>
 <h2 id="core--arduino">Core — Arduino</h2>
 <p>Writing sketch code alongside the browser:</p>
 <ul>
-<li><a href="arduino.html">The Arduino sketch</a> — <code>begin()</code> / <code>run()</code>, <code>share()</code> / <code>send()</code>, and driving actuators from the sketch</li>
+<li><a href="arduino.html">The Arduino sketch</a> — <code>begin()</code> / <code>run()</code>, <code>share()</code> / <code>send()</code></li>
+</ul>
+<h2 id="core--messaging">Core — Messaging</h2>
+<p>A key/value channel for everything that isn't a pin or a device — symmetric between browser and sketch:</p>
+<ul>
+<li><a href="messaging.html">Messaging</a> — <code>send()</code> / <code>watch()</code>, retain and broadcast, and the frame monitor (<a href="messaging.html#javascript-to-arduino">JavaScript to Arduino</a> · <a href="messaging.html#arduino-to-javascript">Arduino to JavaScript</a>)</li>
 </ul>
 <h2 id="extensions">Extensions</h2>
 <p>Hardware support, one include at a time:</p>
 <ul>
-<li><a href="extensions.html">Extensions overview</a> — registering, script order, firmware includes</li>
+<li><a href="extensions.html">Extensions overview</a> — registering, script order, firmware includes, creating objects from the sketch, and <a href="extensions.html#reading-and-writing-actuators-from-the-sketch">reading actuators</a></li>
 <li><a href="servo.html">Servo</a> · <a href="stepper.html">Stepper</a> · <a href="bus-servo.html">Bus servo</a> · <a href="groups.html">Groups</a></li>
-<li><a href="neopixel.html">NeoPixel</a> · <a href="ultrasonic.html">Ultrasonic</a> · <a href="mpu.html">MPU / IMU</a> · <a href="camera.html">Camera</a></li>
+<li><a href="neopixel.html">NeoPixel</a> · <a href="ultrasonic.html">Ultrasonic</a> · <a href="encoder.html">Rotary encoder</a> · <a href="imu.html">IMU</a> · <a href="camera.html">Camera</a></li>
 </ul>
 <h2 id="under-the-hood">Under the hood</h2>
 <ul>
 <li><a href="protocol.html">Protocol</a> — the binary frame format and state sync</li>
+<li><a href="pin-capabilities.html">Pin capabilities</a> — what each pin can do, per board, and the silicon gotchas</li>
 <li><a href="troubleshooting.html">Troubleshooting</a> — common issues and their usual fixes</li>
 </ul>
 <h2 id="conventions-used-throughout">Conventions used throughout</h2>
@@ -95,13 +125,14 @@
 <li><strong><code>target</code> vs <code>position</code>.</strong> Commanded values update immediately; feedback values arrive with polling.</li>
 <li><strong>Last writer wins.</strong> The browser and the sketch share the same hardware as equals.</li>
 <li><strong>Setup goes in <code>on('ready')</code>.</strong> Attach, init and start polls after the Arduino has synced its state.</li>
+<li><strong>Motion runs on the board.</strong> Timed moves and <code>gesture()</code> schedules are played on the Arduino's own clock — never streamed step-by-step — so they stay smooth and survive a WiFi blip. See each actuator's <code>gesture()</code> and <a href="groups.html#gesture">Groups</a>.</li>
 </ul>
 
     </main>
   </div>
 </div>
 
-<footer class="site-footer speckled">
+<footer class="site-footer">
   <div class="wrap">
     <span>Pardalote — created by Scott Mitchell for design education and creative technology.</span>
     <span><a href="index.html">Reference</a> · <a href="https://github.com/ScottMit/Pardalote">GitHub</a> · GPL-3.0</span>

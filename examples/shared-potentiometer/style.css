@@ -1,0 +1,174 @@
+/* ==========================================================================
+   Pardalote example — house style
+   Matches the website ("Graph Line / Bauhaus"): white paper, graph-paper
+   wash, Poppins, 1.5px ink outlines, teal / amber / orange accents.
+   Copy this file as-is into new examples so they all stay in step.
+   ========================================================================== */
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
+
+:root {
+    --ink:      #2B2420;
+    --ink-soft: #4a463f;
+    --grey:     #6d6a5f;
+    --paper:    #FFFFFF;
+    --cream:    #F2E9D8;
+    --orange:   #D3542B;   /* primary accent / warnings   */
+    --teal:     #3FA9A0;   /* live / active               */
+    --amber:    #E8A33D;   /* highlights / secondary      */
+    --line:     #2B2420;   /* structural outlines         */
+    --hair:     #d9d2c2;   /* soft dividers               */
+    --grid:     #ededed;   /* graph-paper lines           */
+    --mono: "SF Mono", "Fira Code", ui-monospace, Consolas, monospace;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+
+body {
+    font-family: 'Poppins', -apple-system, system-ui, sans-serif;
+    color: var(--ink);
+    background-color: var(--paper);
+    background-image:
+        linear-gradient(var(--grid) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 40px 40px;
+    line-height: 1.5;
+}
+
+main {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 26px clamp(16px, 4vw, 40px) 44px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+/* ---- header ---- */
+.heading {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    margin-bottom: 2px;
+}
+.heading::after {
+    content: "";
+    display: block;
+    width: 44px;
+    height: 3px;
+    background: var(--amber);
+    margin-top: 6px;
+}
+#status {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--grey);
+    margin: 8px 0 14px;
+}
+
+/* ---- control rows ---- */
+.row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    font-size: 13px;
+    color: var(--ink-soft);
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+}
+.lbl {
+    width: 74px;
+    flex: none;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: var(--ink);
+}
+
+/* ---- controls ---- */
+button, select {
+    font-family: 'Poppins', system-ui, sans-serif;
+    font-size: 12.5px;
+    font-weight: 600;
+    padding: 5px 12px;
+    background: var(--paper);
+    color: var(--ink);
+    border: 1.5px solid var(--line);
+    border-radius: 0;
+    cursor: pointer;
+    transition: background .15s, color .15s, border-color .15s;
+}
+button:hover { background: var(--ink); color: #fff; }
+
+/* primary action (Connect, etc.) */
+button.primary { background: var(--ink); color: #fff; }
+button.primary:hover { background: var(--orange); border-color: var(--orange); }
+
+/* highlighted toggle state (enable, switch-set) */
+button.active { background: var(--teal); border-color: var(--teal); color: #fff; }
+button.active:hover { background: var(--teal); color: #fff; }
+/* highlighted "released/off" state (disable) */
+button.active-warn { background: var(--orange); border-color: var(--orange); color: #fff; }
+button.active-warn:hover { background: var(--orange); color: #fff; }
+
+input[type=text], input[type=number] {
+    font-family: var(--mono);
+    font-size: 13px;
+    padding: 4px 7px;
+    background: var(--paper);
+    color: var(--ink);
+    border: 1.5px solid var(--line);
+    border-radius: 0;
+}
+input[type=number] { width: 64px; }
+input[type=range] { accent-color: var(--teal); }
+
+/* ---- canvas card ---- */
+canvas {
+    display: block;
+    margin: 12px 0 26px;   /* clear space between the display and what follows */
+    background: var(--paper);
+    border: 1.5px solid var(--line);
+}
+
+/* ---- log ---- */
+#log {
+    margin-top: 12px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--grey);
+    line-height: 1.55;
+    min-height: 150px;
+}
+#log div:first-child { color: var(--ink); }
+
+/* ---- this example: live value + bar ---- */
+#value {
+    font-family: var(--mono);
+    font-size: 44px;
+    font-weight: 700;
+    color: var(--ink);
+    margin: 4px 0 10px;
+}
+.bar-track {
+    width: min(480px, 90vw);
+    height: 22px;
+    background: var(--grid);
+    border: 1.5px solid var(--line);
+    overflow: hidden;
+}
+#bar {
+    height: 100%;
+    width: 0%;
+    background: var(--teal);
+    transition: width 0.08s linear;
+}
+.hint {
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--grey);
+    margin-top: 18px;
+    max-width: 56ch;
+}
+.hint code { font-family: var(--mono); color: var(--orange); }

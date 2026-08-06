@@ -41,7 +41,16 @@ void ledMatrixBegin() {
     _matrixText("Pardalote", SCROLL_LEFT);
 }
 
-void ledMatrixLoop() {
+void ledMatrixLoop(bool anyConnected) {
+    // A browser is connected — stop re-arming the scroll. The in-flight
+    // SCROLL_LEFT animation runs off the left edge and leaves the matrix
+    // blank on its own, so there's nothing to clear; we simply stop paying
+    // the per-cycle cost of rebuilding and replaying the animation, which
+    // competes with _ws.loop() on the UNO R4's single core. If every client
+    // later disconnects, anyConnected goes false and scrolling resumes so
+    // the IP is readable again for the next connection.
+    if (anyConnected) return;
+
     if (_matrixDisplayReady) {
         _matrixDisplayReady = false;
         _matrixText(_ipToString(WiFi.localIP()), SCROLL_LEFT);
@@ -51,6 +60,6 @@ void ledMatrixLoop() {
 #else  // not PLATFORM_UNO_R4
 
 void ledMatrixBegin() {}
-void ledMatrixLoop()  {}
+void ledMatrixLoop(bool) {}
 
 #endif

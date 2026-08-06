@@ -10,9 +10,9 @@
 </head>
 <body data-nav="reference">
 
-<nav class="site-nav speckled">
+<nav class="site-nav">
   <a class="logo" href="../index.html">
-    <img src="../assets/logo.svg" width="30" height="30" alt="">
+    <img src="../assets/logo.svg" width="26" height="26" alt="">
     Pardalote
   </a>
   <div class="links">
@@ -27,42 +27,65 @@
 <div class="wrap">
   <div class="ref-layout">
 <aside class="ref-nav">
-  <h4>Getting started</h4>
+  <button class="ref-nav-toggle" aria-expanded="false" aria-controls="ref-nav-links">Contents</button>
+  <div class="ref-nav-links" id="ref-nav-links">
+  <h4><a href="index.html">Getting started</a></h4>
   <a href="index.html">Overview</a>
   <a href="installation.html">Installation</a>
   <a href="wifi.html">WiFi configuration</a>
-  <h4>Core — JavaScript</h4>
-  <a href="connecting.html#connect">connect() / events</a>
+  <a href="ai-coding.html">Coding with AI</a>
+  <h4><a href="connecting.html">Core — JavaScript</a></h4>
+  <a href="connecting.html#connect">connect()</a>
+  <a href="connecting.html#on">on()</a>
+  <a href="connecting.html#disconnect">disconnect()</a>
+  <a href="connecting.html#getstatus">getStatus()</a>
   <a href="pins.html#pinmode">pinMode()</a>
-  <a href="pins.html#digitalwrite">digitalWrite() / analogWrite()</a>
-  <a href="pins.html#analogread">analogRead() / digitalRead()</a>
-  <a href="pins.html#onchange">onChange()</a>
+  <a href="pins.html#digitalwrite">digitalWrite()</a>
+  <a href="pins.html#analogwrite">analogWrite()</a>
+  <a href="pins.html#setwritethrottle--setwritethreshold">setWriteThrottle() / setWriteThreshold()</a>
+  <a href="pins.html#analogread">analogRead()</a>
+  <a href="pins.html#digitalread">digitalRead()</a>
+  <a href="pins.html#setreadinterval--setreadthreshold">setReadInterval() / setReadThreshold()</a>
+  <a href="pins.html#pin--the-listening-handle">pin() — the listening handle</a>
+  <a href="pins.html#end--endall">end() / endAll()</a>
   <a href="pins.html#pin-aliases">Pin aliases</a>
-  <h4>Core — Arduino</h4>
-  <a href="arduino.html#pardalotebegin">Pardalote.begin() / run()</a>
-  <a href="arduino.html#pardaloteshare">share() / send()</a>
-  <a href="arduino.html#the-actuator-objects">Reading actuators</a>
-  <h4>Extensions</h4>
+  <h4><a href="arduino.html">Core — Arduino</a></h4>
+  <a href="arduino.html#pardalotebegin">Pardalote.begin()</a>
+  <a href="arduino.html#pardaloterun">Pardalote.run()</a>
+  <a href="arduino.html#pardaloteshare">Pardalote.share()</a>
+  <a href="arduino.html#pardalotesend">Pardalote.send()</a>
+  <a href="arduino.html#when-not-to-share">When not to share</a>
+  <h4><a href="messaging.html">Core — Messaging</a></h4>
+  <a href="messaging.html#javascript-to-arduino">JavaScript to Arduino</a>
+  <a href="messaging.html#arduino-to-javascript">Arduino to JavaScript</a>
+  <a href="messaging.html#retain-and-broadcast">Retain and broadcast</a>
+  <a href="messaging.html#inspecting-all-traffic">Inspecting all traffic</a>
+  <h4><a href="extensions.html">Extensions</a></h4>
   <a href="extensions.html">Overview</a>
+  <a href="extensions.html#creating-extension-objects-in-the-firmware">Creating extension objects in the firmware</a>
+  <a href="extensions.html#reading-and-writing-actuators-from-the-sketch">Reading and writing actuators from the sketch</a>
   <a href="servo.html">Servo</a>
   <a href="stepper.html">Stepper</a>
   <a href="bus-servo.html">Bus servo</a>
   <a href="groups.html">Groups</a>
   <a href="neopixel.html">NeoPixel</a>
   <a href="ultrasonic.html">Ultrasonic</a>
-  <a href="mpu.html">MPU / IMU</a>
+  <a href="encoder.html">Rotary encoder</a>
+  <a href="imu.html">IMU</a>
   <a href="camera.html">Camera</a>
-  <h4>Under the hood</h4>
+  <h4><a href="protocol.html">Under the hood</a></h4>
   <a href="protocol.html">Protocol</a>
+  <a href="pin-capabilities.html">Pin capabilities</a>
   <a href="troubleshooting.html">Troubleshooting</a>
+  </div>
 </aside>
     <main class="ref-main">
       <h1>Groups</h1>
       <p class="lede">Drive several actuators as one — a single message moves every member, and coordinated moves arrive together.</p>
-<p>A <strong>group</strong> is a named collection of actuators you drive together, with methods that mirror the single actuators. <code>write()</code> writes every member in a <strong>single WebSocket message</strong>, <code>writeTimed()</code> coordinates a move so all members <strong>arrive together</strong>, and <code>whenDone()</code> awaits real completion. Groups currently take <strong>Servo</strong>, <strong>BusServo</strong>, and <strong>Stepper</strong> members (pins and NeoPixels are planned).</p>
+<p>A <strong>group</strong> is a named collection of actuators you drive together, with methods that mirror the single actuators. <code>write()</code> writes every member in a <strong>single WebSocket message</strong>, <code>writeTimed()</code> coordinates a move so all members <strong>arrive together</strong>, <code>gesture()</code> plays coordinated expressive motion, and <code>whenDone()</code> awaits real completion. Groups currently take <strong>Servo</strong>, <strong>BusServo</strong>, and <strong>Stepper</strong> members (pins and NeoPixels are planned).</p>
 <h2 id="arduinogroup">arduino.group()</h2>
 <p>Creates a group from named members. Call inside <code>on('ready')</code>, after attaching each member.</p>
-<div class="sig">arduino.<span class="fn">group</span>(name, members)</div>
+<div class="sig sig-js">arduino.<span class="fn">group</span>(name, members)</div>
 <table>
 <thead>
 <tr>
@@ -85,24 +108,24 @@
 </tbody>
 </table>
 <p><strong>Returns</strong> the group object.</p>
-<div class="code-ex"><div class="bar">Example — build an arm group</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;shoulder&#39;</span><span class="p">,</span> <span class="ow">new</span> <span class="nx">BusServo</span><span class="p">());</span>
-<span class="nx">arduino</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;elbow&#39;</span><span class="p">,</span>    <span class="ow">new</span> <span class="nx">BusServo</span><span class="p">());</span>
-<span class="nx">arduino</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;base&#39;</span><span class="p">,</span>     <span class="ow">new</span> <span class="nx">Stepper</span><span class="p">());</span>
-<span class="nx">arduino</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;wrist&#39;</span><span class="p">,</span>    <span class="ow">new</span> <span class="nx">Servo</span><span class="p">());</span>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><div class="bar">Example — build an arm group</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;shoulder&#39;</span><span class="p">,</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">BusServo</span><span class="p">());</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;elbow&#39;</span><span class="p">,</span><span class="w">    </span><span class="ow">new</span><span class="w"> </span><span class="nx">BusServo</span><span class="p">());</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;base&#39;</span><span class="p">,</span><span class="w">     </span><span class="ow">new</span><span class="w"> </span><span class="nx">Stepper</span><span class="p">());</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;wrist&#39;</span><span class="p">,</span><span class="w">    </span><span class="ow">new</span><span class="w"> </span><span class="nx">Servo</span><span class="p">());</span>
 
-<span class="nx">arduino</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;ready&#39;</span><span class="p">,</span> <span class="p">()</span> <span class="p">=&gt;</span> <span class="p">{</span>
-    <span class="c1">// ... attach each member ...</span>
-    <span class="kd">const</span> <span class="nx">arm</span> <span class="o">=</span> <span class="nx">arduino</span><span class="p">.</span><span class="nx">group</span><span class="p">(</span><span class="s1">&#39;arm&#39;</span><span class="p">,</span> <span class="p">{</span>
-        <span class="nx">shoulder</span><span class="o">:</span> <span class="nx">arduino</span><span class="p">.</span><span class="nx">shoulder</span><span class="p">,</span>
-        <span class="nx">elbow</span><span class="o">:</span>    <span class="nx">arduino</span><span class="p">.</span><span class="nx">elbow</span><span class="p">,</span>
-        <span class="nx">base</span><span class="o">:</span>     <span class="nx">arduino</span><span class="p">.</span><span class="nx">base</span><span class="p">,</span>
-        <span class="nx">wrist</span><span class="o">:</span>    <span class="nx">arduino</span><span class="p">.</span><span class="nx">wrist</span><span class="p">,</span>
-    <span class="p">});</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;ready&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="c1">// ... attach each member ...</span>
+<span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">arm</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">group</span><span class="p">(</span><span class="s1">&#39;arm&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nx">shoulder</span><span class="o">:</span><span class="w"> </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">shoulder</span><span class="p">,</span>
+<span class="w">        </span><span class="nx">elbow</span><span class="o">:</span><span class="w">    </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">elbow</span><span class="p">,</span>
+<span class="w">        </span><span class="nx">base</span><span class="o">:</span><span class="w">     </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">base</span><span class="p">,</span>
+<span class="w">        </span><span class="nx">wrist</span><span class="o">:</span><span class="w">    </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">wrist</span><span class="p">,</span>
+<span class="w">    </span><span class="p">});</span>
 <span class="p">});</span>
 </code></pre></div>
 <h2 id="write">write()</h2>
 <p>Writes all named members at once — the group counterpart of <code>servo.write()</code> / <code>stepper.moveTo()</code>. Every member's frame is packed into <strong>one</strong> WebSocket message, so the board applies them back-to-back within a single receive — they move together. Bus servos of the same series are additionally coalesced into a single hardware <strong>SyncWrite</strong> packet (a truly simultaneous latch).</p>
-<div class="sig">arm.<span class="fn">write</span>(targets)</div>
+<div class="sig sig-js">arm.<span class="fn">write</span>(targets)</div>
 <table>
 <thead>
 <tr>
@@ -119,7 +142,7 @@
 </tr>
 </tbody>
 </table>
-<div class="code-ex"><div class="bar">Example — write everyone at once</div><pre><code><span class="nx">arm</span><span class="p">.</span><span class="nx">write</span><span class="p">({</span> <span class="nx">shoulder</span><span class="o">:</span> <span class="mf">2048</span><span class="p">,</span> <span class="nx">elbow</span><span class="o">:</span> <span class="mf">3000</span><span class="p">,</span> <span class="nx">base</span><span class="o">:</span> <span class="mf">1600</span><span class="p">,</span> <span class="nx">wrist</span><span class="o">:</span> <span class="mf">90</span> <span class="p">});</span>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><div class="bar">Example — write everyone at once</div><pre><code><span class="nx">arm</span><span class="p">.</span><span class="nx">write</span><span class="p">({</span><span class="w"> </span><span class="nx">shoulder</span><span class="o">:</span><span class="w"> </span><span class="mf">2048</span><span class="p">,</span><span class="w"> </span><span class="nx">elbow</span><span class="o">:</span><span class="w"> </span><span class="mf">3000</span><span class="p">,</span><span class="w"> </span><span class="nx">base</span><span class="o">:</span><span class="w"> </span><span class="mf">1600</span><span class="p">,</span><span class="w"> </span><span class="nx">wrist</span><span class="o">:</span><span class="w"> </span><span class="mf">90</span><span class="w"> </span><span class="p">});</span>
 </code></pre></div>
 <h2 id="writetimed">writeTimed()</h2>
 <p>Moves every member to its target so they all finish after about <code>duration</code> ms — the same shape as a single actuator's <code>writeTimed(value, duration)</code>. Each actuator type uses its own native mechanism:</p>
@@ -146,7 +169,7 @@
 </tbody>
 </table>
 <p>All of it still goes out in <strong>one</strong> batched message — including mixed groups.</p>
-<div class="sig">arm.<span class="fn">writeTimed</span>(targets, duration)</div>
+<div class="sig sig-js">arm.<span class="fn">writeTimed</span>(targets, duration)</div>
 <table>
 <thead>
 <tr>
@@ -168,12 +191,45 @@
 </tr>
 </tbody>
 </table>
-<div class="code-ex"><div class="bar">Example — arrive together</div><pre><code><span class="nx">arm</span><span class="p">.</span><span class="nx">writeTimed</span><span class="p">({</span> <span class="nx">shoulder</span><span class="o">:</span> <span class="mf">3000</span><span class="p">,</span> <span class="nx">elbow</span><span class="o">:</span> <span class="mf">1200</span><span class="p">,</span> <span class="nx">base</span><span class="o">:</span> <span class="mf">0</span><span class="p">,</span> <span class="nx">wrist</span><span class="o">:</span> <span class="mf">120</span> <span class="p">},</span> <span class="mf">1500</span><span class="p">);</span>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><div class="bar">Example — arrive together</div><pre><code><span class="nx">arm</span><span class="p">.</span><span class="nx">writeTimed</span><span class="p">({</span><span class="w"> </span><span class="nx">shoulder</span><span class="o">:</span><span class="w"> </span><span class="mf">3000</span><span class="p">,</span><span class="w"> </span><span class="nx">elbow</span><span class="o">:</span><span class="w"> </span><span class="mf">1200</span><span class="p">,</span><span class="w"> </span><span class="nx">base</span><span class="o">:</span><span class="w"> </span><span class="mf">0</span><span class="p">,</span><span class="w"> </span><span class="nx">wrist</span><span class="o">:</span><span class="w"> </span><span class="mf">120</span><span class="w"> </span><span class="p">},</span><span class="w"> </span><span class="mf">1500</span><span class="p">);</span>
 </code></pre></div>
 <p><code>duration</code> is approximate — it's the <em>arrival synchronisation</em> that's exact. For an accurate first move from an unknown pose, either poll <code>read()</code> first or start from a known pose (<code>center()</code> / <code>write()</code>), since <code>writeTimed</code> measures distance from each member's last commanded position.</p>
+<h2 id="gesture">gesture()</h2>
+<p>Coordinated <strong>expressive motion</strong> — each member plays its own <a href="servo.html#gesture">segment schedule</a>, all pushed in <strong>one batched message</strong> and played on the board's own clock. Lanes are per-member, so overlapping timings give coordination and follow-through. Uneven lanes are padded with a trailing hold so every member still <strong>arrives together</strong> — the expressive counterpart of <code>writeTimed()</code>.</p>
+<div class="sig sig-js">arm.<span class="fn">gesture</span>(lanes, [opts])</div>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>lanes</code></td>
+<td>object</td>
+<td>Member names mapped to segment arrays — each the same shape a single actuator's <code>gesture()</code> takes.</td>
+</tr>
+<tr>
+<td><code>opts</code></td>
+<td>object</td>
+<td>Optional. <code>{ absolute }</code> forces the reference frame for all lanes.</td>
+</tr>
+</tbody>
+</table>
+<p>Each lane is relative (<code>by</code>) by default, or absolute (<code>to</code>) per lane. Lanes of unequal total duration are padded (a trailing hold) to the longest so they finish together. A lane naming a member that doesn't support <code>gesture()</code>, an unknown member, or an empty array is skipped with a warning; the rest still play.</p>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><div class="bar">Example — a coordinated reach with follow-through</div><pre><code><span class="nx">arm</span><span class="p">.</span><span class="nx">gesture</span><span class="p">({</span>
+<span class="w">    </span><span class="nx">shoulder</span><span class="o">:</span><span class="w"> </span><span class="p">[{</span><span class="w"> </span><span class="nx">by</span><span class="o">:</span><span class="w"> </span><span class="mf">300</span><span class="p">,</span><span class="w"> </span><span class="nx">dur</span><span class="o">:</span><span class="w"> </span><span class="mf">400</span><span class="p">,</span><span class="w"> </span><span class="nx">curve</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;easeOut&#39;</span><span class="w">   </span><span class="p">},</span>
+<span class="w">               </span><span class="p">{</span><span class="w"> </span><span class="nx">by</span><span class="o">:-</span><span class="mf">300</span><span class="p">,</span><span class="w"> </span><span class="nx">dur</span><span class="o">:</span><span class="w"> </span><span class="mf">600</span><span class="p">,</span><span class="w"> </span><span class="nx">curve</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;easeInOut&#39;</span><span class="w"> </span><span class="p">}],</span><span class="w">   </span><span class="c1">// 1000 ms</span>
+<span class="w">    </span><span class="nx">wrist</span><span class="o">:</span><span class="w">    </span><span class="p">[{</span><span class="w"> </span><span class="nx">by</span><span class="o">:</span><span class="w">  </span><span class="mf">20</span><span class="p">,</span><span class="w"> </span><span class="nx">dur</span><span class="o">:</span><span class="w"> </span><span class="mf">250</span><span class="p">,</span><span class="w"> </span><span class="nx">curve</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;back&#39;</span><span class="w">       </span><span class="p">}],</span><span class="w">   </span><span class="c1">// 250 ms → padded to 1000</span>
+<span class="p">});</span>
+<span class="k">await</span><span class="w"> </span><span class="nx">arm</span><span class="p">.</span><span class="nx">gesture</span><span class="p">({</span><span class="w"> </span><span class="cm">/* … */</span><span class="w"> </span><span class="p">}).</span><span class="nx">whenDone</span><span class="p">();</span>
+</code></pre></div>
+<p>Mixed groups work: servos, steppers, and bus servos in the same call each play via their own on-board mechanism, all coordinated on the board clock. See each actuator's <code>gesture()</code> for what a segment holds — <a href="servo.html#gesture">servo</a>, <a href="stepper.html#gesture">stepper</a>, <a href="bus-servo.html#gesture">bus servo</a>.</p>
 <h2 id="whendone">whenDone()</h2>
-<p>Promise for the group's most recent <code>write()</code>/<code>writeTimed()</code>. Resolves <code>true</code> when <strong>every</strong> moved member reports it actually <strong>arrived</strong> (each actuator's real <code>done</code> — feedback-confirmed, not a timer), or <code>false</code> on the safety timeout if a member never reports (dead servo, lost link). The same method exists on every single actuator.</p>
-<div class="sig">await arm.<span class="fn">whenDone</span>([{ timeout }])</div>
+<p>Promise for the group's most recent <code>write()</code> / <code>writeTimed()</code> / <code>gesture()</code>. Resolves <code>true</code> when <strong>every</strong> moved member reports it actually <strong>arrived</strong> (each actuator's real <code>done</code> — feedback-confirmed, not a timer), or <code>false</code> on the safety timeout if a member never reports (dead servo, lost link). The same method exists on every single actuator.</p>
+<div class="sig sig-js">await arm.<span class="fn">whenDone</span>([{ timeout }])</div>
 <table>
 <thead>
 <tr>
@@ -190,12 +246,12 @@
 </tr>
 </tbody>
 </table>
-<div class="code-ex"><div class="bar">Example — sequence poses</div><pre><code><span class="k">await</span> <span class="nx">arm</span><span class="p">.</span><span class="nx">writeTimed</span><span class="p">({</span> <span class="nx">shoulder</span><span class="o">:</span> <span class="mf">2048</span><span class="p">,</span> <span class="nx">elbow</span><span class="o">:</span> <span class="mf">2048</span> <span class="p">},</span> <span class="mf">1000</span><span class="p">).</span><span class="nx">whenDone</span><span class="p">();</span>
-<span class="k">await</span> <span class="nx">arm</span><span class="p">.</span><span class="nx">writeTimed</span><span class="p">({</span> <span class="nx">shoulder</span><span class="o">:</span> <span class="mf">1000</span><span class="p">,</span> <span class="nx">elbow</span><span class="o">:</span> <span class="mf">3000</span> <span class="p">},</span>  <span class="mf">800</span><span class="p">).</span><span class="nx">whenDone</span><span class="p">();</span>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><div class="bar">Example — sequence poses</div><pre><code><span class="k">await</span><span class="w"> </span><span class="nx">arm</span><span class="p">.</span><span class="nx">writeTimed</span><span class="p">({</span><span class="w"> </span><span class="nx">shoulder</span><span class="o">:</span><span class="w"> </span><span class="mf">2048</span><span class="p">,</span><span class="w"> </span><span class="nx">elbow</span><span class="o">:</span><span class="w"> </span><span class="mf">2048</span><span class="w"> </span><span class="p">},</span><span class="w"> </span><span class="mf">1000</span><span class="p">).</span><span class="nx">whenDone</span><span class="p">();</span>
+<span class="k">await</span><span class="w"> </span><span class="nx">arm</span><span class="p">.</span><span class="nx">writeTimed</span><span class="p">({</span><span class="w"> </span><span class="nx">shoulder</span><span class="o">:</span><span class="w"> </span><span class="mf">1000</span><span class="p">,</span><span class="w"> </span><span class="nx">elbow</span><span class="o">:</span><span class="w"> </span><span class="mf">3000</span><span class="w"> </span><span class="p">},</span><span class="w">  </span><span class="mf">800</span><span class="p">).</span><span class="nx">whenDone</span><span class="p">();</span>
 </code></pre></div>
 <h2 id="read--values">read() / values()</h2>
 <p>Polling and snapshots across every member.</p>
-<div class="sig">arm.<span class="fn">read</span>([interval]) · arm.<span class="fn">values</span>()</div>
+<div class="sig sig-js">arm.<span class="fn">read</span>([interval]) · arm.<span class="fn">values</span>()</div>
 <table>
 <thead>
 <tr>
@@ -224,19 +280,19 @@
 </table>
 <h2 id="home">home()</h2>
 <p>Sends every member to its stored home — servos and bus servos as (optionally timed) moves, steppers via their limit-switch homing routine (a routine has no duration). Not arrive-together: each member homes at its own pace. <code>whenDone()</code> resolves when every member settles; homing can be slow, so raise the timeout.</p>
-<div class="sig">arm.<span class="fn">home</span>([duration])</div>
-<div class="code-ex"><div class="bar">Example — everything to home pose</div><pre><code><span class="k">await</span> <span class="nx">arm</span><span class="p">.</span><span class="nx">home</span><span class="p">(</span><span class="mf">1500</span><span class="p">).</span><span class="nx">whenDone</span><span class="p">({</span> <span class="nx">timeout</span><span class="o">:</span> <span class="mf">30000</span> <span class="p">});</span>
+<div class="sig sig-js">arm.<span class="fn">home</span>([duration])</div>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><div class="bar">Example — everything to home pose</div><pre><code><span class="k">await</span><span class="w"> </span><span class="nx">arm</span><span class="p">.</span><span class="nx">home</span><span class="p">(</span><span class="mf">1500</span><span class="p">).</span><span class="nx">whenDone</span><span class="p">({</span><span class="w"> </span><span class="nx">timeout</span><span class="o">:</span><span class="w"> </span><span class="mf">30000</span><span class="w"> </span><span class="p">});</span>
 </code></pre></div>
 <h2 id="stop--getstate">stop() / getState()</h2>
-<div class="sig">arm.<span class="fn">stop</span>() · arm.<span class="fn">getState</span>()</div>
+<div class="sig sig-js">arm.<span class="fn">stop</span>() · arm.<span class="fn">getState</span>()</div>
 <p><code>stop()</code> halts every member's motion — the group counterpart of <code>member.stop()</code> (to stop polling, use <code>read(END)</code>). <code>getState()</code> returns <code>{ name, members: { shoulder: {...}, base: {...}, ... } }</code>.</p>
-<p>See also: <a href="servo.html">Servo</a> · <a href="stepper.html">Stepper</a> · <a href="bus-servo.html">Bus servo</a> · <a href="../examples/coordinated-motion-example.html">Coordinated motion example</a></p>
+<p>See also: <a href="servo.html">Servo</a> · <a href="stepper.html">Stepper</a> · <a href="bus-servo.html">Bus servo</a> · <a href="../examples/coordinated-motion.html">Coordinated motion example</a> · <a href="../examples/expressive-gesture.html">Expressive gesture example</a></p>
 
     </main>
   </div>
 </div>
 
-<footer class="site-footer speckled">
+<footer class="site-footer">
   <div class="wrap">
     <span>Pardalote — created by Scott Mitchell for design education and creative technology.</span>
     <span><a href="index.html">Reference</a> · <a href="https://github.com/ScottMit/Pardalote">GitHub</a> · GPL-3.0</span>

@@ -1,7 +1,7 @@
 title: Groups
 lede: Drive several actuators as one — a single message moves every member, and coordinated moves arrive together.
 ---
-A **group** is a named collection of actuators you drive together, with methods that mirror the single actuators. `write()` writes every member in a **single WebSocket message**, `writeTimed()` coordinates a move so all members **arrive together**, and `whenDone()` awaits real completion. Groups currently take **Servo**, **BusServo**, and **Stepper** members (pins and NeoPixels are planned).
+A **group** is a named collection of actuators you drive together, with methods that mirror the single actuators. `write()` writes every member in a **single WebSocket message**, `writeTimed()` coordinates a move so all members **arrive together**, `gesture()` plays coordinated expressive motion, and `whenDone()` awaits real completion. Groups currently take **Servo**, **BusServo**, and **Stepper** members (pins and NeoPixels are planned).
 
 ## arduino.group()
 
@@ -72,9 +72,33 @@ arm.writeTimed({ shoulder: 3000, elbow: 1200, base: 0, wrist: 120 }, 1500);
 
 `duration` is approximate — it's the *arrival synchronisation* that's exact. For an accurate first move from an unknown pose, either poll `read()` first or start from a known pose (`center()` / `write()`), since `writeTimed` measures distance from each member's last commanded position.
 
+## gesture()
+
+Coordinated **expressive motion** — each member plays its own [segment schedule](servo.html#gesture), all pushed in **one batched message** and played on the board's own clock. Lanes are per-member, so overlapping timings give coordination and follow-through. Uneven lanes are padded with a trailing hold so every member still **arrives together** — the expressive counterpart of `writeTimed()`.
+
+<div class="sig">arm.<span class="fn">gesture</span>(lanes, [opts])</div>
+
+| Parameter | Type | Description |
+|---|---|---|
+| `lanes` | object | Member names mapped to segment arrays — each the same shape a single actuator's `gesture()` takes. |
+| `opts` | object | Optional. `{ absolute }` forces the reference frame for all lanes. |
+
+Each lane is relative (`by`) by default, or absolute (`to`) per lane. Lanes of unequal total duration are padded (a trailing hold) to the longest so they finish together. A lane naming a member that doesn't support `gesture()`, an unknown member, or an empty array is skipped with a warning; the rest still play.
+
+```javascript Example — a coordinated reach with follow-through
+arm.gesture({
+    shoulder: [{ by: 300, dur: 400, curve: 'easeOut'   },
+               { by:-300, dur: 600, curve: 'easeInOut' }],   // 1000 ms
+    wrist:    [{ by:  20, dur: 250, curve: 'back'       }],   // 250 ms → padded to 1000
+});
+await arm.gesture({ /* … */ }).whenDone();
+```
+
+Mixed groups work: servos, steppers, and bus servos in the same call each play via their own on-board mechanism, all coordinated on the board clock. See each actuator's `gesture()` for what a segment holds — [servo](servo.html#gesture), [stepper](stepper.html#gesture), [bus servo](bus-servo.html#gesture).
+
 ## whenDone()
 
-Promise for the group's most recent `write()`/`writeTimed()`. Resolves `true` when **every** moved member reports it actually **arrived** (each actuator's real `done` — feedback-confirmed, not a timer), or `false` on the safety timeout if a member never reports (dead servo, lost link). The same method exists on every single actuator.
+Promise for the group's most recent `write()` / `writeTimed()` / `gesture()`. Resolves `true` when **every** moved member reports it actually **arrived** (each actuator's real `done` — feedback-confirmed, not a timer), or `false` on the safety timeout if a member never reports (dead servo, lost link). The same method exists on every single actuator.
 
 <div class="sig">await arm.<span class="fn">whenDone</span>([{ timeout }])</div>
 
@@ -116,4 +140,4 @@ await arm.home(1500).whenDone({ timeout: 30000 });
 
 `stop()` halts every member's motion — the group counterpart of `member.stop()` (to stop polling, use `read(END)`). `getState()` returns `{ name, members: { shoulder: {...}, base: {...}, ... } }`.
 
-See also: [Servo](servo.html) · [Stepper](stepper.html) · [Bus servo](bus-servo.html) · [Coordinated motion example](../examples/coordinated-motion-example.html)
+See also: [Servo](servo.html) · [Stepper](stepper.html) · [Bus servo](bus-servo.html) · [Coordinated motion example](../examples/coordinated-motion.html) · [Expressive gesture example](../examples/expressive-gesture.html)

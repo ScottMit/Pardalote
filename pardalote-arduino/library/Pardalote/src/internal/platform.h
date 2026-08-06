@@ -16,16 +16,25 @@
   #include "Arduino_LED_Matrix.h"
   #include "TextAnimation.h"
   #define PLATFORM_UNO_R4
+#elif defined(ARDUINO_UNOR4_MINIMA)
+  // Same RA4M1 core as the R4 WiFi, but no radio and no LED matrix —
+  // serial transport only. PARDALOTE_NO_WIFI compiles out the whole
+  // WiFi + WebSocket path; every begin() form starts the serial
+  // transport (the only one this hardware can have).
+  #define PLATFORM_UNO_R4_MINIMA
+  #define PARDALOTE_NO_WIFI
 #elif defined(ESP32)
   #include <WiFi.h>
   #define PLATFORM_ESP32
 #else
-  #error "Unsupported platform — only UNO R4 WiFi and ESP32 are supported"
+  #error "Unsupported platform — only UNO R4 WiFi/Minima and ESP32 are supported"
 #endif
 
 #ifndef PARDALOTE_BOARD
   #if defined(ARDUINO_UNOR4_WIFI)
     #define PARDALOTE_BOARD "UNO R4 WiFi"
+  #elif defined(ARDUINO_UNOR4_MINIMA)
+    #define PARDALOTE_BOARD "UNO R4 Minima"
   #elif defined(ARDUINO_DFROBOT_FIREBEETLE_2_ESP32C5)
     #define PARDALOTE_BOARD "FireBeetle 2 ESP32-C5"
   #elif defined(ARDUINO_ESP32_WROVER_KIT) || defined(ARDUINO_UPESY_WROVER) || defined(ARDUINO_ESP32_DEV)

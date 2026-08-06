@@ -10,9 +10,9 @@
 </head>
 <body data-nav="reference">
 
-<nav class="site-nav speckled">
+<nav class="site-nav">
   <a class="logo" href="../index.html">
-    <img src="../assets/logo.svg" width="30" height="30" alt="">
+    <img src="../assets/logo.svg" width="26" height="26" alt="">
     Pardalote
   </a>
   <div class="links">
@@ -27,34 +27,57 @@
 <div class="wrap">
   <div class="ref-layout">
 <aside class="ref-nav">
-  <h4>Getting started</h4>
+  <button class="ref-nav-toggle" aria-expanded="false" aria-controls="ref-nav-links">Contents</button>
+  <div class="ref-nav-links" id="ref-nav-links">
+  <h4><a href="index.html">Getting started</a></h4>
   <a href="index.html">Overview</a>
   <a href="installation.html">Installation</a>
   <a href="wifi.html">WiFi configuration</a>
-  <h4>Core — JavaScript</h4>
-  <a href="connecting.html#connect">connect() / events</a>
+  <a href="ai-coding.html">Coding with AI</a>
+  <h4><a href="connecting.html">Core — JavaScript</a></h4>
+  <a href="connecting.html#connect">connect()</a>
+  <a href="connecting.html#on">on()</a>
+  <a href="connecting.html#disconnect">disconnect()</a>
+  <a href="connecting.html#getstatus">getStatus()</a>
   <a href="pins.html#pinmode">pinMode()</a>
-  <a href="pins.html#digitalwrite">digitalWrite() / analogWrite()</a>
-  <a href="pins.html#analogread">analogRead() / digitalRead()</a>
-  <a href="pins.html#onchange">onChange()</a>
+  <a href="pins.html#digitalwrite">digitalWrite()</a>
+  <a href="pins.html#analogwrite">analogWrite()</a>
+  <a href="pins.html#setwritethrottle--setwritethreshold">setWriteThrottle() / setWriteThreshold()</a>
+  <a href="pins.html#analogread">analogRead()</a>
+  <a href="pins.html#digitalread">digitalRead()</a>
+  <a href="pins.html#setreadinterval--setreadthreshold">setReadInterval() / setReadThreshold()</a>
+  <a href="pins.html#pin--the-listening-handle">pin() — the listening handle</a>
+  <a href="pins.html#end--endall">end() / endAll()</a>
   <a href="pins.html#pin-aliases">Pin aliases</a>
-  <h4>Core — Arduino</h4>
-  <a href="arduino.html#pardalotebegin">Pardalote.begin() / run()</a>
-  <a href="arduino.html#pardaloteshare">share() / send()</a>
-  <a href="arduino.html#the-actuator-objects">Reading actuators</a>
-  <h4>Extensions</h4>
+  <h4><a href="arduino.html">Core — Arduino</a></h4>
+  <a href="arduino.html#pardalotebegin">Pardalote.begin()</a>
+  <a href="arduino.html#pardaloterun">Pardalote.run()</a>
+  <a href="arduino.html#pardaloteshare">Pardalote.share()</a>
+  <a href="arduino.html#pardalotesend">Pardalote.send()</a>
+  <a href="arduino.html#when-not-to-share">When not to share</a>
+  <h4><a href="messaging.html">Core — Messaging</a></h4>
+  <a href="messaging.html#javascript-to-arduino">JavaScript to Arduino</a>
+  <a href="messaging.html#arduino-to-javascript">Arduino to JavaScript</a>
+  <a href="messaging.html#retain-and-broadcast">Retain and broadcast</a>
+  <a href="messaging.html#inspecting-all-traffic">Inspecting all traffic</a>
+  <h4><a href="extensions.html">Extensions</a></h4>
   <a href="extensions.html">Overview</a>
+  <a href="extensions.html#creating-extension-objects-in-the-firmware">Creating extension objects in the firmware</a>
+  <a href="extensions.html#reading-and-writing-actuators-from-the-sketch">Reading and writing actuators from the sketch</a>
   <a href="servo.html">Servo</a>
   <a href="stepper.html">Stepper</a>
   <a href="bus-servo.html">Bus servo</a>
   <a href="groups.html">Groups</a>
   <a href="neopixel.html">NeoPixel</a>
   <a href="ultrasonic.html">Ultrasonic</a>
-  <a href="mpu.html">MPU / IMU</a>
+  <a href="encoder.html">Rotary encoder</a>
+  <a href="imu.html">IMU</a>
   <a href="camera.html">Camera</a>
-  <h4>Under the hood</h4>
+  <h4><a href="protocol.html">Under the hood</a></h4>
   <a href="protocol.html">Protocol</a>
+  <a href="pin-capabilities.html">Pin capabilities</a>
   <a href="troubleshooting.html">Troubleshooting</a>
+  </div>
 </aside>
     <main class="ref-main">
       <h1>Pins and reading</h1>
@@ -62,7 +85,7 @@
 <p>Anywhere a <code>pin</code> is accepted you can pass a number (<code>13</code>), a board constant (<code>A0</code>, <code>LED_BUILTIN</code> — see <a href="#pin-aliases">Pin aliases</a>), or a string alias (<code>'A0'</code>).</p>
 <h2 id="pinmode">pinMode()</h2>
 <p>Sets a pin's mode. For input modes, an optional interval starts periodic reads immediately.</p>
-<div class="sig">arduino.<span class="fn">pinMode</span>(pin, mode, [interval])</div>
+<div class="sig sig-js">arduino.<span class="fn">pinMode</span>(pin, mode, [interval], [threshold])</div>
 <table>
 <thead>
 <tr>
@@ -80,22 +103,28 @@
 <tr>
 <td><code>mode</code></td>
 <td>constant</td>
-<td><code>OUTPUT</code>, <code>INPUT</code>, <code>INPUT_PULLUP</code>, <code>INPUT_PULLDOWN</code>, or <code>ANALOG_INPUT</code>.</td>
+<td><code>OUTPUT</code>, <code>INPUT</code>, <code>INPUT_PULLUP</code>, <code>INPUT_PULLDOWN</code>, or <code>ANALOG_INPUT_MODE</code>.</td>
 </tr>
 <tr>
 <td><code>interval</code></td>
 <td>number</td>
-<td>Optional. Poll interval in ms — starts periodic reads straight away (input modes only).</td>
+<td>Optional. Starts watching the pin straight away (input modes only); acts as the analog rate limit.</td>
+</tr>
+<tr>
+<td><code>threshold</code></td>
+<td>number</td>
+<td>Optional. Change threshold — see <a href="#thresholds">Thresholds</a>.</td>
 </tr>
 </tbody>
 </table>
-<pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">pinMode</span><span class="p">(</span><span class="mf">13</span><span class="p">,</span> <span class="nx">OUTPUT</span><span class="p">);</span>
-<span class="nx">arduino</span><span class="p">.</span><span class="nx">pinMode</span><span class="p">(</span><span class="mf">7</span><span class="p">,</span>  <span class="nx">INPUT_PULLUP</span><span class="p">);</span>
-<span class="nx">arduino</span><span class="p">.</span><span class="nx">pinMode</span><span class="p">(</span><span class="nx">A0</span><span class="p">,</span> <span class="nx">ANALOG_INPUT</span><span class="p">,</span> <span class="mf">50</span><span class="p">);</span>  <span class="c1">// and start reading A0 every 50 ms</span>
-</code></pre>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">pinMode</span><span class="p">(</span><span class="mf">13</span><span class="p">,</span><span class="w"> </span><span class="nx">OUTPUT</span><span class="p">);</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">pinMode</span><span class="p">(</span><span class="mf">7</span><span class="p">,</span><span class="w">  </span><span class="nx">INPUT_PULLUP</span><span class="p">);</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">pinMode</span><span class="p">(</span><span class="nx">A0</span><span class="p">,</span><span class="w"> </span><span class="nx">ANALOG_INPUT_MODE</span><span class="p">,</span><span class="w"> </span><span class="mf">50</span><span class="p">);</span><span class="w">     </span><span class="c1">// watch A0, update at most every 50 ms</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">pinMode</span><span class="p">(</span><span class="nx">A0</span><span class="p">,</span><span class="w"> </span><span class="nx">ANALOG_INPUT_MODE</span><span class="p">,</span><span class="w"> </span><span class="mf">50</span><span class="p">,</span><span class="w"> </span><span class="mf">8</span><span class="p">);</span><span class="w">  </span><span class="c1">// …transmitting changes of 8+ counts</span>
+</code></pre></div>
 <h2 id="digitalwrite">digitalWrite()</h2>
 <p>Sets a digital output pin high or low.</p>
-<div class="sig">arduino.<span class="fn">digitalWrite</span>(pin, value)</div>
+<div class="sig sig-js">arduino.<span class="fn">digitalWrite</span>(pin, value)</div>
 <table>
 <thead>
 <tr>
@@ -119,7 +148,7 @@
 </table>
 <h2 id="analogwrite">analogWrite()</h2>
 <p>Writes a PWM value to a pin.</p>
-<div class="sig">arduino.<span class="fn">analogWrite</span>(pin, value)</div>
+<div class="sig sig-js">arduino.<span class="fn">analogWrite</span>(pin, value)</div>
 <table>
 <thead>
 <tr>
@@ -141,9 +170,35 @@
 </tr>
 </tbody>
 </table>
+<p>Writes are <strong>rate-limited per pin</strong> so you can safely drive <code>analogWrite()</code> from a slider or a draw loop: the first write goes out immediately, and rapid follow-ups are coalesced into a single send that carries the latest value — the resting value is never lost. The default window is 20 ms (~50 writes/s per pin), which is imperceptible on ESP32 and keeps the slower UNO R4 WiFi from being flooded off the socket. Tune it with <code>setWriteThrottle()</code> / <code>setWriteThreshold()</code>, or pass <code>0</code> to <code>setWriteThrottle()</code> to send every value.</p>
+<h2 id="setwritethrottle--setwritethreshold">setWriteThrottle() / setWriteThreshold()</h2>
+<p>Rate-limits outgoing PWM writes — the outbound counterpart to <code>setReadInterval()</code>. Useful when <code>analogWrite()</code> is driven from mouse movement or a draw loop, and essential for keeping the UNO R4 WiFi responsive under a fast slider.</p>
+<div class="sig sig-js">arduino.<span class="fn">setWriteThrottle</span>(ms) · arduino.<span class="fn">setWriteThreshold</span>(value)</div>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ms</code></td>
+<td>number</td>
+<td>Minimum ms between PWM sends on a pin. Default <code>20</code>. <code>0</code> = off (send every value).</td>
+</tr>
+<tr>
+<td><code>value</code></td>
+<td>number</td>
+<td>Minimum duty change worth sending. Default <code>0</code> (send all).</td>
+</tr>
+</tbody>
+</table>
+<p>Both apply to every <code>analogWrite()</code> pin and are chainable.</p>
 <h2 id="analogread">analogRead()</h2>
 <p>Reads the value of an analog pin. The first call starts a periodic poll on the Arduino; every later call returns the cached value instantly — so it's safe to call on every frame of a draw loop with no extra network traffic.</p>
-<div class="sig">arduino.<span class="fn">analogRead</span>(pin, [interval])</div>
+<div class="sig sig-js">arduino.<span class="fn">analogRead</span>(pin, [interval], [threshold])</div>
 <table>
 <thead>
 <tr>
@@ -161,20 +216,25 @@
 <tr>
 <td><code>interval</code></td>
 <td>number</td>
-<td>Optional. Poll interval in ms (default <code>200</code>). Pass <code>END</code> to stop polling. Calling with the interval already in effect just returns the cache.</td>
+<td>Optional. Minimum ms between updates to this browser (default <code>200</code>) — a rate limit, not a sampling clock; see <a href="#how-watching-works--intervals-and-thresholds">How watching works</a>. Pass <code>END</code> to stop. Calling with the settings already in effect just returns the cache.</td>
+</tr>
+<tr>
+<td><code>threshold</code></td>
+<td>number</td>
+<td>Optional. Change threshold — see <a href="#how-watching-works--intervals-and-thresholds">How watching works</a>.</td>
 </tr>
 </tbody>
 </table>
 <p><strong>Returns</strong> the most recent value, <code>0</code> to <code>arduino.analogMax</code>. Returns <code>0</code> until the first reading arrives.</p>
-<div class="code-ex"><div class="bar">Example — circle that follows a knob</div><pre><code><span class="kd">function</span> <span class="nx">draw</span><span class="p">()</span> <span class="p">{</span>
-    <span class="kd">let</span> <span class="nx">v</span> <span class="o">=</span> <span class="nx">arduino</span><span class="p">.</span><span class="nx">analogRead</span><span class="p">(</span><span class="nx">A0</span><span class="p">,</span> <span class="mf">50</span><span class="p">);</span>   <span class="c1">// poll every 50 ms</span>
-    <span class="kd">let</span> <span class="nx">size</span> <span class="o">=</span> <span class="nx">map</span><span class="p">(</span><span class="nx">v</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="nx">arduino</span><span class="p">.</span><span class="nx">analogMax</span><span class="p">,</span> <span class="mf">10</span><span class="p">,</span> <span class="nx">width</span><span class="p">);</span>
-    <span class="nx">circle</span><span class="p">(</span><span class="nx">width</span> <span class="o">/</span> <span class="mf">2</span><span class="p">,</span> <span class="nx">height</span> <span class="o">/</span> <span class="mf">2</span><span class="p">,</span> <span class="nx">size</span><span class="p">);</span>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><div class="bar">Example — circle that follows a knob</div><pre><code><span class="kd">function</span><span class="w"> </span><span class="nx">draw</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="nx">v</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">analogRead</span><span class="p">(</span><span class="nx">A0</span><span class="p">,</span><span class="w"> </span><span class="mf">50</span><span class="p">);</span><span class="w">   </span><span class="c1">// updates at most every 50 ms</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="nx">size</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">map</span><span class="p">(</span><span class="nx">v</span><span class="p">,</span><span class="w"> </span><span class="mf">0</span><span class="p">,</span><span class="w"> </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">analogMax</span><span class="p">,</span><span class="w"> </span><span class="mf">10</span><span class="p">,</span><span class="w"> </span><span class="nx">width</span><span class="p">);</span>
+<span class="w">    </span><span class="nx">circle</span><span class="p">(</span><span class="nx">width</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="mf">2</span><span class="p">,</span><span class="w"> </span><span class="nx">height</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="mf">2</span><span class="p">,</span><span class="w"> </span><span class="nx">size</span><span class="p">);</span>
 <span class="p">}</span>
 </code></pre></div>
 <h2 id="digitalread">digitalRead()</h2>
 <p>Reads a digital pin. Same poll-and-cache pattern as <code>analogRead()</code>.</p>
-<div class="sig">arduino.<span class="fn">digitalRead</span>(pin, [interval])</div>
+<div class="sig sig-js">arduino.<span class="fn">digitalRead</span>(pin, [interval], [threshold])</div>
 <table>
 <thead>
 <tr>
@@ -192,14 +252,55 @@
 <tr>
 <td><code>interval</code></td>
 <td>number</td>
-<td>Optional. Poll interval in ms (default <code>200</code>). Pass <code>END</code> to stop polling.</td>
+<td>Optional. Registers the watch (default <code>200</code>). Digital changes are transmitted immediately regardless of the interval — edges are never delayed. Pass <code>END</code> to stop.</td>
+</tr>
+<tr>
+<td><code>threshold</code></td>
+<td>number</td>
+<td>Optional. Change threshold (digital default <code>1</code> — any change).</td>
 </tr>
 </tbody>
 </table>
 <p><strong>Returns</strong> <code>HIGH</code> (1) or <code>LOW</code> (0); <code>0</code> until the first reading arrives.</p>
-<h2 id="onchange">onChange()</h2>
-<p>Registers a callback that fires whenever a polled pin's value changes.</p>
-<div class="sig">arduino.<span class="fn">onChange</span>(pin, handler)</div>
+<h2 id="how-watching-works--intervals-and-thresholds">How watching works — intervals and thresholds</h2>
+<p>The board watches pins continuously and transmits <strong>meaningful changes</strong>; the <code>interval</code> is a per-browser <strong>rate limit</strong> (minimum ms between updates), not a sampling clock:</p>
+<ul>
+<li><strong>Digital pins</strong> are checked on every pass of the board's loop. A level change is transmitted <strong>immediately</strong> — a button press never waits for a timer, and even a very short tap delivers both edges (a 15 ms lockout absorbs contact bounce). Idle pins transmit nothing.</li>
+<li><strong>Analog pins</strong> are sampled every 10 ms internally. A change on a dormant pin goes out at once; a continuously moving pin updates each browser at most once per its <code>interval</code>.</li>
+</ul>
+<p>The Arduino only transmits a reading when it has changed by at least <code>threshold</code> since the value this browser last saw. That keeps the channel quiet while a sensor sits still: a raw ADC jitters by a count or two constantly, so without a threshold &quot;send on change&quot; sends nearly every sample.</p>
+<p>Defaults (used when the threshold is <code>0</code> or omitted):</p>
+<table>
+<thead>
+<tr>
+<th>Kind</th>
+<th>Default threshold</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Digital</td>
+<td><code>1</code> — any change</td>
+</tr>
+<tr>
+<td>Analog</td>
+<td>the ADC noise floor: <code>analogMax &gt;&gt; 8</code>, min <code>1</code> (UNO ≈ 4 counts, ESP32 ≈ 16)</td>
+</tr>
+</tbody>
+</table>
+<p>Thresholds and intervals are <strong>per browser</strong>: each connected page gets its own rate limit and its own idea of a meaningful change, without disturbing anyone else's. The pin itself is watched once, on the board.</p>
+<p>Reading a precise sensor? Set the threshold to <code>1</code> to receive every count of change.</p>
+<h2 id="setreadinterval--setreadthreshold">setReadInterval() / setReadThreshold()</h2>
+<p>Set a pin's poll interval or change threshold directly — before polling starts (stored and applied when the read registers) or while it runs (applied immediately).</p>
+<div class="sig sig-js">arduino.<span class="fn">setReadInterval</span>(pin, ms) · arduino.<span class="fn">setReadThreshold</span>(pin, threshold)</div>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">setReadThreshold</span><span class="p">(</span><span class="nx">A0</span><span class="p">,</span><span class="w"> </span><span class="mf">1</span><span class="p">);</span><span class="w">     </span><span class="c1">// precision mode: every count matters</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">setReadInterval</span><span class="p">(</span><span class="nx">A0</span><span class="p">,</span><span class="w"> </span><span class="mf">25</span><span class="p">);</span><span class="w">     </span><span class="c1">// …and poll fast</span>
+<span class="kd">let</span><span class="w"> </span><span class="nx">v</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">analogRead</span><span class="p">(</span><span class="nx">A0</span><span class="p">);</span><span class="w">      </span><span class="c1">// uses the stored settings</span>
+</code></pre></div>
+<p>The global defaults are also settable: <code>arduino.defaultInterval</code> (ms, <code>200</code>) and <code>arduino.defaultThreshold</code> (<code>0</code> = board default).</p>
+<h2 id="pin--the-listening-handle">pin() — the listening handle</h2>
+<p>The verbs above are how you <strong>do</strong> things. To <strong>listen</strong> to a pin, take its handle — it speaks the same grammar as every device (<code>arduino.pan</code>, <code>arduino.sonar</code>, …):</p>
+<div class="sig sig-js">arduino.<span class="fn">pin</span>(ref)</div>
 <table>
 <thead>
 <tr>
@@ -210,25 +311,29 @@
 </thead>
 <tbody>
 <tr>
-<td><code>pin</code></td>
+<td><code>ref</code></td>
 <td>number | string</td>
-<td>The pin to watch. Polling must be running (via <code>pinMode</code> interval, a read call, or the Arduino's <code>share()</code>).</td>
-</tr>
-<tr>
-<td><code>handler</code></td>
-<td>function</td>
-<td>Receives <code>(value, pin)</code>.</td>
+<td>Pin number or alias (<code>'A0'</code>). Handles are cached — <code>pin(9)</code> twice returns the same object.</td>
 </tr>
 </tbody>
 </table>
-<div class="code-ex"><div class="bar">Example — react to changes</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">onChange</span><span class="p">(</span><span class="nx">A0</span><span class="p">,</span> <span class="p">(</span><span class="nx">value</span><span class="p">,</span> <span class="nx">pin</span><span class="p">)</span> <span class="p">=&gt;</span> <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s1">&#39;A0 →&#39;</span><span class="p">,</span> <span class="nx">value</span><span class="p">));</span>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><div class="bar">Example — react to changes</div><pre><code><span class="kd">const</span><span class="w"> </span><span class="nx">knob</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">pin</span><span class="p">(</span><span class="s1">&#39;A0&#39;</span><span class="p">);</span>
+<span class="nx">knob</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;change&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">({</span><span class="w"> </span><span class="nx">value</span><span class="p">,</span><span class="w"> </span><span class="nx">pin</span><span class="w"> </span><span class="p">})</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s1">&#39;A0 →&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">value</span><span class="p">));</span>
+<span class="nx">knob</span><span class="p">.</span><span class="nx">off</span><span class="p">(</span><span class="s1">&#39;change&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">fn</span><span class="p">);</span><span class="w">                 </span><span class="c1">// unsubscribe one handler (omit fn: all)</span>
+<span class="nx">knob</span><span class="p">.</span><span class="nx">setReadInterval</span><span class="p">(</span><span class="mf">25</span><span class="p">);</span><span class="w">               </span><span class="c1">// per-pin poll config</span>
+<span class="nx">knob</span><span class="p">.</span><span class="nx">setReadThreshold</span><span class="p">(</span><span class="mf">4</span><span class="p">);</span>
+<span class="nx">knob</span><span class="p">.</span><span class="nx">value</span><span class="p">;</span><span class="w">                             </span><span class="c1">// the mirrored value</span>
 </code></pre></div>
+<p><code>'change'</code> fires for <strong>any</strong> pin-state change: input readings that moved by at least the threshold, and output writes from any browser or the sketch — you don't need to care which kind of pin it is. For inputs, registering a listener auto-starts a default poll if none is running.</p>
+<p>Alias handles resolve <strong>lazily</strong>: <code>arduino.pin('A0')</code> works before <code>'ready'</code>, even though the board's alias table hasn't arrived yet — the listener starts firing once it has. (The verbs still need resolvable pins at call time.)</p>
+<p>Listeners survive <code>connect()</code> to a new board, like device extensions; polls are re-established automatically on the new board's sync.</p>
+<p>The handle also carries conveniences — <code>knob.read()</code>, <code>knob.write(HIGH)</code>, <code>knob.mode(OUTPUT)</code> — but the Arduino-mirroring verbs remain the documented way to do things.</p>
 <h2 id="end--endall">end() / endAll()</h2>
 <p>Stops polling one pin, or all pins.</p>
-<div class="sig">arduino.<span class="fn">end</span>(pin) · arduino.<span class="fn">endAll</span>()</div>
-<pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">end</span><span class="p">(</span><span class="nx">A0</span><span class="p">);</span>    <span class="c1">// stop one pin</span>
-<span class="nx">arduino</span><span class="p">.</span><span class="nx">endAll</span><span class="p">();</span>   <span class="c1">// stop all pins</span>
-</code></pre>
+<div class="sig sig-js">arduino.<span class="fn">end</span>(pin) · arduino.<span class="fn">endAll</span>()</div>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">end</span><span class="p">(</span><span class="nx">A0</span><span class="p">);</span><span class="w">    </span><span class="c1">// stop one pin</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">endAll</span><span class="p">();</span><span class="w">   </span><span class="c1">// stop all pins</span>
+</code></pre></div>
 <h2 id="analogmax">analogMax</h2>
 <p>The board's ADC range, set automatically from the HELLO handshake. Use it to map correctly on any board.</p>
 <table>
@@ -249,17 +354,17 @@
 </tr>
 </tbody>
 </table>
-<div class="code-ex"><div class="bar">Example — map correctly on any board</div><pre><code><span class="kd">let</span> <span class="nx">mapped</span> <span class="o">=</span> <span class="nx">map</span><span class="p">(</span><span class="nx">arduino</span><span class="p">.</span><span class="nx">analogRead</span><span class="p">(</span><span class="nx">A0</span><span class="p">),</span> <span class="mf">0</span><span class="p">,</span> <span class="nx">arduino</span><span class="p">.</span><span class="nx">analogMax</span><span class="p">,</span> <span class="mf">0</span><span class="p">,</span> <span class="nx">width</span><span class="p">);</span>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><div class="bar">Example — map correctly on any board</div><pre><code><span class="kd">let</span><span class="w"> </span><span class="nx">mapped</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">map</span><span class="p">(</span><span class="nx">arduino</span><span class="p">.</span><span class="nx">analogRead</span><span class="p">(</span><span class="nx">A0</span><span class="p">),</span><span class="w"> </span><span class="mf">0</span><span class="p">,</span><span class="w"> </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">analogMax</span><span class="p">,</span><span class="w"> </span><span class="mf">0</span><span class="p">,</span><span class="w"> </span><span class="nx">width</span><span class="p">);</span>
 </code></pre></div>
 <h2 id="pin-aliases">Pin aliases</h2>
 <p>Rather than raw numbers, include the pin file for your board and use named constants. This prevents mistakes and makes sketches portable.</p>
 <pre><code><span class="cm">&lt;!-- in index.html, after pardalote.js --&gt;</span>
 <span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;pardalote-pins-esp32-wrover-dev.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
 </code></pre>
-<pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">pinMode</span><span class="p">(</span><span class="nx">A0</span><span class="p">,</span> <span class="nx">ANALOG_INPUT</span><span class="p">,</span> <span class="mf">50</span><span class="p">);</span>
-<span class="nx">arduino</span><span class="p">.</span><span class="nx">digitalWrite</span><span class="p">(</span><span class="nx">LED_BUILTIN</span><span class="p">,</span> <span class="nx">HIGH</span><span class="p">);</span>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">pinMode</span><span class="p">(</span><span class="nx">A0</span><span class="p">,</span><span class="w"> </span><span class="nx">ANALOG_INPUT_MODE</span><span class="p">,</span><span class="w"> </span><span class="mf">50</span><span class="p">);</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">digitalWrite</span><span class="p">(</span><span class="nx">LED_BUILTIN</span><span class="p">,</span><span class="w"> </span><span class="nx">HIGH</span><span class="p">);</span>
 <span class="nx">arduino</span><span class="p">.</span><span class="nx">imu</span><span class="p">.</span><span class="nx">attach</span><span class="p">(</span><span class="nx">SDA</span><span class="p">);</span>
-</code></pre>
+</code></pre></div>
 <table>
 <thead>
 <tr>
@@ -283,16 +388,16 @@
 </tbody>
 </table>
 <p>String aliases also work anywhere a pin is accepted:</p>
-<pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">analogRead</span><span class="p">(</span><span class="s1">&#39;A0&#39;</span><span class="p">);</span>      <span class="c1">// resolved from the board&#39;s alias table</span>
-<span class="nx">arduino</span><span class="p">.</span><span class="nx">digitalWrite</span><span class="p">(</span><span class="s1">&#39;SDA&#39;</span><span class="p">,</span> <span class="nx">HIGH</span><span class="p">);</span>
-</code></pre>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">analogRead</span><span class="p">(</span><span class="s1">&#39;A0&#39;</span><span class="p">);</span><span class="w">      </span><span class="c1">// resolved from the board&#39;s alias table</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">digitalWrite</span><span class="p">(</span><span class="s1">&#39;SDA&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">HIGH</span><span class="p">);</span>
+</code></pre></div>
 <p>See also: <a href="connecting.html">Connecting</a> · <a href="arduino.html">The Arduino sketch</a></p>
 
     </main>
   </div>
 </div>
 
-<footer class="site-footer speckled">
+<footer class="site-footer">
   <div class="wrap">
     <span>Pardalote — created by Scott Mitchell for design education and creative technology.</span>
     <span><a href="index.html">Reference</a> · <a href="https://github.com/ScottMit/Pardalote">GitHub</a> · GPL-3.0</span>

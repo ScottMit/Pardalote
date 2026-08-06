@@ -1,7 +1,7 @@
 // ==============================================================
 // busServo.js
 // Pardalote Serial Bus Servo Extension
-// Version v1.0
+// Part of Pardalote — version in package.json
 // by Scott Mitchell
 // GPL-3.0 License
 //
@@ -49,6 +49,14 @@ const CMD_BUSSERVO_PING        = 0x4C;
 const CMD_BUSSERVO_SCAN        = 0x4D;
 const CMD_BUSSERVO_SYNC_WRITE  = 0x4E;
 const CMD_BUSSERVO_DONE        = 0x51;
+const CMD_BUSSERVO_READ_LIMITS = 0x62;  // read the servo's EEPROM angle-limit registers (firmware limits).
+const CMD_BUSSERVO_PRESENT     = 0x63;  // Ar→JS: did the servo answer the attach-time ping?
+const CMD_BUSSERVO_GESTURE     = 0x5A;  // global: payload = bus-servo channel blocks (segment schedules).
+                                        // See pardalote.js CURVE_IDS / GESTURE_FLAG_* and defs.h.
+
+// Board-side cap (PardaloteBusServo.h MAX_BUS_SERVO_SEGMENTS) — mirrored so
+// JS can warn instead of silently overrunning. Extra segments are dropped.
+const MAX_BUS_SERVO_SEGMENTS = 12;
 
 const BUSSERVO_SERIES_ST = 0;   // 0–4095
 const BUSSERVO_SERIES_SC = 1;   // 0–1023
@@ -82,6 +90,11 @@ class BusServo extends Extension {
 
         // Commanded destination (set by write; position is feedback)
         this.target      = 0;
+        // Whether `target` is a LIVE goal. A position write/gesture sets it;
+        // releasing torque (free mode) or entering wheel mode clears it — a
+        // freed servo isn't holding a target. `target` keeps its last number
+        // for reference; `hasTarget` says whether it currently means anything.
+        this.hasTarget   = false;
 
         // Feedback (from read polls)
         this.position    = 0;
@@ -96,14 +109,31 @@ class BusServo extends Extension {
         this.limitMax     = 0;
         this.limitEnabled = false;
 
-        // Periodic read
-        this._readTimer    = null;
-        this._readInterval = 0;
+        // The servo's OWN firmware angle limits (read from EEPROM by the board
+        // at attach, replayed on reconnect). null = not yet read / servo didn't
+        // answer. { min, max, enabled } otherwise — enabled is false when the
+        // servo reports min==max==0 (Feetech's "limits off / multi-turn").
+        // Read-only mirror of the servo; distinct from the soft limits above.
+        this.firmwareLimits = null;
 
-        // Pending scan()/ping()/done promise resolvers
+        // Is the servo answering? true = found, false = no response (check
+        // wiring / ID / baud), null = not yet attached / unknown. Seeded by the
+        // board's attach-time ping (CMD_BUSSERVO_PRESENT), then kept LIVE from
+        // read() feedback (position -1 = no answer) — so a servo powered up or
+        // unplugged mid-session flips it. Fires the 'presence' event on change.
+        this.present = null;
+
+        // Periodic read registration (board-side).
+        // _readThreshold is in counts; 0 = board default (2 counts).
+        // Survives _reset() — it's user-tuned configuration.
+        this._readInterval  = 0;
+        this._readThreshold = 0;
+
+        // Pending scan()/ping()/done/firmware-limit promise resolvers
         this._scanResolvers = [];
         this._pingResolvers = [];
         this._doneResolvers = [];
+        this._fwLimitResolvers = [];
 
         // Home position (counts) — where home() goes; null = centre of range.
         this.homePosition = null;
@@ -122,10 +152,13 @@ class BusServo extends Extension {
     // Board switch / reconnection
     // -------------------------------------------------------------------
     _reset() {
-        this._stopRead();
+        this._readInterval = 0;  // registration died with the old board — send nothing
         this._drain(this._scanResolvers, []);
         this._drain(this._pingResolvers, null);
         this._drain(this._doneResolvers, this.position);
+        this._drain(this._fwLimitResolvers, null);
+        this.firmwareLimits = null;   // announce() replays it fresh from the board
+        this.present = null;          // announce() replays presence too
         this._movePromise  = null;
         this._moveDuration = 0;
         this.homePosition  = null;
@@ -134,6 +167,7 @@ class BusServo extends Extension {
         this.mode        = BUSSERVO_MODE_POSITION;
         this.torqueOn    = true;
         this.target      = 0;
+        this.hasTarget   = false;
         this.limitEnabled = false;
         this._announcedByArduino = false;
     }
@@ -147,11 +181,9 @@ class BusServo extends Extension {
                 this._raw(CMD_BUSSERVO_SET_LIMITS, [this.logicalId, this.limitMin, this.limitMax, 1]);
             }
         }
-        if (this.isAttached && this._readInterval > 0) {
-            const interval = this._readInterval;
-            this._readInterval = 0;
-            this.read(interval);
-        }
+        // Periodic read registrations are per-WS-client on the Arduino
+        // (cleared on disconnect), so always re-register if active.
+        if (this.isAttached && this._readInterval > 0) this._sendRead();
         this._announcedByArduino = false;
     }
 
@@ -203,6 +235,7 @@ class BusServo extends Extension {
         this._armDone();          // the board polls Moving and emits 'done'
         position = this._clampPos(Math.round(position));
         this.target = position;                     // commanded goal; position is feedback
+        this.hasTarget = true;                      // now a live goal (until freed)
         this.arduino.send(encodeFrame(CMD_BUSSERVO_WRITE, DEVICE_BUSSERVO,
             [this.logicalId, position, speed, acc]));
         this._emit('write', { position });
@@ -237,6 +270,103 @@ class BusServo extends Extension {
         return this;
     }
 
+    // -------------------------------------------------------------------
+    // gesture(segments, opts?) — play an authored SEGMENT SCHEDULE on-board.
+    //
+    // The bus-servo counterpart of servo.gesture() / stepper.gesture(). A bus
+    // servo runs its OWN motion, so — unlike the PWM servo — the per-segment
+    // `curve` is NOT rendered inside a segment: each segment is one position
+    // write at a distance/duration-matched speed, and the board advances to
+    // the next when the servo's Moving flag settles (real arrival feedback,
+    // not a timer). Expression comes from decomposing the move into segments
+    // (and, in a group, lane overlap). Values are in servo COUNTS. Each
+    // segment is { dur, curve?, and either `by` (relative) or `to` (absolute) }:
+    //
+    //   grip.gesture([                       // reach out, ease back, small settle
+    //       { by:  600, dur: 400 },
+    //       { by: -600, dur: 600 },
+    //       { by:   80, dur: 200 },
+    //   ]);
+    //   await grip.gesture([...]).whenDone();
+    //
+    // Relative by default (the board captures live start position, then chains
+    // from each target); `to`/opts.absolute for absolute targets (soft limits
+    // clamp the ends). The authored `dur` sizes each segment's speed; if that
+    // exceeds the servo's max the segment simply takes longer and the next
+    // still fires on true arrival. Fires one 'done' after the last segment.
+    // -------------------------------------------------------------------
+    gesture(segments, opts = {}) {
+        const blk = this._gestureBlock(segments, opts);
+        if (!blk) return this;
+        this.arduino.send(encodeFrame(CMD_BUSSERVO_GESTURE, DEVICE_BUSSERVO, [], blk.bytes));
+        return this;
+    }
+
+    // Encode ONE gesture channel block — shared by gesture() (wrap + send) and
+    // the group adapter _memberGestureEncode() (batched, no send). Arms
+    // whenDone(), mirrors the commanded target, emits 'write'. Returns
+    // { bytes, total } or null when there's nothing to play.
+    _gestureBlock(segments, opts = {}) {
+        if (!this._requireAttached('gesture')) return null;
+        if (!Array.isArray(segments) || segments.length === 0) {
+            this._warn('gesture: needs a non-empty array of segments');
+            return null;
+        }
+
+        const usesTo = segments.some(s => s.to !== undefined);
+        const usesBy = segments.some(s => s.by !== undefined || s.value !== undefined);
+        const absolute = (opts.absolute !== undefined) ? !!opts.absolute : usesTo;
+        if (usesTo && usesBy)
+            this._warn(`gesture: mixes 'to' (absolute) and 'by' (relative) — treating whole gesture as ${absolute ? 'absolute' : 'relative'}`);
+
+        if (segments.length > MAX_BUS_SERVO_SEGMENTS)
+            this._warn(`gesture: ${segments.length} segments exceeds board max ${MAX_BUS_SERVO_SEGMENTS} — extra segments dropped`);
+        const count = Math.min(segments.length, MAX_BUS_SERVO_SEGMENTS);
+
+        const flags = absolute ? GESTURE_FLAG_ABSOLUTE : 0;
+
+        // Encode: [logicalId u8, flags u8, count u8] + count × {curve u8, dur u16, value i32}.
+        const bytes = new Uint8Array(3 + count * 7);
+        const dv    = new DataView(bytes.buffer);
+        dv.setUint8(0, this.logicalId & 0xFF);
+        dv.setUint8(1, flags & 0xFF);
+        dv.setUint8(2, count & 0xFF);
+        let total = 0, rest = this.position;   // predicted end (board uses its live read)
+        for (let i = 0; i < count; i++) {
+            const s   = segments[i];
+            const off = 3 + i * 7;
+            const dur = Math.max(1, Math.round(s.dur ?? 0));
+            const val = absolute ? this._clampPos(Math.round(s.to ?? rest))
+                                 : Math.round(s.by ?? s.value ?? 0);
+            dv.setUint8(off, curveId(s.curve));
+            dv.setUint16(off + 1, dur & 0xFFFF, false);
+            dv.setInt32(off + 3, val, false);
+            total += dur;
+            rest = absolute ? this._clampPos(Math.round(s.to ?? rest))
+                            : this._clampPos(rest + Math.round(s.by ?? s.value ?? 0));
+        }
+
+        this._armDone(total);
+        this.target = rest;   // mirror commanded target; read polls refine position
+        this.hasTarget = true;
+        this._emit('write', { position: rest });
+        return { bytes, total };
+    }
+
+    // Group adapter (group.gesture()). entries: [[member, segments], ...], all
+    // BusServos → one CMD_BUSSERVO_GESTURE frame carrying every member's channel
+    // block; the board sequences each locally. Returns frame(s) WITHOUT sending,
+    // so the group batches all types into one message.
+    _memberGestureEncode(entries) {
+        const blocks = [];
+        for (const [m, segs] of entries) { const b = m._gestureBlock(segs); if (b) blocks.push(b.bytes); }
+        if (!blocks.length) return [];
+        const payload = new Uint8Array(blocks.reduce((n, b) => n + b.length, 0));
+        let off = 0;
+        for (const b of blocks) { payload.set(b, off); off += b.length; }
+        return [encodeFrame(CMD_BUSSERVO_GESTURE, DEVICE_BUSSERVO, [], payload)];
+    }
+
     // stop() — halt motion: hold the last-read position (or zero speed in
     // wheel mode). Matches servo.stop() / stepper.stop().
     stop() {
@@ -256,6 +386,7 @@ class BusServo extends Extension {
         if (!this._requireAttached('runSpeed')) return this;
         this._movePromise  = null;   // continuous — never "arrives"
         this._moveDuration = 0;
+        this.hasTarget     = false;  // wheel mode has no position goal
         if (this.mode !== BUSSERVO_MODE_WHEEL) this.setMode('wheel');
         this.arduino.send(encodeFrame(CMD_BUSSERVO_WRITE_SPEED, DEVICE_BUSSERVO,
             [this.logicalId, Math.round(speed), acc]));
@@ -275,28 +406,63 @@ class BusServo extends Extension {
     // demonstration), enable to hold position.
     // -------------------------------------------------------------------
     torque(on)      { this.torqueOn = !!on;
+                      if (!this.torqueOn) this.hasTarget = false;   // freed → no live target
                       if (this.isAttached) this._raw(CMD_BUSSERVO_TORQUE, [this.logicalId, on ? 1 : 0]);
                       return this; }
     enableTorque()  { return this.torque(true); }
     disableTorque() { return this.torque(false); }
 
     // -------------------------------------------------------------------
-    // read(interval?) — poll present state (one bus transaction per poll).
+    // read(interval?, threshold?) — poll present state.
+    // read()             — return cached position; no network traffic.
+    // read(interval)     — board-side periodic poll (ms): ONE bus
+    //                      transaction per tick regardless of how many
+    //                      browsers are connected; 'change' fires when the
+    //                      position moved by threshold+ counts.
+    // read(interval, 10) — only report changes of 10+ counts.
+    // read(END)          — stop this browser's periodic read.
+    // The board runs the poll and gates per browser ;
+    // threshold 0 = board default (2 counts — encoder noise floor).
+    // Calling again with the same settings just returns the cached value.
     // -------------------------------------------------------------------
-    read(interval) {
-        if (!this.isAttached) { console.warn(`BusServo ${this.logicalId}: not attached`); return this.position; }
+    read(interval, threshold) {
+        if (!this.isAttached) { this._warn('not attached'); return this.position; }
         if (interval === END) { this._stopRead(); return this.position; }
-        if (this._readTimer && (interval === undefined || interval === this._readInterval)) return this.position;
-        interval ??= this.arduino.defaultInterval;
-        this._stopRead();
-        this._readInterval = interval;
-        this._sendReadRequest();
-        this._readTimer = setInterval(() => this._sendReadRequest(), interval);
+        if (this._readInterval > 0
+            && (interval  === undefined || interval  === this._readInterval)
+            && (threshold === undefined || threshold === this._readThreshold)) {
+            return this.position;
+        }
+        this._readInterval = interval ?? this.arduino.defaultInterval;
+        if (threshold !== undefined) this._readThreshold = threshold;
+        this._sendRead();
         return this.position;
     }
 
-    _sendReadRequest() { this._raw(CMD_BUSSERVO_READ, [this.logicalId]); }
-    _stopRead() { if (this._readTimer) { clearInterval(this._readTimer); this._readTimer = null; } this._readInterval = 0; }
+    // setReadInterval(ms) / setReadThreshold(counts) — set poll settings
+    // directly; applied immediately if polling, stored for read() otherwise.
+    setReadInterval(ms) {
+        this._readInterval = ms;
+        if (this.isAttached && ms > 0) this._sendRead();
+        return this;
+    }
+
+    setReadThreshold(counts) {
+        this._readThreshold = counts;
+        if (this.isAttached && this._readInterval > 0) this._sendRead();
+        return this;
+    }
+
+    // Register (or update) this browser's poll with the board.
+    _sendRead() {
+        this._raw(CMD_BUSSERVO_READ, [this.logicalId, this._readInterval,
+            Math.max(0, Math.round(this._readThreshold))]);
+    }
+
+    _stopRead() {
+        if (this._readInterval > 0) this._raw(CMD_BUSSERVO_READ, [this.logicalId, END]);
+        this._readInterval = 0;
+    }
 
     // -------------------------------------------------------------------
     // Soft limits (safety) — same shape as stepper/servo setLimits().
@@ -320,6 +486,24 @@ class BusServo extends Extension {
         this.limitEnabled = false;
         if (this.isAttached) this._raw(CMD_BUSSERVO_SET_LIMITS, [this.logicalId, this.limitMin, this.limitMax, 0]);
         return this;
+    }
+
+    // -------------------------------------------------------------------
+    // readFirmwareLimits() — force a fresh read of the servo's OWN EEPROM
+    // angle-limit registers on the board, and resolve with the result. Also
+    // updates the cached `firmwareLimits` property (the board reads these once
+    // at attach, so `firmwareLimits` is usually already populated — call this
+    // only to re-read after changing them on the servo).
+    //
+    // Resolves { min, max, enabled } (counts), or null if the servo didn't
+    // answer. enabled is false when min==max==0 (Feetech "limits off").
+    //   const fw = await arduino.shoulder.readFirmwareLimits();
+    // Read the cached value directly (no round-trip) with .firmwareLimits.
+    // -------------------------------------------------------------------
+    readFirmwareLimits() {
+        if (!this._requireAttached('readFirmwareLimits')) return Promise.resolve(null);
+        this._raw(CMD_BUSSERVO_READ_LIMITS, [this.logicalId]);
+        return new Promise(resolve => this._fwLimitResolvers.push(resolve));
     }
 
     // Mirror the board's RAM clamp so cached target matches what it applied.
@@ -385,9 +569,10 @@ class BusServo extends Extension {
     // -------------------------------------------------------------------
     // Callback shortcuts
     // -------------------------------------------------------------------
-    onRead(fn)  { return this.on('read',  fn); }
+    onChange(fn) { return this.on('change', fn); }
     onWrite(fn) { return this.on('write', fn); }
     onDone(fn)  { return this.on('done',  fn); }
+    onPresence(fn) { return this.on('presence', fn); }
 
     // Resolves when the board reports the servo settled (CMD_BUSSERVO_DONE).
     _whenDone() { return new Promise(resolve => this._doneResolvers.push(resolve)); }
@@ -437,7 +622,10 @@ class BusServo extends Extension {
 
             case CMD_BUSSERVO_BUS_CONFIG: /* global echo — nothing per-instance */ break;
             case CMD_BUSSERVO_SET_MODE:   this.mode     = frame.params[1]; break;
-            case CMD_BUSSERVO_TORQUE:     this.torqueOn = frame.params[1] === 1; break;
+            case CMD_BUSSERVO_TORQUE:
+                this.torqueOn = frame.params[1] === 1;
+                if (!this.torqueOn) this.hasTarget = false;   // freed elsewhere → drop the target
+                break;
 
             case CMD_BUSSERVO_SET_LIMITS:
                 this.limitMin = frame.params[1];
@@ -448,7 +636,28 @@ class BusServo extends Extension {
             case CMD_BUSSERVO_WRITE:
                 // Echoed from a sketch-issued write — mirror the commanded goal.
                 this.target = frame.params[1];
+                this.hasTarget = true;
                 break;
+
+            case CMD_BUSSERVO_READ_LIMITS: {
+                // The servo's own firmware angle limits: [id, min, max] raw
+                // counts (-1 = servo didn't answer). min==max==0 = disabled.
+                const min = frame.params[1], max = frame.params[2];
+                this.firmwareLimits = (min < 0 || max < 0)
+                    ? null
+                    : { min, max, enabled: !(min === 0 && max === 0) };
+                this._emit('fwlimits', this.firmwareLimits);
+                this._drain(this._fwLimitResolvers, this.firmwareLimits);
+                break;
+            }
+
+            case CMD_BUSSERVO_PRESENT: {
+                // Did the servo answer the attach-time ping? [id, servoId, present]
+                const p = frame.params[2];
+                this.present = (p === 1) ? true : (p === 0) ? false : null;
+                this._emit('presence', { servoId: frame.params[1], present: this.present });
+                break;
+            }
 
             case CMD_BUSSERVO_DONE:
                 // Board polled the Moving flag and the servo has settled.
@@ -458,18 +667,29 @@ class BusServo extends Extension {
                 break;
 
             // ---- live updates ----
-            case CMD_BUSSERVO_READ:
+            case CMD_BUSSERVO_READ: {
                 this.position    = frame.params[1];
                 this.velocity    = frame.params[2];
                 this.load        = frame.params[3];
                 this.voltage     = frame.params[4] / 10;   // decivolts → volts
                 this.temperature = frame.params[5];
                 this.current     = frame.params[6];
-                this._emit('read', {
+                // Live presence: a valid read means the servo answered; the
+                // board sends position -1 when it doesn't. This keeps `present`
+                // current between attaches — a servo powered up (or unplugged)
+                // mid-session flips it and fires 'presence'. (Positions are
+                // 0..resolution-1, so -1 is an unambiguous "no answer".)
+                const answering = this.position !== -1;
+                if (answering !== this.present) {
+                    this.present = answering;
+                    this._emit('presence', { servoId: this.servoId, present: this.present });
+                }
+                this._emit('change', {
                     position: this.position, velocity: this.velocity, load: this.load,
                     voltage: this.voltage, temperature: this.temperature, current: this.current,
                 });
                 break;
+            }
 
             case CMD_BUSSERVO_PING:
                 this._drain(this._pingResolvers, frame.params[2] === 1);
@@ -497,6 +717,7 @@ class BusServo extends Extension {
         this._armDone();
         position = this._clampPos(Math.round(position));
         this.target = position;               // mirror individual write()
+        this.hasTarget = true;
         this._emit('write', { position });
         return [encodeFrame(CMD_BUSSERVO_WRITE, DEVICE_BUSSERVO,
             [this.logicalId, position, this.defaultSpeed, this.defaultAcc])];
@@ -533,6 +754,7 @@ class BusServo extends Extension {
             dv.setUint16(off + 3, spd, false);
             dv.setUint8 (off + 5, m.defaultAcc & 0xFF);
             m.target = pos;                   // mirror individual write()
+            m.hasTarget = true;
             m._armDone();
             m._emit('write', { position: pos });
         });
@@ -577,6 +799,7 @@ class BusServo extends Extension {
             torque:      this.torqueOn,
             resolution:  this.resolution,
             target:      this.target,
+            hasTarget:   this.hasTarget,
             position:    this.position,
             velocity:    this.velocity,
             load:        this.load,
@@ -584,6 +807,8 @@ class BusServo extends Extension {
             temperature: this.temperature,
             current:     this.current,
             limits:      this.limitEnabled ? { min: this.limitMin, max: this.limitMax } : null,
+            firmwareLimits: this.firmwareLimits,
+            present:     this.present,
             home:        this.homePosition ?? Math.round(this.resolution / 2),
             interval:    this._readInterval,
         };
@@ -595,7 +820,7 @@ class BusServo extends Extension {
     _raw(cmd, params) { this.arduino.send(encodeFrame(cmd, DEVICE_BUSSERVO, params)); }
 
     _requireAttached(who) {
-        if (!this.isAttached) { console.warn(`BusServo ${this.logicalId}: not attached (${who})`); return false; }
+        if (!this.isAttached) { this._warn(`not attached (${who})`); return false; }
         return true;
     }
 
