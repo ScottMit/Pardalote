@@ -53,13 +53,13 @@ let statusEl;
 let ipIn, transportSelect, connectLbl, idIns = [], torqueBtns = [], rxIn, txIn, connectBtn, disconnectBtn;
 let rxTxLocked = false;   // true while the pins are R4-fixed (1/2)
 let manualDisconnect = false;
+let usbBusy = false;   // board on WiFi, silent USB reconnect refused (see 'usbBusy')
 
 function setup() {
     const main = select('main');
 
-    const top = createDiv().id('top').parent(main);
-    createDiv('Bus servos').class('heading').parent(top);
-    statusEl = createDiv('status: starting…').id('status').parent(top);
+    // Heading + status live in index.html (#top); the sketch just drives status.
+    statusEl = select('#status');
 
     // Board — WiFi (IP) or USB (Web Serial), connect/disconnect.
     // Out-of-the-box: no code editing. USB needs the sketch on serial transport
@@ -120,8 +120,12 @@ function setup() {
     arduino.on('disconnect', () => {
         ready = false;
         setConnected(false);
-        if (!manualDisconnect) setStatus('reconnecting…');
+        if (usbBusy) { usbBusy = false; setStatus('board is on WiFi — press Connect to switch it to USB'); }
+        else if (!manualDisconnect) setStatus('reconnecting…');
     });
+    // 'usbBusy': a silent USB reconnect reached a board that's on WiFi — it won't
+    // switch without a picker gesture. The 'disconnect' that follows shows the prompt.
+    arduino.on('usbBusy', () => { usbBusy = true; });
 
     // Presence: seeded by the attach ping, then kept live from read feedback,
     // so a servo that appears (e.g. driver board powered up after the browser)

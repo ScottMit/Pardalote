@@ -172,6 +172,14 @@ private:
 #endif
         _st.pSerial = s;
         _sc.pSerial = s;
+        // Keep bus reads short. SCServo's default 100 ms read timeout, taken
+        // once per polled servo when the bus goes silent (servo powered down,
+        // wire pulled), stalls the main loop long enough to starve _ws.loop()
+        // — the WebSocket drops (and WiFiS3 on the R4 destabilises). A live
+        // servo answers in well under 1 ms, so 5 ms is ample headroom while
+        // capping a fully-silent 6-servo poll at ~30 ms instead of ~600 ms.
+        _st.IOTimeOut = 5;
+        _sc.IOTimeOut = 5;
         _busConfigured = true;
         Serial.print(F("BusServo: bus up on Serial")); Serial.print(_serialIndex);
         Serial.print(F(" @ ")); Serial.print(_baud); Serial.println(F(" baud"));
@@ -180,6 +188,10 @@ private:
     // ---- series-routed primitives ----
     static void writePos(int id, int pos, int speed, int acc) {
         uint8_t sid = _servoId[id];
+        // Last gate before the wire: never let an out-of-range count reach the
+        // servo, which would wrap it mod-resolution and lurch the wrong way.
+        // Covers every caller — browser write, sketch write, gesture.
+        pos = constrain(pos, 0, isSC(id) ? 1023 : 4095);
         if (isSC(id)) _sc.WritePos(sid, pos, 0, speed);
         else          _st.WritePosEx(sid, pos, speed, acc);
     }
@@ -391,6 +403,9 @@ public:
     // browser routes by it); echoes the clamped value the board actually applied.
     static void echoTarget(int id, int position) {
         if (!validId(id) || !_attached[id]) return;
+        // Mirror writePos's clamp so the browser caches the value the board
+        // actually applied — physical range always, soft limits when set.
+        position = constrain(position, 0, isSC(id) ? 1023 : 4095);
         if (_limitSet[id]) position = constrain(position, _minPos[id], _maxPos[id]);
         FrameBuilder fb;
         fb.begin(CMD_BUSSERVO_WRITE, DEVICE_BUSSERVO);
@@ -540,7 +555,11 @@ public:
                 positions[n] = (int16_t)(((uint16_t)r[1] << 8) | r[2]);
                 speeds[n]    = (uint16_t)(((uint16_t)r[3] << 8) | r[4]);
                 accs[n]      = r[5];
-                // Apply the bound instance's soft limits (RAM clamp).
+                // Clamp to the series' physical range first (SyncWrite skips
+                // writePos, so it needs its own guard against the mod-wrap
+                // lurch), then apply the bound instance's soft limits.
+                int16_t hi = (series == BUSSERVO_SERIES_SC) ? 1023 : 4095;
+                positions[n] = constrain(positions[n], (int16_t)0, hi);
                 int lid = logicalForServoId(ids[n]);
                 if (lid >= 0 && _limitSet[lid]) {
                     positions[n] = constrain(positions[n], _minPos[lid], _maxPos[lid]);

@@ -396,8 +396,9 @@ It costs nothing until a handler is registered. See **File → Examples → Pard
 const arduino = new Arduino();
 arduino.connect('192.168.1.42');                  // WebSocket on port 81
 arduino.connect('192.168.1.42', 8081);            // custom port
-arduino.connect('192.168.1.42', { key: 'red' });  // board started with Pardalote.begin("red")
+arduino.connect('192.168.1.42', { key: 'red' });  // board that called Pardalote.requireKey("red")
 arduino.connectSerial();                          // USB serial instead of WiFi (Chrome/Edge)
+arduino.connectSerial({ key: 'red' });            // …with a key (works over USB too)
 
 // Events
 arduino.on('ready',        () => { /* Arduino connected and state synced */ });
@@ -405,6 +406,7 @@ arduino.on('connect',      () => { /* WebSocket open — before ready */ });
 arduino.on('disconnect',   () => { /* connection lost */ });
 arduino.on('reconnecting', ({ attempt, delay }) => { /* next retry in `delay` ms */ });
 arduino.on('authFail',     ({ reason, message }) => { /* wrong/missing key — no retries */ });
+arduino.on('usbBusy',      ({ message }) => { /* serial: board is on WiFi — click to switch */ });
 arduino.on('log',          (line) => { /* serial only: the sketch's Serial.print output */ });
 
 arduino.on('warn',  ({ source, message }) => { /* e.g. "Servo 'pan': not attached" */ });
@@ -420,10 +422,14 @@ neighbour's IP and drive the wrong hardware. Give the board a key and only pages
 that present it get in:
 
 ```cpp
-void setup() { Pardalote.begin("robot-arm-3"); }   // Arduino
+void setup() {
+  Pardalote.requireKey("robot-arm-3");   // before begin() — Arduino
+  Pardalote.begin();
+}
 ```
 ```javascript
-arduino.connect('192.168.1.42', { key: 'robot-arm-3' });   // browser
+arduino.connect('192.168.1.42', { key: 'robot-arm-3' });   // browser (WiFi)
+arduino.connectSerial({ key: 'robot-arm-3' });             // browser (USB) — catches the wrong board
 ```
 
 A client with the wrong key (or none) is refused: the `'authFail'` event fires
@@ -434,18 +440,24 @@ latch, **not security** — the key crosses the network unencrypted.
 #### USB serial instead of WiFi
 
 `arduino.connectSerial()` talks to the board over the USB cable — no network, no
-IP address, no key. WiFi is the default; the sketch asks for serial explicitly
-with `Pardalote.begin(PARDALOTE_SERIAL)`. The one exception is the UNO R4
-Minima: it has no radio, so every `begin()` form starts the serial transport —
-the only one that hardware can have. Everything else is identical, so a project
-can start on USB and move to WiFi by changing one line on each side.
+IP address. The default `begin()` runs on WiFi **and** listens on USB: connect
+over the cable with a picker gesture and the board drops WiFi and switches to
+USB (one-way; reset to return to WiFi). `begin(PARDALOTE_WIFI)` is WiFi only (no
+USB); `begin(PARDALOTE_SERIAL)` is USB only. The one exception is the UNO R4
+Minima: it has no radio, so every `begin()` form starts the serial transport.
+Everything downstream is identical, so a project can move between WiFi and USB by
+changing one line on each side.
 
 Notes:
 
 - Web Serial is Chrome/Edge only (including Chromebooks); Safari/Firefox need WiFi.
 - The first `connectSerial()` must come from a click — the browser shows a port
   picker. The permission is remembered, so a returning visit auto-connects; pass
-  `{ prompt: true }` to pick a different port.
+  `PROMPT` (`{ prompt: true }`) to pick a different port.
+- The **switch from WiFi to USB only happens on a real user gesture** (a click) —
+  even a click that silently reuses a granted port counts. An automatic connect
+  (page load, background tab) fires `'usbBusy'` instead, so it can't pull a shared
+  board off WiFi.
 - The sketch's `Serial.print` output arrives in the browser as the `'log'` event
   (console by default) — no IDE needed to see debug prints. Avoid printing raw
   `0x00` bytes from the sketch; text is fine.

@@ -104,7 +104,7 @@ HTTP      :82  ──── MJPEG stream ──→  <img src="http://ip:82/strea
 // Resolution — call before or after attach()
 arduino.cam.setResolution(FRAMESIZE_QVGA);   // 320×240  ← default
 arduino.cam.setResolution(FRAMESIZE_VGA);    // 640×480
-arduino.cam.setResolution(FRAMESIZE_HD);     // 1280×720
+arduino.cam.setResolution(FRAMESIZE_HD);     // 1280×720 — see Troubleshooting
 
 // JPEG quality: 0 = best image / highest bandwidth
 //              63 = worst image / lowest bandwidth
@@ -120,7 +120,7 @@ arduino.cam.setQuality(12);  // default
 | `FRAMESIZE_SVGA` | 800×600 |
 | `FRAMESIZE_HD` | 1280×720 |
 
-Higher resolutions require more bandwidth and may reduce frame rate. QVGA is a good starting point for most WiFi environments.
+Higher resolutions require more bandwidth and may reduce frame rate. QVGA is a good starting point for most WiFi environments. Anything above QQVGA also needs **PSRAM enabled**, and the largest sizes don't work on every sensor — see [Troubleshooting](#troubleshooting) below.
 
 ---
 
@@ -182,6 +182,14 @@ Note: `loadPixels()` on every frame is CPU-intensive. For heavy processing, cons
 - Reduce resolution with `setResolution(FRAMESIZE_QVGA)` or increase quality number (lower quality) with `setQuality(20)`
 - Move the Arduino closer to the WiFi access point
 - Disable WiFi modem sleep — Pardalote does this automatically with `WiFi.setSleep(false)`
+
+**Image is stuck at 160×120 (QQVGA) and `setResolution()` won't change it**
+- Anything above QQVGA needs the board's **PSRAM enabled and working**. Without it the camera falls back to a single QQVGA (160×120) frame buffer in internal RAM, and any `setResolution()` to a larger size is refused — you'll see `[Camera] No PSRAM — using DRAM, forced to QQVGA` in the Serial Monitor. Fix PSRAM and the higher resolutions come back.
+- **Seeed XIAO ESP32S3:** it has 8 MB of octal PSRAM, but you must select it — **Tools → PSRAM → `OPI PSRAM`** (not "QSPI PSRAM", not "Disabled"). Re-flash; the "No PSRAM" line should be gone.
+- **ESP32 WROVER:** PSRAM is enabled automatically by the "ESP32 Wrover Module" board, so there's no PSRAM menu to set. If the Serial Monitor shows `esp_psram: SPI SRAM memory test fail … writes failed`, PSRAM *is* enabled but the module's chip is failing its power-on test — usually marginal power or a faulty module. Try a full power-cycle with a different USB cable/port, drop **Tools → Flash Frequency → 40 MHz**, and if it persists use a different WROVER (that PSRAM chip is likely bad).
+
+**`FRAMESIZE_HD` stutters or drops the stream (`cam_hal: FB-OVF` / `net::ERR_INCOMPLETE_CHUNKED_ENCODING`)**
+- The largest sizes push the sensor's data rate hard, and HD's 16:9 mode is the flakiest — some modules (the XIAO's OV2640 among them) can't sustain it and drop frames, which shows in the browser console as `net::ERR_INCOMPLETE_CHUNKED_ENCODING`. Pardalote now rides out the occasional dropped frame rather than closing the stream, but a size that overflows *every* frame is the sensor's ceiling, not a bug. Step down to **`FRAMESIZE_SVGA` (800×600)**, which streams reliably on the XIAO.
 
 **XIAO ESP32S3 won't connect to WiFi**
 - The Sense board has a u.FL connector for an external antenna. If the antenna switch is set to external and nothing is plugged in, the radio has no antenna and cannot connect. Either attach an external antenna or move the antenna switch to the internal position.

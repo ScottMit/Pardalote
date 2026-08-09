@@ -117,6 +117,20 @@ class Camera extends Extension {
             CMD_CAMERA_INIT, DEVICE_CAMERA,
             [this.logicalId, this._port]
         ));
+        // Replay our desired framesize + quality right after init. The board
+        // always inits at its own defaults, and the reliable way to change the
+        // frame size is the post-init set_framesize() path — so we push our
+        // state here. This makes setResolution()/setQuality() work when called
+        // BEFORE attach(), and keeps resolution/quality in sync across a
+        // reconnect (which re-inits the board back to defaults).
+        this.arduino.send(encodeFrame(
+            CMD_CAMERA_SET_RES, DEVICE_CAMERA,
+            [this.logicalId, this.framesize]
+        ));
+        this.arduino.send(encodeFrame(
+            CMD_CAMERA_SET_QUALITY, DEVICE_CAMERA,
+            [this.logicalId, this.quality]
+        ));
     }
 
     // -------------------------------------------------------------------

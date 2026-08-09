@@ -16,8 +16,7 @@
 
 void setup() {
     Pardalote.begin();
-    // No WiFi handy? Use the USB cable instead (control-panel's USB mode):
-    //   Pardalote.begin(PARDALOTE_SERIAL);
+    // Connect on either USB or WiFi. Moving from USB to WiFi requires a board reset.
 }
 
 void loop() {

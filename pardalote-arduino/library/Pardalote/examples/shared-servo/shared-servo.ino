@@ -21,9 +21,9 @@
 #include <Pardalote.h>
 #include <PardaloteServo.h>
 
-const int SERVO_PIN = 18;
+const int SERVO_PIN = 9;
 
-int pan = -1;                     // logical id, assigned by attach()
+int pan = -1;                     // logical id, auto assigned by attach()
 unsigned long lastMove = 0;
 
 void setup() {

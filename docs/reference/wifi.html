@@ -82,7 +82,7 @@
     <main class="ref-main">
       <h1>WiFi configuration</h1>
       <p class="lede">Two ways to give Pardalote your network details — use either, or both.</p>
-<p>WiFi is Pardalote's default transport, but not the only one — with no network at all, the same code runs over the USB cable: <code>Pardalote.begin(PARDALOTE_SERIAL)</code> on the board, <a href="connecting.html#connectserial"><code>connectSerial()</code></a> in the browser. Nothing on this page is needed in that mode.</p>
+<p>WiFi is Pardalote's default transport, but not the only one — the same code runs over the USB cable. The default <code>begin()</code> even listens on both: a board on WiFi will <a href="connecting.html#switching-to-usb">switch to USB</a> when a browser connects over the cable. With no network at all, <code>Pardalote.begin(PARDALOTE_SERIAL)</code> skips WiFi entirely and the browser connects with <a href="connecting.html#connectserial"><code>connectSerial()</code></a> — nothing on this page is needed in that mode.</p>
 <h2 id="option-a--compile-time-secretsh">Option A — compile-time (secrets.h)</h2>
 <p>Create a <code>secrets.h</code> file in the same folder as your sketch:</p>
 <div class="code-ex"><span class="lang-badge lang-arduino">Arduino</span><div class="bar">secrets.h</div><pre><code><span class="cp">#define SECRET_SSID &quot;YourWiFiName&quot;</span>

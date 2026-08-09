@@ -40,10 +40,20 @@ struct PardaloteSecrets {
 };
 extern PardaloteSecrets _pardaloteSecrets;
 
+// Boot-watch probe. During the "press 'w' to configure" window, wifiConfigInit
+// feeds each received byte to this callback (supplied by the core, which owns
+// the USB envelope decoder). Return value:
+//   0 = nothing yet — keep waiting
+//   1 = a loose 'w' config keystroke — enter the config menu
+//   2 = a USB takeover probe completed — stop the window; the core skips WiFi
+// nullptr disables the USB watch (only 'w' is honoured).
+typedef int (*PardaloteBootProbe)(uint8_t b);
+
 // Call at the top of setup(), before WiFi.begin().
 // Loads stored networks from EEPROM, optionally enters the Serial
-// config menu (forced if no networks at all are available).
-void wifiConfigInit(WifiStore& s);
+// config menu (forced if no networks at all are available). During the
+// config window it also watches USB for a takeover via `probe` (see above).
+void wifiConfigInit(WifiStore& s, PardaloteBootProbe probe = nullptr);
 
 // Tries each available network in order:
 // secrets.h first (if bound), then EEPROM entries.

@@ -51,8 +51,7 @@
 
 <span class="kt">void</span><span class="w"> </span><span class="nf">setup</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
 <span class="w">    </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">begin</span><span class="p">();</span>
-<span class="w">    </span><span class="c1">// No WiFi handy? Use the USB cable instead (control-panel&#39;s USB mode):</span>
-<span class="w">    </span><span class="c1">//   Pardalote.begin(PARDALOTE_SERIAL);</span>
+<span class="w">    </span><span class="c1">// Connect on either USB or WiFi. Moving from USB to WiFi requires a board reset.</span>
 <span class="p">}</span>
 
 <span class="kt">void</span><span class="w"> </span><span class="nf">loop</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
@@ -86,7 +85,7 @@
 
 <span class="w">    </span><span class="c1">// get reading from the Arduino</span>
 <span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="nx">dial</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">analogRead</span><span class="p">(</span><span class="nx">POTPIN</span><span class="p">);</span>
-<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="nx">circleRadius</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">map</span><span class="p">(</span><span class="nx">dial</span><span class="p">,</span><span class="w"> </span><span class="mf">0</span><span class="p">,</span><span class="w"> </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">analogMax</span><span class="p">,</span><span class="w"> </span><span class="mf">2</span><span class="p">,</span><span class="w"> </span><span class="mf">300</span><span class="p">);</span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="nx">circleRadius</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">map</span><span class="p">(</span><span class="nx">dial</span><span class="p">,</span><span class="w"> </span><span class="mf">0</span><span class="p">,</span><span class="w"> </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">analogMax</span><span class="p">,</span><span class="w"> </span><span class="mf">10</span><span class="p">,</span><span class="w"> </span><span class="mf">300</span><span class="p">);</span>
 <span class="w">    </span><span class="c1">// for UNO the ADC range is 0-1023</span>
 <span class="w">    </span><span class="c1">// for ESP32 the ADC range is 0-4095</span>
 

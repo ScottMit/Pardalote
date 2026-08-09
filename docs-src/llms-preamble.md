@@ -32,8 +32,10 @@ arduino.on('ready', () => {             // ALL setup goes here, after the board 
 ```cpp sketch.ino (Arduino)
 #include <Pardalote.h>
 #include <PardaloteServo.h>             // one include per extension you use
-void setup() { Pardalote.begin(); }     // WiFi set at compile-time or via the Serial menu;
-                                        // Pardalote.begin("key") requires a connection key
+void setup() { Pardalote.begin(); }     // WiFi + listens on USB; WiFi set at compile-time or
+                                        // via the Serial menu. begin(PARDALOTE_WIFI) = WiFi only,
+                                        // begin(PARDALOTE_SERIAL) = USB only. Call
+                                        // Pardalote.requireKey("key") before begin() to require a key.
 void loop()  { Pardalote.run(); }
 ```
 

@@ -506,8 +506,11 @@ class BusServo extends Extension {
         return new Promise(resolve => this._fwLimitResolvers.push(resolve));
     }
 
-    // Mirror the board's RAM clamp so cached target matches what it applied.
+    // Mirror the board's clamp so cached target matches what it applied:
+    // physical range always (keeps the needle/timing honest and stops an
+    // out-of-range count wrapping mod-resolution), soft limits when set.
     _clampPos(pos) {
+        pos = Math.max(0, Math.min(this.resolution - 1, pos));
         if (this.limitEnabled) pos = Math.max(this.limitMin, Math.min(this.limitMax, pos));
         return pos;
     }

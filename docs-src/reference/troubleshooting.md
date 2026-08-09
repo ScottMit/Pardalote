@@ -28,11 +28,46 @@ lede: Common issues and their usual fixes, roughly in the order people hit them.
 
 ## "The board resets when the browser connects over serial" (ESP32)
 
-Expected. Opening the serial port toggles the DTR/RTS lines, and the auto-reset circuit on classic ESP32 dev boards restarts the chip — the same thing the IDE does before uploading. Pardalote's probe simply waits through the reboot and connects when the board comes back (a few seconds). The UNO R4's native USB doesn't reset on open.
+Expected. Opening the serial port toggles the DTR/RTS lines, and the auto-reset circuit on classic ESP32 dev boards restarts the chip — the same thing the IDE does before uploading. Pardalote's probe simply waits through the reboot and connects when the board comes back (a few seconds). The UNO R4's native USB doesn't reset on open. A board switching from WiFi to USB (the default `begin()`) goes through this same reboot on ESP32 — reboot, WiFi comes up, then the switch — so a WiFi→USB switch on ESP32 takes a few seconds; on the R4 it's immediate.
+
+## "connectSerial() connects but nothing happens / I get a 'usbBusy' message"
+
+The board is running on WiFi and won't hand itself to USB without a deliberate user action — a safety so a background tab (or a board that's merely cabled for power) can't yank a shared WiFi board away from everyone. Click your **Connect** button: a `connectSerial()` called from a real click authorises the switch (even one that silently reuses an already-granted port, so no picker needs to appear). What *doesn't* authorise it is an **automatic** connect with no user action — a page reloading and reconnecting, or a background tab. If you're seeing this after a click, make sure `connectSerial()` is called directly from the click handler (not after an `await`, which can expire the browser's user-activation).
+
+## "connectSerial() gets no response at all"
+
+The console logs a hint after a few seconds. Likely causes: the board is still booting (an ESP32 resets when the port opens — wait a moment); it isn't running a Pardalote sketch; or it was started with `Pardalote.begin(PARDALOTE_WIFI)`, which is **WiFi-only and ignores USB**. Use `begin()` (WiFi + USB) or `begin(PARDALOTE_SERIAL)` (USB only) if you want to connect over the cable.
+
+## "Wrong key for this board" over USB
+
+You passed a [connection key](connecting.html#connection-keys) (`connectSerial({ key })`) that doesn't match the one the board set with `requireKey()` — you're likely cabled to the wrong physical board. Over USB the key is a board-identity check, so it catches exactly this. Connect to the board your sketch expects, or fix the key.
+
+## "I reset the board while connected over USB"
+
+It recovers on its own. The board announces the reboot over serial, and the browser — still holding the port — resumes connecting, so a board on the default `begin()` switches straight back to USB within a second or two. No click needed. (If the browser ever misses the announce it still recovers the slower way, via its heartbeat timeout.)
 
 ## "Serial connection works, then dies after a NeoPixel animation" 
 
 `show()` disables interrupts while it streams the strip, which can drop incoming serial bytes. Pardalote's serial framing detects the corruption (CRC) and drops that message rather than desyncing — occasional lost frames during heavy animation are expected; the link itself recovers on its own.
+
+## "Camera: poor image quality, stuck at low resolution, or `cam_hal: FB-OVF` in the Serial Monitor"
+
+Almost always **PSRAM isn't enabled in the build.** ESP32 camera boards need PSRAM for anything above the tiniest frame size. Look for this on the Serial Monitor at startup:
+
+```
+[Camera] No PSRAM — using DRAM, forced to QQVGA
+```
+
+If you see it, the camera has fallen back to a single tiny frame buffer in internal RAM: the image is locked to QQVGA (160×120), it looks poor, and any `setResolution()` to something larger overflows that buffer — the driver then spams `cam_hal: FB-OVF` and the stream breaks.
+
+- **Seeed XIAO ESP32S3 Sense:** it has 8 MB of *octal* PSRAM, but you must select it. **Tools → PSRAM → `OPI PSRAM`** (not "QSPI PSRAM", not "Disabled"), with the board set to XIAO ESP32S3. Re-upload — the "No PSRAM" line should be gone.
+- **Other boards:** enable PSRAM under Tools (the option name varies — "OPI PSRAM", "QSPI PSRAM", or "Enabled"). Match it to what your module actually has.
+
+Once PSRAM is detected the camera double-buffers in PSRAM and `setResolution()` works normally.
+
+## "Camera: `FRAMESIZE_HD` gives `cam_hal: FB-OVF` / `net::ERR_INCOMPLETE_CHUNKED_ENCODING` even with PSRAM on"
+
+The largest frame sizes push the sensor's data rate hard, and the 16:9 HD mode is the flakiest — some modules (the XIAO's OV2640 among them) can't sustain it and drop frames, which surfaces in the browser console as `net::ERR_INCOMPLETE_CHUNKED_ENCODING`. Pardalote now rides out the occasional dropped frame rather than closing the stream, but a size that overflows *every* frame is the sensor's ceiling, not a bug. **Step down to `FRAMESIZE_SVGA` (800×600)** — it streams reliably on the XIAO.
 
 ## "NeoPixels don't light up"
 

@@ -28,28 +28,19 @@ PardaloteClass::PardaloteClass() {
 // begin() — called from setup(). Three public forms (see Pardalote.h);
 // all funnel through _beginCommon() + one transport starter.
 // -------------------------------------------------------------------
-// WiFi is the default transport; serial is chosen explicitly with
-// begin(PARDALOTE_SERIAL). One exception (Scott's call): on a board with
-// no radio at all (UNO R4 Minima) a WiFi begin() can only mean one thing,
-// so it starts the serial transport — with a Serial note saying so —
-// rather than leaving the board dead. There is NO runtime WiFi→serial
-// failover on WiFi-capable boards.
+// begin() is WiFi + a USB listen: WiFi is the active transport, but the
+// board also watches USB and switches to it on a deliberate (picker-gesture)
+// takeover — one-way, reboot to return to WiFi. begin(PARDALOTE_WIFI) is
+// WiFi with the listen off; begin(PARDALOTE_SERIAL) is USB only. One
+// exception (Scott's call): on a board with no radio (UNO R4 Minima) every
+// form starts serial — the only transport the hardware can have.
 void PardaloteClass::begin() {
 #ifdef PARDALOTE_NO_WIFI
     _beginSerial();
     Serial.println(F("[Pardalote] (no WiFi on this board — serial transport started)"));
 #else
-    _beginWifi(nullptr);
-#endif
-}
-
-void PardaloteClass::begin(const char* key) {
-#ifdef PARDALOTE_NO_WIFI
-    (void)key;   // serial needs no key — the cable is possession
-    _beginSerial();
-    Serial.println(F("[Pardalote] (no WiFi on this board — serial transport started; key ignored)"));
-#else
-    _beginWifi(key);
+    _serialListen = true;
+    _beginWifi();
 #endif
 }
 
@@ -57,9 +48,29 @@ void PardaloteClass::begin(int transport) {
     if (transport == PARDALOTE_SERIAL) { _beginSerial(); return; }
 #ifdef PARDALOTE_NO_WIFI
     _beginSerial();
+    Serial.println(F("[Pardalote] (no WiFi on this board — serial transport started)"));
 #else
-    _beginWifi(nullptr);
+    // PARDALOTE_WIFI = WiFi only, no USB listen. Any other value is treated
+    // as the default (listen on) rather than leaving the board unreachable.
+    _serialListen = (transport != PARDALOTE_WIFI);
+    _beginWifi();
 #endif
+}
+
+// requireKey() — set BEFORE begin(). Stashes the key; the transport starters
+// read _key/_keyRequired. Works on either transport (see the CMD_AUTH note in
+// defs.h). Idempotent-ish; truncates over-long keys with a warning.
+void PardaloteClass::requireKey(const char* key) {
+    if (!key || !key[0]) return;
+    if (_begun) {
+        Serial.println(F("[Pardalote] requireKey() must be called before begin() — ignored"));
+        return;
+    }
+    if (strlen(key) > PARDALOTE_KEY_MAX)
+        Serial.println(F("[Pardalote] connection key truncated to 32 chars"));
+    strncpy(_key, key, PARDALOTE_KEY_MAX);
+    _key[PARDALOTE_KEY_MAX] = 0;
+    _keyRequired = true;
 }
 
 // Shared by both transports: Serial console + boot id.
@@ -87,14 +98,45 @@ void PardaloteClass::_beginCommon() {
     Serial.println(F(PARDALOTE_BOARD));
 }
 
+// Emit one CMD_REBOOT frame over serial, once per boot (guarded so the
+// boot-takeover path, where _beginWifi then _beginSerial both call this, sends
+// it only once). A browser still holding the port from a pre-reset session sees
+// it and resumes takeover-probing — the fast recovery from a reset-while-USB.
+void PardaloteClass::_announceReboot() {
+    if (_rebootAnnounced) return;
+    _rebootAnnounced = true;
+    FrameBuilder fb;
+    fb.begin(CMD_REBOOT, 0x0000);
+    size_t n = fb.finish();
+    if (n) _serialT.sendUnconnected(fb.buf, n);
+}
+
 #ifndef PARDALOTE_NO_WIFI
-void PardaloteClass::_beginWifi(const char* key) {
+void PardaloteClass::_beginWifi() {
     _transport = TRANSPORT_WIFI;
+    _begun = true;
 
     Serial.begin(115200);
-    _platformInit();
+    _announceReboot();   // tell a browser still holding the port that we rebooted
 
-    wifiConfigInit(_wifiStore);
+    // Boot-watch: arm the USB listen so the config window can catch a takeover
+    // probe. If the browser opened the port (which DTR-resets an ESP32 into this
+    // boot) and is probing with takeover intent, we skip WiFi entirely — no 5 s
+    // window wait, no failed-network timeouts, ~1 s to serial instead of ~10.
+    _bootWatch = _serialListen;
+    _bootTakeover = false;
+    if (_bootWatch) _serialT.beginListen(_serialListenTrampoline);
+
+    wifiConfigInit(_wifiStore, _bootWatch ? _bootProbeByte : nullptr);
+    _bootWatch = false;
+
+    if (_bootTakeover) {
+        Serial.println(F("[Pardalote] USB takeover at boot — skipping WiFi, starting serial"));
+        _beginSerial();
+        return;
+    }
+
+    _platformInit();
     wifiConfigConnect(_wifiStore);
 
 #ifdef PLATFORM_UNO_R4
@@ -104,16 +146,8 @@ void PardaloteClass::_beginWifi(const char* key) {
 
     _beginCommon();   // boot id AFTER the WiFi connect (jitter = entropy)
 
-    // Connection key — an opt-in latch against connecting to the wrong
-    // board on a shared network. NOT security (cleartext ws://).
-    if (key && key[0]) {
-        if (strlen(key) > PARDALOTE_KEY_MAX)
-            Serial.println(F("[Pardalote] connection key truncated to 32 chars"));
-        strncpy(_key, key, PARDALOTE_KEY_MAX);
-        _key[PARDALOTE_KEY_MAX] = 0;
-        _keyRequired = true;
-        Serial.println(F("Connection key required"));
-    }
+    // Key set via requireKey() before begin() (see the CMD_AUTH note in defs.h).
+    if (_keyRequired) Serial.println(F("Connection key required"));
 
     Serial.print(F("IP: "));
     Serial.println(WiFi.localIP());
@@ -125,18 +159,30 @@ void PardaloteClass::_beginWifi(const char* key) {
 #ifdef PLATFORM_ESP32
     WiFi.setSleep(false);   // disable modem sleep — prevents latency on incoming frames
 #endif
+
+    // Arm the USB listen AFTER the WiFi bring-up (and its Serial config
+    // window) has finished, so nothing else is reading Serial. A takeover
+    // probe now switches the board to USB; a plain probe gets a CMD_SERIAL_BUSY
+    // nudge. begin(PARDALOTE_WIFI) leaves _serialListen false → no listen.
+    if (_serialListen) {
+        _serialT.beginListen(_serialListenTrampoline);
+        Serial.println(F("Listening on USB — connectSerial() switches the board to serial"));
+    }
 }
 #endif   // PARDALOTE_NO_WIFI
 
 void PardaloteClass::_beginSerial() {
     _transport = TRANSPORT_SERIAL;
+    _begun = true;
     _beginCommon();
+    _announceReboot();   // no-op if _beginWifi already announced (boot-takeover path)
     // No _platformInit(): the UNO R4 LED matrix scroll exists to show the
     // IP address — there is no IP here, and the rebuild work it does per
     // loop() is exactly what the R4's WebSocket lesson taught us to avoid.
     _serialT.begin(_serialMessageTrampoline,
                    _serialConnectTrampoline,
                    _serialDisconnectTrampoline);
+    if (_keyRequired) Serial.println(F("Connection key required"));
     Serial.println(F("Serial transport ready — connect with arduino.connectSerial()"));
 }
 
@@ -150,6 +196,10 @@ void PardaloteClass::run() {
 #ifndef PARDALOTE_NO_WIFI
         _ws.loop();
         _platformLoop();
+        // Watch USB for a takeover probe (begin() default). A gesture-backed
+        // takeover here calls _switchToSerial(), flipping _transport — the
+        // next run() pass takes the serial branch above.
+        if (_serialListen) _serialT.loopListen(millis());
 #endif
     }
     loopAll();
@@ -162,17 +212,17 @@ void PardaloteClass::run() {
 
     unsigned long now = millis();
 
-#ifndef PARDALOTE_NO_WIFI
     // Auth timeout — a connected client that never presented the key
     // (old JS, or a page that wasn't given one) is rejected so it gets a
-    // clear reason instead of a silent HELLO that never comes.
-    if (_keyRequired && _transport == TRANSPORT_WIFI) {
+    // clear reason instead of a silent HELLO that never comes. Applies to
+    // both transports now that keys work over USB (a keyed serial client
+    // that never sends AUTH is rejected the same way).
+    if (_keyRequired) {
         for (int c = 0; c < MAX_WS_CLIENTS; c++) {
             if (!(_connectedClients & (1 << c)) || _authed[c]) continue;
             if ((int32_t)(now - _authDeadline[c]) > 0) _rejectClient(c, 1);
         }
     }
-#endif
 
     // Send deferred HELLO + announce to any newly connected client.
     for (int c = 0; c < MAX_WS_CLIENTS; c++) {
@@ -271,9 +321,11 @@ void PardaloteClass::_offerToClients(Action& a, int32_t val,
 void PardaloteClass::_onClientConnected(uint8_t num) {
     if (_connectedClients & (1 << num)) return;    // already connected
     _connectedClients |= (1 << num);
-    // Serial clients are authed by possession; WS clients need the key
-    // (when one is set) before any HELLO/announce/broadcast reaches them.
-    _authed[num] = (_transport == TRANSPORT_SERIAL) || !_keyRequired;
+    // A client is authed immediately when no key is required. With a key set,
+    // both transports must present it (over USB the key is a board-identity
+    // check — see the CMD_AUTH note in defs.h); nothing reaches an unauthed
+    // client until AUTH matches.
+    _authed[num] = !_keyRequired;
     _authDeadline[num] = millis() + AUTH_TIMEOUT_MS;
     if (_authed[num]) {
         _pendingHello[num] = true;
@@ -348,21 +400,28 @@ void PardaloteClass::_handleAuthFrame(uint8_t num, const Frame& f) {
     }
 }
 
-// Send CMD_AUTH [reason] (1 = key required, 2 = wrong key), then close.
-// The JS side surfaces it as the 'authFail' event and stops reconnecting.
+// Send CMD_AUTH [reason] (1 = key required, 2 = wrong key), then drop the
+// client. Works over both transports (keys work over USB too). The JS side
+// surfaces it as the 'authFail' event and stops reconnecting.
 void PardaloteClass::_rejectClient(uint8_t num, int32_t reason) {
-#ifndef PARDALOTE_NO_WIFI
     FrameBuilder fb;
     fb.begin(CMD_AUTH, 0x0000);
     fb.addInt(reason);
     size_t len = fb.finish();
-    if (len) _ws.sendBIN(num, fb.buf, len);   // deliberate direct send — sendFrame requires _authed
+    // Direct raw send — sendFrame() requires _authed, and a rejected client
+    // is by definition not authed. _sendRaw routes to the active transport.
+    if (len) _sendRaw(num, fb.buf, len);
     Serial.print('['); Serial.print(num);
     Serial.println(reason == 2 ? F("] Rejected: wrong key") : F("] Rejected: no key presented"));
-    _ws.disconnect(num);                      // fires WStype_DISCONNECTED → cleanup
-#else
-    (void)num; (void)reason;                  // serial transport never rejects
+#ifndef PARDALOTE_NO_WIFI
+    if (_transport == TRANSPORT_WIFI) {
+        _ws.disconnect(num);                  // fires WStype_DISCONNECTED → cleanup
+        return;
+    }
 #endif
+    // Serial: the board can't close the host's port (JS closes it on authFail
+    // and stops reconnecting). Clear board-side state so the slot is clean.
+    _onClientDisconnected(num);
 }
 
 // -------------------------------------------------------------------
@@ -375,6 +434,103 @@ void PardaloteClass::_serialConnectTrampoline()    { Pardalote._onClientConnecte
 void PardaloteClass::_serialDisconnectTrampoline() { Pardalote._onClientDisconnected(0); }
 
 #ifndef PARDALOTE_NO_WIFI
+void PardaloteClass::_serialListenTrampoline(uint8_t* data, size_t len) {
+    Pardalote._handleListenMessage(data, len);
+}
+
+// -------------------------------------------------------------------
+// USB listen mode — a WiFi-active board (begin() default) watches USB for a
+// deliberate takeover. Only two verbs matter here: CMD_AUTH (the board-
+// identity key, when one is required) and CMD_HELLO (the probe, carrying the
+// takeover flag in param 0). A plain probe gets a CMD_SERIAL_BUSY nudge and
+// the board stays on WiFi; a gesture-backed takeover (with a matching key,
+// if required) switches the board to serial. No client is ever "connected"
+// here — the switch, then the normal serial handshake, does that.
+// -------------------------------------------------------------------
+void PardaloteClass::_handleListenMessage(uint8_t* data, size_t len) {
+    size_t pos = 0;
+    while (pos < len) {
+        Frame f = parseFrame(data, pos, len);
+        if (!f.valid) break;
+
+        if (f.cmd == CMD_AUTH) {
+            const size_t keyLen = strlen(_key);
+            if (f.payloadLen == keyLen && keyLen > 0 &&
+                memcmp(f.payload, _key, keyLen) == 0) {
+                _listenAuthed = true;
+            } else {
+                _listenKeyTried = true;   // reported against the HELLO below
+            }
+        } else if (f.cmd == CMD_HELLO) {
+            const bool takeover = (f.nparams >= 1 && paramInt(f.params, 0) != 0);
+            if (takeover && (!_keyRequired || _listenAuthed)) {
+                // Authorised takeover. During the boot window, just flag it so
+                // _beginWifi skips WiFi and starts serial (nothing to tear down
+                // yet). At runtime, do the full WiFi→serial switch.
+                if (_bootWatch) { _bootTakeover = true; return; }
+                _switchToSerial();
+                return;   // _transport changed; stop draining in listen mode
+            }
+            // Not an authorised takeover. At runtime, nudge the browser; during
+            // the boot window stay silent and let WiFi come up — the runtime
+            // listen handles a plain/keyless probe once the board is on WiFi.
+            if (!_bootWatch) {
+                if (!takeover) _sendListenFrame(CMD_SERIAL_BUSY, 0);      // no gesture
+                else           _sendListenFrame(CMD_AUTH, _listenKeyTried ? 2 : 1);  // wrong/absent key
+            }
+        }
+        pos += f.totalLen;
+    }
+}
+
+// Boot-watch byte handler (see PardaloteBootProbe). Feeds one byte to the USB
+// envelope decoder; a completed takeover probe sets _bootTakeover. A loose 'w'
+// (between envelopes) is the WiFi config keystroke.
+int PardaloteClass::_bootProbeByte(uint8_t b) { return Pardalote._handleBootByte(b); }
+int PardaloteClass::_handleBootByte(uint8_t b) {
+    const bool looseText = _serialT.decoderInText();   // between envelopes?
+    _serialT.feedListen(b, millis());                  // completed envelope → _handleListenMessage
+    if (_bootTakeover)             return 2;            // USB takeover — skip WiFi
+    if (looseText && b == 'w')     return 1;            // config keystroke
+    return 0;
+}
+
+// Emit one framed message over USB while still WiFi-active (not connected as
+// a serial client) — the listen-mode nudges.
+void PardaloteClass::_sendListenFrame(uint8_t cmd, int32_t reason) {
+    FrameBuilder fb;
+    fb.begin(cmd, 0x0000);
+    if (cmd == CMD_AUTH) fb.addInt(reason);
+    size_t n = fb.finish();
+    if (n) _serialT.sendUnconnected(fb.buf, n);
+}
+
+// A USB takeover was accepted: release WiFi and promote the serial transport.
+void PardaloteClass::_switchToSerial() {
+    // Drop every WS client cleanly (fires extension disconnect hooks, clears
+    // per-client read registrations and auth state).
+    for (uint8_t c = 0; c < MAX_WS_CLIENTS; c++)
+        if (_connectedClients & (1 << c)) _onClientDisconnected(c);
+
+    _ws.close();          // stop the WebSocket server
+    WiFi.disconnect();    // drop the association — radio stays powered so the
+                          // sketch can still use WiFi for its own purposes
+    Serial.println(F("[Pardalote] USB takeover — WiFi released, switching to serial"));
+
+    _serialListen   = false;
+    _listenAuthed   = false;
+    _listenKeyTried = false;
+    _transport      = TRANSPORT_SERIAL;
+
+    // Full connected serial mode. JS keeps probing (and re-sends AUTH if a key
+    // is set), so the normal HELLO→announce→SYNC_COMPLETE handshake runs and
+    // client 0 comes up — re-authing through the standard path if keyed.
+    _serialT.begin(_serialMessageTrampoline,
+                   _serialConnectTrampoline,
+                   _serialDisconnectTrampoline);
+}
+
+
 // -------------------------------------------------------------------
 // WebSocket trampoline + event handler
 // -------------------------------------------------------------------

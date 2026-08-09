@@ -1,7 +1,7 @@
 title: WiFi configuration
 lede: Two ways to give Pardalote your network details — use either, or both.
 ---
-WiFi is Pardalote's default transport, but not the only one — with no network at all, the same code runs over the USB cable: `Pardalote.begin(PARDALOTE_SERIAL)` on the board, [`connectSerial()`](connecting.html#connectserial) in the browser. Nothing on this page is needed in that mode.
+WiFi is Pardalote's default transport, but not the only one — the same code runs over the USB cable. The default `begin()` even listens on both: a board on WiFi will [switch to USB](connecting.html#switching-to-usb) when a browser connects over the cable. With no network at all, `Pardalote.begin(PARDALOTE_SERIAL)` skips WiFi entirely and the browser connects with [`connectSerial()`](connecting.html#connectserial) — nothing on this page is needed in that mode.
 
 ## Option A — compile-time (secrets.h)
 

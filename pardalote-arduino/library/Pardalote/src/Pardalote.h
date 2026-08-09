@@ -110,23 +110,29 @@ public:
     PardaloteClass();
 
     // Call from setup(). Three forms:
-    //   begin()                  — WiFi + WebSocket server (the default)
-    //   begin("key")             — WiFi + WebSocket, browsers must present
-    //                              the key (arduino.connect(ip, { key })).
-    //                              An accident-prevention latch for shared
-    //                              networks/classrooms, NOT security — the
-    //                              key crosses the network in cleartext.
-    //   begin(PARDALOTE_SERIAL)  — USB serial transport instead of WiFi
+    //   begin()                  — WiFi + WebSocket server AND listen on USB
+    //                              for a deliberate (picker-gesture) takeover:
+    //                              when one arrives the board drops WiFi and
+    //                              switches to USB (one-way; reboot to return
+    //                              to WiFi). The default.
+    //   begin(PARDALOTE_WIFI)    — WiFi only; does NOT listen on USB. The
+    //                              opt-out for "nobody grabs my board over
+    //                              the cable."
+    //   begin(PARDALOTE_SERIAL)  — USB serial only, WiFi never started
     //                              (arduino.connectSerial() in the browser).
-    //                              No key concept: the cable IS possession.
-    // WiFi is the default; serial is chosen explicitly — with one
-    // exception: on boards with no radio (UNO R4 Minima) every begin()
-    // form starts the serial transport, because it's the only transport
-    // the hardware can have. No runtime WiFi→serial failover exists on
-    // WiFi-capable boards.
+    // On boards with no radio (UNO R4 Minima) every form starts serial,
+    // the only transport the hardware can have.
     void begin();
-    void begin(const char* key);
     void begin(int transport);
+
+    // Optional — call BEFORE begin(). Require a connection key on EITHER
+    // transport. Over WiFi it latches against connecting to the wrong board
+    // on a shared network; over USB the cable already picks the board, so
+    // the key becomes a board-IDENTITY check that catches "you grabbed the
+    // wrong board" (wrong key → refused, with a browser-console message).
+    // An accident-prevention latch, NOT security: the key crosses the wire
+    // in cleartext. Composes with every begin() form.
+    void requireKey(const char* key);
 
     // Call from loop() — services the WebSocket, runs periodic reads,
     // dispatches per-extension housekeeping.
@@ -304,6 +310,25 @@ private:
     uint8_t                  _transport = TRANSPORT_WIFI;
     PardaloteSerialTransport _serialT;
 
+    // begin() (default) sets this: WiFi is active but the board also sniffs
+    // USB for a takeover probe and switches on a gesture-backed one.
+    // begin(PARDALOTE_WIFI) leaves it false (no USB listen).
+    bool _serialListen = false;
+    bool _begun = false;   // a begin() form has run — requireKey() too late now
+    bool _rebootAnnounced = false;   // CMD_REBOOT sent once per boot (see _announceReboot)
+    // Listen-window auth state for the prospective serial client (kept apart
+    // from _authed[], whose slots belong to WS clients while WiFi is active).
+    bool _listenAuthed  = false;   // a matching key arrived during listen
+    bool _listenKeyTried = false;  // a (wrong) key was tried during listen
+
+    // Boot-watch: during the "press 'w'" config window we also watch USB for a
+    // takeover probe. If one arrives we skip WiFi entirely and go serial — the
+    // fast path for the common "board reset onto WiFi, then switch" case (an
+    // ESP32 DTR-resets when the port opens). _bootWatch gates _handleListenMessage
+    // to set _bootTakeover instead of running the (WiFi-teardown) runtime switch.
+    bool _bootWatch    = false;
+    bool _bootTakeover = false;
+
     // Connection key (WebSocket transport only; serial implies physical
     // possession and skips auth). Empty _key = no auth required.
     // Unauthed clients receive nothing (no HELLO, no announce, no
@@ -341,10 +366,25 @@ private:
 
     void _handleWsEvent(uint8_t num, WStype_t type,
                         uint8_t* payload, size_t length);
-    void _beginWifi(const char* key);
+    void _beginWifi();
+    // Runtime WiFi→serial switch (a USB takeover): drop the WS server and the
+    // WiFi association (radio stays powered — the sketch may want WiFi), then
+    // promote the serial transport to connected mode.
+    void _switchToSerial();
+    // Listen-mode message handler: a probe arrived on USB while WiFi is active.
+    // Decides nudge (stay on WiFi) vs takeover (switch). Never connects a client.
+    void _handleListenMessage(uint8_t* data, size_t len);
+    void _sendListenFrame(uint8_t cmd, int32_t reason);   // one nudge over USB
+    static void _serialListenTrampoline(uint8_t* data, size_t len);
+    // Boot-watch byte handler passed to wifiConfigInit (see PardaloteBootProbe).
+    int  _handleBootByte(uint8_t b);
+    static int _bootProbeByte(uint8_t b);
 #endif
     void _beginCommon();
     void _beginSerial();
+    // Emit a CMD_REBOOT frame over serial at boot (see CMD_REBOOT in defs.h) so a
+    // browser still holding the port resumes probing and recovers fast.
+    void _announceReboot();
 
     // Serial transport sinks (free-function trampolines, same pattern as
     // the WS event trampoline).

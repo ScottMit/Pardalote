@@ -76,10 +76,10 @@ const easeInOut = t => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
 function setup() {
     const main = select('main');
 
-    // --- top: heading, status, connection + transport controls ---
-    const topBar = createDiv().id('top').parent(main);
-    createDiv('Coordinated motion').class('heading').parent(topBar);
-    statusEl = createDiv('').id('status').parent(topBar);
+    // --- top: heading + status live in index.html (#top); the sketch appends
+    // the connection + transport controls into that same block ---
+    const topBar = select('#top');
+    statusEl = select('#status');
 
     let r = createDiv().class('row').parent(topBar);
     connectLbl = createSpan('Board IP').class('lbl').parent(r).elt;
@@ -210,8 +210,12 @@ async function buildRig() {
     arduino.on('disconnect', () => {
         ready = false;
         setConnected(false);
-        if (!manualDisconnect) setStatus('reconnecting…');
+        if (usbBusy) { usbBusy = false; setStatus('board is on WiFi — press Connect to switch it to USB'); }
+        else if (!manualDisconnect) setStatus('reconnecting…');
     });
+    // 'usbBusy': a silent USB reconnect reached a board that's on WiFi — it won't
+    // switch without a picker gesture. The 'disconnect' that follows shows the prompt.
+    arduino.on('usbBusy', () => { usbBusy = true; });
 
     dispA = fromA = toA = TYPES[typeA].low;
     dispB = fromB = toB = TYPES[typeB].low;
@@ -232,6 +236,7 @@ async function buildRig() {
 }
 
 let manualDisconnect = false;
+let usbBusy = false;   // board on WiFi, silent USB reconnect refused (see 'usbBusy')
 function doDisconnect() {
     manualDisconnect = true;
     ready = false;

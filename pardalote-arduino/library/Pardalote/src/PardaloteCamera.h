@@ -394,6 +394,7 @@ private:
     inline static uint16_t       _port            = 82;
     inline static uint8_t        _quality         = 12;
     inline static framesize_t    _framesize       = FRAMESIZE_QVGA;
+    inline static bool           _dramFallback    = false;  // true when no PSRAM: locked to QQVGA in DRAM
     inline static uint8_t        _clientCount     = 0;     // WebSocket clients currently connected
     inline static bool           _shutdownPending = false;
     inline static uint32_t       _shutdownStart   = 0;     // millis() when last client left
@@ -411,15 +412,25 @@ private:
         const char* boundary = "\r\n--" _CAM_BOUNDARY "\r\n";
         char        partHdr[128];
         esp_err_t   res = ESP_OK;
+        uint8_t     fails = 0;   // consecutive failed captures
 
         while (res == ESP_OK) {
             delay(1);  // yield to main loop so WebSocket events are processed between frames
 
             camera_fb_t* fb = esp_camera_fb_get();
             if (!fb) {
-                Serial.println(F("[Camera] Frame capture failed"));
-                return ESP_FAIL;
+                // A single dropped frame — e.g. a transient FB-OVF at a
+                // too-high framesize like HD on the OV2640 — shouldn't kill
+                // the whole stream (that surfaces in the browser as
+                // ERR_INCOMPLETE_CHUNKED_ENCODING). Skip it and retry; bail
+                // only if captures keep failing (the sensor is truly stuck).
+                if (++fails >= 5) {
+                    Serial.println(F("[Camera] Frame capture failed repeatedly — closing stream"));
+                    return ESP_FAIL;
+                }
+                continue;
             }
+            fails = 0;
 
             size_t hlen = snprintf(partHdr, sizeof(partHdr),
                 "Content-Type: image/jpeg\r\nContent-Length: %u\r\n\r\n",
@@ -483,10 +494,14 @@ private:
         if (psramFound()) {
             cfg.fb_count    = 2;                  // double-buffer for smooth streaming
             cfg.fb_location = CAMERA_FB_IN_PSRAM;
+            _dramFallback   = false;
         } else {
             cfg.fb_count    = 1;
             cfg.fb_location = CAMERA_FB_IN_DRAM;
             cfg.frame_size  = FRAMESIZE_QQVGA;    // 160×120 — only size that fits in DRAM
+            _framesize      = FRAMESIZE_QQVGA;    // keep our cached size in step with the hardware
+            _dramFallback   = true;               // lock out resolution changes — a larger DMA
+                                                  // buffer than QQVGA can't fit, and would FB-OVF
             Serial.println(F("[Camera] No PSRAM — using DRAM, forced to QQVGA"));
         }
         cfg.grab_mode    = CAMERA_GRAB_LATEST;
@@ -599,6 +614,13 @@ public:
 
             case CMD_CAMERA_SET_RES: {
                 if (nparams < 2) return;
+                // No-PSRAM boards run a single QQVGA frame buffer in DRAM. A larger
+                // framesize won't fit that buffer and the driver spews cam_hal: FB-OVF
+                // with a broken stream, so refuse the change and stay at QQVGA.
+                if (_dramFallback) {
+                    Serial.println(F("[Camera] No PSRAM — resolution locked to QQVGA, ignoring set-res"));
+                    break;
+                }
                 _framesize = (framesize_t)(int)paramInt(params, 1);
                 if (_cameraReady) {
                     sensor_t* s = esp_camera_sensor_get();

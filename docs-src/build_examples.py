@@ -97,7 +97,7 @@ EXAMPLES = {
         "Author animation-style motion: a pan/tilt head plays nods, shakes and curious tilts built from eased gesture segments — and shows you the code for each.",
         "🙂", "linear-gradient(135deg,#f0e6dc,#e0a86d)", ["Motion", "Tool"], "Advanced"),
     "neopixel": ("NeoPixel",
-        "Mix a colour with the mouse and an LED strip follows it live — the whole page becomes the colour you're sending.",
+        "Mix a colour by moving the mouse across a hue-and-brightness field, and an LED strip follows the colour under your cursor live.",
         "🌈", "linear-gradient(135deg,#f3dce8,#d989b8)", ["Light", "p5.js"], "Intermediate"),
     "ultrasonic-sensor": ("Ultrasonic sensor",
         "A distance sensor paints a colour bar that responds as you move your hand closer and further away.",

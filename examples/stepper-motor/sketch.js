@@ -76,9 +76,8 @@ let enableBtn, disableBtn, minSetBtn, maxSetBtn;
 function setup() {
     const main = select('main');
 
-    const top = createDiv().id('top').parent(main);
-    createDiv('Stepper motor').class('heading').parent(top);
-    statusEl = createDiv('status: starting…').id('status').parent(top);
+    // Heading + status live in index.html (#top); the sketch just drives status.
+    statusEl = select('#status');
 
     // Board — WiFi (IP) or USB (Web Serial), connect/disconnect
     let r = row(main, 'Board IP');
@@ -192,8 +191,12 @@ function setup() {
     arduino.on('disconnect', () => {
         ready = false;
         setConnected(false);
-        if (!manualDisconnect) setStatus('reconnecting…');
+        if (usbBusy) { usbBusy = false; setStatus('board is on WiFi — press Connect to switch it to USB'); }
+        else if (!manualDisconnect) setStatus('reconnecting…');
     });
+    // 'usbBusy': a silent USB reconnect reached a board that's on WiFi — it won't
+    // switch without a picker gesture. The 'disconnect' that follows shows the prompt.
+    arduino.on('usbBusy', () => { usbBusy = true; });
 
     // Returning visit: reconnect with the remembered settings.
     if (localStorage.getItem(STORE)) doConnect();
@@ -220,6 +223,7 @@ async function doConnect() {
 }
 
 let manualDisconnect = false;
+let usbBusy = false;   // board on WiFi, silent USB reconnect refused (see 'usbBusy')
 
 function doDisconnect() {
     manualDisconnect = true;

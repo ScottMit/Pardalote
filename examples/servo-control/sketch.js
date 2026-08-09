@@ -37,6 +37,7 @@ const W = 520, H = 300, cx = W / 2, cy = 210, R = 120, D = 2 * R;
 let arduino;
 let ready = false;
 let manualDisconnect = false;
+let usbBusy = false;   // board on WiFi, silent USB reconnect refused (see 'usbBusy')
 
 // Display interpolation so the gauge animates smoothly whether or not a
 // timed move is running. A leg eases `from`→`to` (degrees) over moveDur ms.
@@ -58,9 +59,8 @@ const easeInOut = t => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
 function setup() {
     const main = select('main');
 
-    const topBar = createDiv().id('top').parent(main);
-    createDiv('Servo control').class('heading').parent(topBar);
-    statusEl = createDiv('status: starting…').id('status').parent(topBar);
+    // Heading + status live in index.html (#top); the sketch just drives status.
+    statusEl = select('#status');
 
     // Board — WiFi (IP) or USB (Web Serial), connect/disconnect
     let r = row(main, 'Board IP');
@@ -127,8 +127,12 @@ function setup() {
     arduino.on('disconnect', () => {
         ready = false;
         setConnected(false);
-        if (!manualDisconnect) setStatus('reconnecting…');
+        if (usbBusy) { usbBusy = false; setStatus('board is on WiFi — press Connect to switch it to USB'); }
+        else if (!manualDisconnect) setStatus('reconnecting…');
     });
+    // 'usbBusy': a silent USB reconnect reached a board that's on WiFi — it won't
+    // switch without a picker gesture. The 'disconnect' that follows shows the prompt.
+    arduino.on('usbBusy', () => { usbBusy = true; });
 
     // Returning visit: reconnect with the remembered settings.
     if (localStorage.getItem(STORE)) doConnect();

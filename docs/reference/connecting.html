@@ -113,10 +113,10 @@
 </code></pre></div>
 <p>Calling <code>connect()</code> (or <code>connectSerial()</code>) again starts a fresh session: pin modes, polled reads, and write listeners from the previous board are cleared. Each registered extension is reset to its just-constructed state, so attached servos, initialised strips, IMU calibration and camera streams are released — call <code>attach()</code> / <code>init()</code> again inside the new <code>on('ready')</code> handler. Event listeners attached with <code>on('change', …)</code> etc. survive, as do user-tuned settings like <code>setWriteThrottle</code>, <code>setWriteThreshold</code> and <code>setQuality</code>.</p>
 <h3 id="connection-keys">Connection keys</h3>
-<p>A board started with <code>Pardalote.begin(&quot;robot-arm-3&quot;)</code> only completes the handshake for clients that present the same key — an opt-in latch against connecting to a neighbour's board on a shared classroom network. A client with the wrong key (or none) receives one <code>'authFail'</code> event with a readable message and auto-reconnect stops, so a typo surfaces as a single clear error rather than a silent retry loop.</p>
-<p>The key is an accident-prevention measure, <strong>not security</strong>: it crosses the network unencrypted (<code>ws://</code>). Boards started without a key accept everyone.</p>
+<p>A board that called <a href="arduino.html#pardaloterequirekey"><code>Pardalote.requireKey(&quot;robot-arm-3&quot;)</code></a> before <code>begin()</code> only completes the handshake for clients that present the same key — pass it as <code>connect(ip, { key: &quot;robot-arm-3&quot; })</code> or <code>connectSerial({ key: &quot;robot-arm-3&quot; })</code>. A client with the wrong key (or none) receives one <code>'authFail'</code> event with a readable message and auto-reconnect stops, so a typo surfaces as a single clear error rather than a silent retry loop.</p>
+<p>The key works over <strong>both</strong> transports. Over WiFi it's a latch against connecting to a neighbour's board on a shared classroom network. Over USB — where the cable already picks the board — it's a <strong>board-identity check</strong>: a student who grabbed the wrong physical board gets &quot;wrong key for this board&quot; instead of silently driving it. Either way it's an accident-prevention measure, <strong>not security</strong>: it crosses the wire unencrypted (<code>ws://</code>, or in the clear over USB). Boards that never call <code>requireKey()</code> accept everyone.</p>
 <h2 id="connectserial">connectSerial()</h2>
-<p>Connects over the USB cable instead of WiFi, using the browser's Web Serial API (Chrome and Edge only, including Chromebooks). WiFi is the default but the Arduino sketch can select serial explicitly with <code>Pardalote.begin(PARDALOTE_SERIAL)</code>. The one exception is the UNO R4 Minima — it has no radio, so every <code>begin()</code> form starts the serial transport, the only one that hardware can have. Everything downstream of connecting is identical to WiFi, so a project can migrate between the two by changing one line on each side. There is no key concept over serial: holding the cable is access.</p>
+<p>Connects over the USB cable instead of WiFi, using the browser's Web Serial API (Chrome and Edge only, including Chromebooks). Everything downstream of connecting is identical to WiFi, so a project can migrate between the two by changing one line on each side. Which boards accept a USB connection depends on how the sketch called <code>begin()</code>: <code>begin()</code> (the default) and <code>begin(PARDALOTE_SERIAL)</code> both do; <code>begin(PARDALOTE_WIFI)</code> does not. On a UNO R4 Minima every form is serial (no radio).</p>
 <div class="sig sig-js">arduino.<span class="fn">connectSerial</span>([options])</div>
 <table>
 <thead>
@@ -130,21 +130,25 @@
 <tr>
 <td><code>options</code></td>
 <td>object</td>
-<td>Optional. <code>{ prompt: true }</code> forces the browser's port picker even when a previously granted port exists.</td>
+<td>Optional. <code>{ prompt: true }</code> (also exported as <code>PROMPT</code>) forces the browser's port picker even when a previously granted port exists. <code>{ key }</code> sets the board's <a href="#connection-keys">connection key</a>.</td>
 </tr>
 </tbody>
 </table>
 <div class="code-ex"><span class="lang-badge lang-js">JS</span><pre><code><span class="nx">connectButton</span><span class="p">.</span><span class="nx">addEventListener</span><span class="p">(</span><span class="s1">&#39;click&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">connectSerial</span><span class="p">();</span><span class="w">   </span><span class="c1">// first time: Chrome shows a port picker</span>
+<span class="w">    </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">connectSerial</span><span class="p">(</span><span class="nx">PROMPT</span><span class="p">);</span><span class="w">   </span><span class="c1">// Chrome shows a port picker</span>
 <span class="p">});</span>
 </code></pre></div>
 <p>Notes:</p>
 <ul>
-<li>The <strong>first</strong> call must come from a user gesture (a click) — the browser requires it for the port picker. The permission is remembered, so a returning visit can call <code>connectSerial()</code> without a gesture and reconnect silently.</li>
+<li>The <strong>first</strong> call must come from a user gesture (a click) — the browser requires it for the port picker. The permission is remembered, so a returning visit can call <code>connectSerial()</code> without a gesture and reconnect silently. Tool examples pass <code>PROMPT</code> so every click raises the picker.</li>
 <li>The sketch's <code>Serial.print</code> output is delivered to the page as the <code>'log'</code> event, one line per event (with no listener it goes to the console prefixed <code>[board]</code>) — debug prints are visible without opening the Arduino IDE. Avoid <code>Serial.write</code> of raw binary from the sketch; text is fine.</li>
 <li>The camera extension needs WiFi (its video travels over HTTP); everything else works over serial.</li>
 <li>Multi-browser sharing is a WiFi feature — a USB cable has one end.</li>
 </ul>
+<h3 id="switching-to-usb">Switching to USB</h3>
+<p>A board started with the default <code>begin()</code> runs on WiFi but also listens on USB. Connecting over USB with <code>connectSerial()</code> makes the board <strong>drop WiFi and switch to the cable</strong> — handy when there's no WiFi handy or you just want a quick, direct session. It's one-way: to go back to WiFi, reset the board.</p>
+<p>The switch only happens on a <strong>deliberate user gesture</strong> — a <code>connectSerial()</code> called in response to a real click (whether or not a port picker appears; a click that silently reuses an already-granted port still counts). An <strong>automatic</strong> connect with no user action — a page reloading and reconnecting, or a background tab — will <strong>not</strong> pull a board off WiFi; instead the page gets a <code>'usbBusy'</code> event meaning &quot;this board is on WiFi — click Connect to switch it to USB.&quot; This keeps a background tab, or a board that's merely cabled for power, from yanking a shared WiFi board away from everyone else.</p>
+<p>On a classic ESP32, opening the USB port resets the board (a hardware auto-reset the firmware can't decline), so the switch is really <em>reboot → WiFi → switch to USB</em>, a few seconds. On the UNO R4's native USB there's no reset — the handoff is immediate. A board started with <code>begin(PARDALOTE_WIFI)</code> ignores USB entirely; a <code>connectSerial()</code> attempt gets no reply and the console notes it may be a WiFi-only board.</p>
 <h2 id="on">on()</h2>
 <p>Registers a handler for a connection event.</p>
 <div class="sig sig-js">arduino.<span class="fn">on</span>(event, handler)</div>
@@ -160,12 +164,12 @@
 <tr>
 <td><code>event</code></td>
 <td>string</td>
-<td>One of <code>'ready'</code>, <code>'connect'</code>, <code>'disconnect'</code>, <code>'reconnecting'</code>, <code>'authFail'</code>, <code>'log'</code>, <code>'warn'</code>, <code>'error'</code>.</td>
+<td>One of <code>'ready'</code>, <code>'connect'</code>, <code>'disconnect'</code>, <code>'reconnecting'</code>, <code>'authFail'</code>, <code>'usbBusy'</code>, <code>'log'</code>, <code>'warn'</code>, <code>'error'</code>.</td>
 </tr>
 <tr>
 <td><code>handler</code></td>
 <td>function</td>
-<td>Called when the event fires. <code>'reconnecting'</code> receives <code>{ attempt, delay }</code>; <code>'authFail'</code> receives <code>{ reason, message }</code>; <code>'log'</code> receives a string; <code>'warn'</code>/<code>'error'</code> receive <code>{ source, message }</code>.</td>
+<td>Called when the event fires. <code>'reconnecting'</code> receives <code>{ attempt, delay }</code>; <code>'authFail'</code> and <code>'usbBusy'</code> receive <code>{ …, message }</code>; <code>'log'</code> receives a string; <code>'warn'</code>/<code>'error'</code> receive <code>{ source, message }</code>.</td>
 </tr>
 </tbody>
 </table>
@@ -195,7 +199,11 @@
 </tr>
 <tr>
 <td><code>'authFail'</code></td>
-<td>The board refused this client's connection key (or required one that wasn't sent). Auto-reconnect stops — call <code>connect()</code> again with the right key.</td>
+<td>The board refused this client's connection key (or required one that wasn't sent) — over WiFi or USB. Auto-reconnect stops — reconnect with the right key.</td>
+</tr>
+<tr>
+<td><code>'usbBusy'</code></td>
+<td>Serial only: a <code>connectSerial()</code> without a picker gesture reached a board that's live on WiFi, which won't switch silently. Auto-reconnect stops — click Connect (which raises the picker) to switch it to USB. See <a href="#switching-to-usb">switching to USB</a>.</td>
 </tr>
 <tr>
 <td><code>'log'</code></td>

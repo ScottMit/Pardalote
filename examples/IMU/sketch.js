@@ -7,7 +7,7 @@
 //   SDA → SDA pin    SCL → SCL pin
 //   AD0 → GND        (sets I2C address to 0x68)
 //
-// Firmware: sketch must `#include <PardaloteIMU.h>` (see examples/imu in the Pardalote library).
+// Arduino Firmware: sketch must `#include <PardaloteIMU.h>` (see examples/imu in the Pardalote library).
 // ==============================================================
 
 const ARDUINO_IP = '192.168.x.x';   // Change this to your Arduino's IP
@@ -15,7 +15,7 @@ const ARDUINO_IP = '192.168.x.x';   // Change this to your Arduino's IP
 // ── Tuning ───────────────────────────────────────────────────
 const POLL_MS = 50;    // sensor poll interval ms (50 Hz)
 
-// Complementary filter blend factor.
+// Filter blend factor.
 // Higher → trusts gyro more (responsive but drifts over time).
 // Lower  → trusts accel more (stable but noisy during motion).
 const ALPHA = 0.96;

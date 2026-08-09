@@ -65,11 +65,16 @@ const INK = '#2B2420', GREY = '#6d6a5f', HAIR = '#d9d2c2', PAPER = '#FFFFFF',
 const W = 520, H = 300, cx = W / 2, cy = 170;
 
 const STORE = 'pardalote-expressive-gesture';
-const DEFAULTS = { ip: '192.168.x.x', panPin: 9, tiltPin: 10 };
+const DEFAULTS = {
+    ip: '192.168.x.x',
+    panPin: 9, tiltPin: 10,
+    transport: 'wifi',   // 'wifi' (IP) or 'usb' (Web Serial)
+};
 const saved = { ...DEFAULTS, ...(JSON.parse(localStorage.getItem(STORE) || '{}')) };
 
 let arduino, head, ready = false, manualDisconnect = false;
-let statusEl, codeEl, logEl, ipIn, panIn, tiltIn;
+let statusEl, codeEl, logEl, ipIn, panIn, tiltIn,
+    transportSelect, connectLbl, connectBtn, disconnectBtn;
 let logLines = [];
 
 // Resting pose (servo degrees) the next gesture starts from — mirrors the
@@ -83,15 +88,22 @@ let flashUntil = 0;       // brief ring when whenDone() settles
 function setup() {
     const main = select('main');
 
-    const top = createDiv().id('top').parent(main);
-    createDiv('Expressive gesture').class('heading').parent(top);
-    statusEl = createDiv('status: starting…').id('status').parent(top);
+    // Heading + status live in index.html (#top); the sketch just drives status.
+    statusEl = select('#status');
 
+    // Board — WiFi (IP) or USB (Web Serial), connect/disconnect
     let r = row(main, 'Board IP');
+    connectLbl = r.elt.querySelector('.lbl');
+    transportSelect = createSelect().parent(r);
+    transportSelect.option('WiFi'); transportSelect.option('USB');
+    transportSelect.elt.value = (saved.transport === 'usb') ? 'USB' : 'WiFi';
+    transportSelect.changed(switchTransport);
     ipIn = createInput(saved.ip, 'text').parent(r);
     ipIn.style('width', '130px');
-    createButton('Connect').parent(r).mousePressed(doConnect).addClass('primary');
-    createButton('Disconnect').parent(r).mousePressed(doDisconnect);
+    connectBtn = createButton('Connect').parent(r).mousePressed(doConnect);
+    connectBtn.addClass('primary');
+    disconnectBtn = createButton('Disconnect').parent(r).mousePressed(doDisconnect);
+    applyTransport();
 
     // The gestures — one button each, plus a recentre.
     r = row(main, 'Gestures');
@@ -120,8 +132,12 @@ function setup() {
     arduino = new Arduino();
     arduino.add('pan',  new Servo());
     arduino.add('tilt', new Servo());
-    arduino.on('ready', onReady);
-    arduino.on('disconnect', () => { ready = false; if (!manualDisconnect) setStatus('reconnecting…'); });
+    arduino.on('ready', () => { setConnected(true); onReady(); });
+    arduino.on('disconnect', () => {
+        ready = false;
+        setConnected(false);
+        if (!manualDisconnect) setStatus('reconnecting…');
+    });
     arduino.on('warn', ({ message }) => log('⚠ ' + message));
 
     if (localStorage.getItem(STORE)) doConnect();
@@ -132,23 +148,58 @@ function persist() {
     saved.ip = ipIn.value().trim();
     saved.panPin = int(panIn.value());
     saved.tiltPin = int(tiltIn.value());
+    saved.transport = (transportSelect.value() === 'USB') ? 'usb' : 'wifi';
     localStorage.setItem(STORE, JSON.stringify(saved));
 }
 
-function doConnect() {
-    const ip = ipIn.value().trim();
-    if (!ip || ip.includes('x')) { setStatus("enter your board's IP and press Connect"); return; }
+async function doConnect() {
     persist();
     manualDisconnect = false; ready = false;
-    arduino.connect(ip);
+    if (saved.transport === 'usb') {
+        setStatus('connecting over USB…');
+        await arduino.connectSerial(PROMPT);   // always show the port picker
+        if (!arduino.socket) setStatus('press Connect and choose the USB port');
+        return;
+    }
+    const ip = ipIn.value().trim();
+    if (!ip || ip.includes('x')) { setStatus("enter your board's IP and press Connect"); return; }
+    arduino.connect(ip);        // (re)connect — attach happens on 'ready'
     setStatus('connecting…');
 }
 
 function doDisconnect() {
     manualDisconnect = true;
-    arduino.disconnect();
     ready = false;
+    if (disconnectBtn) { disconnectBtn.html('Disconnecting…'); disconnectBtn.attribute('disabled', ''); }
+    if (connectBtn) { connectBtn.html('Connect'); connectBtn.removeClass('connected').addClass('primary'); }
+    arduino.disconnect();       // the 'disconnect' event restores the button when done
+    setTimeout(() => setConnected(false), 3000);
     setStatus('disconnected — the preview still works');
+}
+
+// --- Connection standard (see PROJECT-STATUS) ---
+// WiFi shows the IP field; USB hides it (the browser's port picker chooses).
+function applyTransport() {
+    const usb = (transportSelect.value() === 'USB');
+    ipIn.style('display', usb ? 'none' : '');
+    if (connectLbl) connectLbl.textContent = usb ? 'Board USB' : 'Board IP';
+}
+// Green "Connected" when live, plain "Connect" otherwise; restore Disconnect.
+function setConnected(on) {
+    if (connectBtn) {
+        connectBtn.html(on ? 'Connected' : 'Connect');
+        connectBtn.removeClass(on ? 'primary' : 'connected').addClass(on ? 'connected' : 'primary');
+    }
+    if (!on && disconnectBtn) { disconnectBtn.html('Disconnect'); disconnectBtn.removeAttribute('disabled'); }
+}
+// Flipping WiFi/USB drops the current connection — a browser holds ONE link.
+function switchTransport() {
+    manualDisconnect = true; ready = false;
+    arduino.disconnect();
+    setConnected(false);
+    persist();
+    applyTransport();
+    setStatus('channel switched — press Connect');
 }
 
 function reattach() { persist(); if (arduino.connected) doConnect(); }

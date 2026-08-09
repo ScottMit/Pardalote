@@ -12,18 +12,33 @@ The minimal sketch is `Pardalote.begin()` + `Pardalote.run()`, but you can also 
 Starts Pardalote. Call once in `setup()`. Three forms:
 
 <div class="sig">Pardalote.<span class="fn">begin</span>()</div>
-<div class="sig">Pardalote.<span class="fn">begin</span>(key)</div>
+<div class="sig">Pardalote.<span class="fn">begin</span>(PARDALOTE_WIFI)</div>
 <div class="sig">Pardalote.<span class="fn">begin</span>(PARDALOTE_SERIAL)</div>
 
 | Form | What it does |
 |---|---|
-| `begin()` | The default: joins WiFi (see [WiFi configuration](wifi.html)) and starts the WebSocket server. |
-| `begin("key")` | As above, plus a **connection key**: only browsers that pass the same key to [`connect(ip, { key })`](connecting.html#connection-keys) get in. An accident-prevention latch for shared networks — not security (the key travels unencrypted). Up to 32 characters. |
-| `begin(PARDALOTE_SERIAL)` | Skips WiFi entirely and talks over the **USB cable** instead — the browser connects with [`connectSerial()`](connecting.html#connectserial). No key concept: holding the cable is access. |
+| `begin()` | The default: joins WiFi (see [WiFi configuration](wifi.html)) and starts the WebSocket server, **and** listens on the USB cable. If a browser connects over USB with a deliberate port-picker gesture, the board **drops WiFi and switches to USB** (see [switching to USB](connecting.html#switching-to-usb)). One-way — reboot to return to WiFi. |
+| `begin(PARDALOTE_WIFI)` | WiFi only. Same as `begin()` but **does not** listen on USB — the opt-out for "nobody grabs my board over the cable." |
+| `begin(PARDALOTE_SERIAL)` | Skips WiFi entirely and talks over the **USB cable** only — the browser connects with [`connectSerial()`](connecting.html#connectserial). |
 
-WiFi is the default; serial is an explicit choice. The one exception is the **UNO R4 Minima** — it has no radio, so every `begin()` form starts the serial transport. There is no runtime WiFi→serial failover on WiFi-capable boards.
+The one exception is the **UNO R4 Minima** — it has no radio, so every `begin()` form starts the serial transport.
 
 In serial mode, `Serial.print` from your sketch still works — the output travels between protocol messages and appears in the browser as the [`'log'` event](connecting.html#connectserial) (and in the Serial Monitor as usual when the browser isn't connected). Don't `Serial.write` raw binary; text is fine.
+
+## Pardalote.requireKey()
+
+Optional. Call **before** `begin()` to require a **connection key** — only browsers that pass the same key to [`connect(ip, { key })`](connecting.html#connection-keys) or [`connectSerial({ key })`](connecting.html#connection-keys) get in. It works over **both** transports and composes with every `begin()` form.
+
+<div class="sig">Pardalote.<span class="fn">requireKey</span>(key)</div>
+
+```cpp
+void setup() {
+  Pardalote.requireKey("robot-arm-3");   // optional — before begin()
+  Pardalote.begin();                     // or begin(PARDALOTE_WIFI) / begin(PARDALOTE_SERIAL)
+}
+```
+
+Over WiFi it's an accident-prevention latch against joining a neighbour's board on a shared network. Over USB — where the cable already picks the board — the key becomes a **board-identity check**: a student who grabbed the wrong physical board gets a clear "wrong key for this board" error instead of silently driving it. **Not security** — the key travels unencrypted (over the network, or in the clear on USB). Up to 32 characters.
 
 ## Pardalote.run()
 

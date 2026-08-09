@@ -35,6 +35,8 @@ inline const char* pardaloteFrameName(uint16_t target, uint8_t cmd) {
             case CMD_PONG:          return "PONG";
             case CMD_SYNC_COMPLETE: return "SYNC_COMPLETE";
             case CMD_AUTH:          return "AUTH";
+            case CMD_SERIAL_BUSY:   return "SERIAL_BUSY";
+            case CMD_REBOOT:        return "REBOOT";
             default:                return nullptr;
         }
     }

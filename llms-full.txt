@@ -32,8 +32,10 @@ arduino.on('ready', () => {             // ALL setup goes here, after the board 
 ```cpp sketch.ino (Arduino)
 #include <Pardalote.h>
 #include <PardaloteServo.h>             // one include per extension you use
-void setup() { Pardalote.begin(); }     // WiFi set at compile-time or via the Serial menu;
-                                        // Pardalote.begin("key") requires a connection key
+void setup() { Pardalote.begin(); }     // WiFi + listens on USB; WiFi set at compile-time or
+                                        // via the Serial menu. begin(PARDALOTE_WIFI) = WiFi only,
+                                        // begin(PARDALOTE_SERIAL) = USB only. Call
+                                        // Pardalote.requireKey("key") before begin() to require a key.
 void loop()  { Pardalote.run(); }
 ```
 
@@ -198,7 +200,7 @@ Put that address into your JavaScript: `arduino.connect('192.168.1.42')`.
 # WiFi configuration
 > Two ways to give Pardalote your network details — use either, or both.
 
-WiFi is Pardalote's default transport, but not the only one — with no network at all, the same code runs over the USB cable: `Pardalote.begin(PARDALOTE_SERIAL)` on the board, `connectSerial()` in the browser. Nothing on this page is needed in that mode.
+WiFi is Pardalote's default transport, but not the only one — the same code runs over the USB cable. The default `begin()` even listens on both: a board on WiFi will switch to USB when a browser connects over the cable. With no network at all, `Pardalote.begin(PARDALOTE_SERIAL)` skips WiFi entirely and the browser connects with `connectSerial()` — nothing on this page is needed in that mode.
 
 ## Option A — compile-time (secrets.h)
 
@@ -270,32 +272,40 @@ Calling `connect()` (or `connectSerial()`) again starts a fresh session: pin mod
 
 ### Connection keys
 
-A board started with `Pardalote.begin("robot-arm-3")` only completes the handshake for clients that present the same key — an opt-in latch against connecting to a neighbour's board on a shared classroom network. A client with the wrong key (or none) receives one `'authFail'` event with a readable message and auto-reconnect stops, so a typo surfaces as a single clear error rather than a silent retry loop.
+A board that called `Pardalote.requireKey("robot-arm-3")` before `begin()` only completes the handshake for clients that present the same key — pass it as `connect(ip, { key: "robot-arm-3" })` or `connectSerial({ key: "robot-arm-3" })`. A client with the wrong key (or none) receives one `'authFail'` event with a readable message and auto-reconnect stops, so a typo surfaces as a single clear error rather than a silent retry loop.
 
-The key is an accident-prevention measure, **not security**: it crosses the network unencrypted (`ws://`). Boards started without a key accept everyone.
+The key works over **both** transports. Over WiFi it's a latch against connecting to a neighbour's board on a shared classroom network. Over USB — where the cable already picks the board — it's a **board-identity check**: a student who grabbed the wrong physical board gets "wrong key for this board" instead of silently driving it. Either way it's an accident-prevention measure, **not security**: it crosses the wire unencrypted (`ws://`, or in the clear over USB). Boards that never call `requireKey()` accept everyone.
 
 ## connectSerial()
 
-Connects over the USB cable instead of WiFi, using the browser's Web Serial API (Chrome and Edge only, including Chromebooks). WiFi is the default but the Arduino sketch can select serial explicitly with `Pardalote.begin(PARDALOTE_SERIAL)`. The one exception is the UNO R4 Minima — it has no radio, so every `begin()` form starts the serial transport, the only one that hardware can have. Everything downstream of connecting is identical to WiFi, so a project can migrate between the two by changing one line on each side. There is no key concept over serial: holding the cable is access.
+Connects over the USB cable instead of WiFi, using the browser's Web Serial API (Chrome and Edge only, including Chromebooks). Everything downstream of connecting is identical to WiFi, so a project can migrate between the two by changing one line on each side. Which boards accept a USB connection depends on how the sketch called `begin()`: `begin()` (the default) and `begin(PARDALOTE_SERIAL)` both do; `begin(PARDALOTE_WIFI)` does not. On a UNO R4 Minima every form is serial (no radio).
 
 `arduino.connectSerial([options])`
 
 | Parameter | Type | Description |
 |---|---|---|
-| `options` | object | Optional. `{ prompt: true }` forces the browser's port picker even when a previously granted port exists. |
+| `options` | object | Optional. `{ prompt: true }` (also exported as `PROMPT`) forces the browser's port picker even when a previously granted port exists. `{ key }` sets the board's [connection key](#connection-keys). |
 
 ```javascript
 connectButton.addEventListener('click', () => {
-    arduino.connectSerial();   // first time: Chrome shows a port picker
+    arduino.connectSerial(PROMPT);   // Chrome shows a port picker
 });
 ```
 
 Notes:
 
-- The **first** call must come from a user gesture (a click) — the browser requires it for the port picker. The permission is remembered, so a returning visit can call `connectSerial()` without a gesture and reconnect silently.
+- The **first** call must come from a user gesture (a click) — the browser requires it for the port picker. The permission is remembered, so a returning visit can call `connectSerial()` without a gesture and reconnect silently. Tool examples pass `PROMPT` so every click raises the picker.
 - The sketch's `Serial.print` output is delivered to the page as the `'log'` event, one line per event (with no listener it goes to the console prefixed `[board]`) — debug prints are visible without opening the Arduino IDE. Avoid `Serial.write` of raw binary from the sketch; text is fine.
 - The camera extension needs WiFi (its video travels over HTTP); everything else works over serial.
 - Multi-browser sharing is a WiFi feature — a USB cable has one end.
+
+### Switching to USB
+
+A board started with the default `begin()` runs on WiFi but also listens on USB. Connecting over USB with `connectSerial()` makes the board **drop WiFi and switch to the cable** — handy when there's no WiFi handy or you just want a quick, direct session. It's one-way: to go back to WiFi, reset the board.
+
+The switch only happens on a **deliberate user gesture** — a `connectSerial()` called in response to a real click (whether or not a port picker appears; a click that silently reuses an already-granted port still counts). An **automatic** connect with no user action — a page reloading and reconnecting, or a background tab — will **not** pull a board off WiFi; instead the page gets a `'usbBusy'` event meaning "this board is on WiFi — click Connect to switch it to USB." This keeps a background tab, or a board that's merely cabled for power, from yanking a shared WiFi board away from everyone else.
+
+On a classic ESP32, opening the USB port resets the board (a hardware auto-reset the firmware can't decline), so the switch is really *reboot → WiFi → switch to USB*, a few seconds. On the UNO R4's native USB there's no reset — the handoff is immediate. A board started with `begin(PARDALOTE_WIFI)` ignores USB entirely; a `connectSerial()` attempt gets no reply and the console notes it may be a WiFi-only board.
 
 ## on()
 
@@ -305,8 +315,8 @@ Registers a handler for a connection event.
 
 | Parameter | Type | Description |
 |---|---|---|
-| `event` | string | One of `'ready'`, `'connect'`, `'disconnect'`, `'reconnecting'`, `'authFail'`, `'log'`, `'warn'`, `'error'`. |
-| `handler` | function | Called when the event fires. `'reconnecting'` receives `{ attempt, delay }`; `'authFail'` receives `{ reason, message }`; `'log'` receives a string; `'warn'`/`'error'` receive `{ source, message }`. |
+| `event` | string | One of `'ready'`, `'connect'`, `'disconnect'`, `'reconnecting'`, `'authFail'`, `'usbBusy'`, `'log'`, `'warn'`, `'error'`. |
+| `handler` | function | Called when the event fires. `'reconnecting'` receives `{ attempt, delay }`; `'authFail'` and `'usbBusy'` receive `{ …, message }`; `'log'` receives a string; `'warn'`/`'error'` receive `{ source, message }`. |
 
 | Event | Fires when |
 |---|---|
@@ -314,7 +324,8 @@ Registers a handler for a connection event.
 | `'connect'` | The WebSocket opens — before `ready`. |
 | `'disconnect'` | The connection is lost. |
 | `'reconnecting'` | A reconnect attempt is scheduled; the next retry is in `delay` ms. |
-| `'authFail'` | The board refused this client's connection key (or required one that wasn't sent). Auto-reconnect stops — call `connect()` again with the right key. |
+| `'authFail'` | The board refused this client's connection key (or required one that wasn't sent) — over WiFi or USB. Auto-reconnect stops — reconnect with the right key. |
+| `'usbBusy'` | Serial only: a `connectSerial()` without a picker gesture reached a board that's live on WiFi, which won't switch silently. Auto-reconnect stops — click Connect (which raises the picker) to switch it to USB. See [switching to USB](#switching-to-usb). |
 | `'log'` | Serial transport only: one line of the sketch's `Serial.print` output. |
 | `'warn'` | Something went wrong but Pardalote carried on — a write to an unattached servo, an oversized message key, a pong timeout. `source` says who's speaking (`"Pardalote"`, `"Servo 'pan'"`, `"Group 'arm'"`). |
 | `'error'` | Something failed — a send error, a camera snapshot failure. Device errors also fire `'error'` on the device instance itself. |
@@ -602,18 +613,33 @@ The minimal sketch is `Pardalote.begin()` + `Pardalote.run()`, but you can also 
 Starts Pardalote. Call once in `setup()`. Three forms:
 
 `Pardalote.begin()`
-`Pardalote.begin(key)`
+`Pardalote.begin(PARDALOTE_WIFI)`
 `Pardalote.begin(PARDALOTE_SERIAL)`
 
 | Form | What it does |
 |---|---|
-| `begin()` | The default: joins WiFi (see WiFi configuration) and starts the WebSocket server. |
-| `begin("key")` | As above, plus a **connection key**: only browsers that pass the same key to `connect(ip, { key })` get in. An accident-prevention latch for shared networks — not security (the key travels unencrypted). Up to 32 characters. |
-| `begin(PARDALOTE_SERIAL)` | Skips WiFi entirely and talks over the **USB cable** instead — the browser connects with `connectSerial()`. No key concept: holding the cable is access. |
+| `begin()` | The default: joins WiFi (see WiFi configuration) and starts the WebSocket server, **and** listens on the USB cable. If a browser connects over USB with a deliberate port-picker gesture, the board **drops WiFi and switches to USB** (see switching to USB). One-way — reboot to return to WiFi. |
+| `begin(PARDALOTE_WIFI)` | WiFi only. Same as `begin()` but **does not** listen on USB — the opt-out for "nobody grabs my board over the cable." |
+| `begin(PARDALOTE_SERIAL)` | Skips WiFi entirely and talks over the **USB cable** only — the browser connects with `connectSerial()`. |
 
-WiFi is the default; serial is an explicit choice. The one exception is the **UNO R4 Minima** — it has no radio, so every `begin()` form starts the serial transport. There is no runtime WiFi→serial failover on WiFi-capable boards.
+The one exception is the **UNO R4 Minima** — it has no radio, so every `begin()` form starts the serial transport.
 
 In serial mode, `Serial.print` from your sketch still works — the output travels between protocol messages and appears in the browser as the `'log'` event (and in the Serial Monitor as usual when the browser isn't connected). Don't `Serial.write` raw binary; text is fine.
+
+## Pardalote.requireKey()
+
+Optional. Call **before** `begin()` to require a **connection key** — only browsers that pass the same key to `connect(ip, { key })` or `connectSerial({ key })` get in. It works over **both** transports and composes with every `begin()` form.
+
+`Pardalote.requireKey(key)`
+
+```cpp
+void setup() {
+  Pardalote.requireKey("robot-arm-3");   // optional — before begin()
+  Pardalote.begin();                     // or begin(PARDALOTE_WIFI) / begin(PARDALOTE_SERIAL)
+}
+```
+
+Over WiFi it's an accident-prevention latch against joining a neighbour's board on a shared network. Over USB — where the cable already picks the board — the key becomes a **board-identity check**: a student who grabbed the wrong physical board gets a clear "wrong key for this board" error instead of silently driving it. **Not security** — the key travels unencrypted (over the network, or in the clear on USB). Up to 32 characters.
 
 ## Pardalote.run()
 
@@ -2454,7 +2480,7 @@ See also: IMU example · Troubleshooting
 
 The camera extension streams MJPEG video and serves JPEG snapshots over a **separate HTTP server** — video never flows through the WebSocket, so it doesn't compete with control messages.
 
-Requires no third-party library beyond the ESP32 Arduino core (which includes `esp_camera` and `esp_http_server`). PSRAM must be present on the board.
+Requires no third-party library beyond the ESP32 Arduino core (which includes `esp_camera` and `esp_http_server`). PSRAM must be present **and enabled in the build** — on the Seeed XIAO ESP32S3 that means **Tools → PSRAM → `OPI PSRAM`**. Without it the camera falls back to a single QQVGA buffer in internal RAM (poor image, `setResolution()` triggers `cam_hal: FB-OVF`); see Troubleshooting.
 
 ## Arduino setup
 
@@ -2526,7 +2552,11 @@ Frame size, using constants that match the ESP32 camera `framesize_t` enum.
 | `FRAMESIZE_HVGA` | 480×320 |
 | `FRAMESIZE_VGA` | 640×480 |
 | `FRAMESIZE_SVGA` | 800×600 |
-| `FRAMESIZE_HD` | 1280×720 |
+| `FRAMESIZE_HD` | 1280×720 — see note |
+
+Call it before or after `attach()` — either way the chosen size is applied once the stream starts, and it persists across reconnects.
+
+`FRAMESIZE_HD` and the other largest sizes push the sensor hard; the 16:9 HD mode can trip `cam_hal: FB-OVF` on some modules (the XIAO's OV2640 among them) and drop the stream. If you hit that, step down to `FRAMESIZE_SVGA` (800×600), which streams reliably on the XIAO. See Troubleshooting.
 
 ## setQuality()
 
@@ -2794,11 +2824,46 @@ See also: Pins and reading · Protocol · Troubleshooting
 
 ## "The board resets when the browser connects over serial" (ESP32)
 
-Expected. Opening the serial port toggles the DTR/RTS lines, and the auto-reset circuit on classic ESP32 dev boards restarts the chip — the same thing the IDE does before uploading. Pardalote's probe simply waits through the reboot and connects when the board comes back (a few seconds). The UNO R4's native USB doesn't reset on open.
+Expected. Opening the serial port toggles the DTR/RTS lines, and the auto-reset circuit on classic ESP32 dev boards restarts the chip — the same thing the IDE does before uploading. Pardalote's probe simply waits through the reboot and connects when the board comes back (a few seconds). The UNO R4's native USB doesn't reset on open. A board switching from WiFi to USB (the default `begin()`) goes through this same reboot on ESP32 — reboot, WiFi comes up, then the switch — so a WiFi→USB switch on ESP32 takes a few seconds; on the R4 it's immediate.
+
+## "connectSerial() connects but nothing happens / I get a 'usbBusy' message"
+
+The board is running on WiFi and won't hand itself to USB without a deliberate user action — a safety so a background tab (or a board that's merely cabled for power) can't yank a shared WiFi board away from everyone. Click your **Connect** button: a `connectSerial()` called from a real click authorises the switch (even one that silently reuses an already-granted port, so no picker needs to appear). What *doesn't* authorise it is an **automatic** connect with no user action — a page reloading and reconnecting, or a background tab. If you're seeing this after a click, make sure `connectSerial()` is called directly from the click handler (not after an `await`, which can expire the browser's user-activation).
+
+## "connectSerial() gets no response at all"
+
+The console logs a hint after a few seconds. Likely causes: the board is still booting (an ESP32 resets when the port opens — wait a moment); it isn't running a Pardalote sketch; or it was started with `Pardalote.begin(PARDALOTE_WIFI)`, which is **WiFi-only and ignores USB**. Use `begin()` (WiFi + USB) or `begin(PARDALOTE_SERIAL)` (USB only) if you want to connect over the cable.
+
+## "Wrong key for this board" over USB
+
+You passed a connection key (`connectSerial({ key })`) that doesn't match the one the board set with `requireKey()` — you're likely cabled to the wrong physical board. Over USB the key is a board-identity check, so it catches exactly this. Connect to the board your sketch expects, or fix the key.
+
+## "I reset the board while connected over USB"
+
+It recovers on its own. The board announces the reboot over serial, and the browser — still holding the port — resumes connecting, so a board on the default `begin()` switches straight back to USB within a second or two. No click needed. (If the browser ever misses the announce it still recovers the slower way, via its heartbeat timeout.)
 
 ## "Serial connection works, then dies after a NeoPixel animation" 
 
 `show()` disables interrupts while it streams the strip, which can drop incoming serial bytes. Pardalote's serial framing detects the corruption (CRC) and drops that message rather than desyncing — occasional lost frames during heavy animation are expected; the link itself recovers on its own.
+
+## "Camera: poor image quality, stuck at low resolution, or `cam_hal: FB-OVF` in the Serial Monitor"
+
+Almost always **PSRAM isn't enabled in the build.** ESP32 camera boards need PSRAM for anything above the tiniest frame size. Look for this on the Serial Monitor at startup:
+
+```
+[Camera] No PSRAM — using DRAM, forced to QQVGA
+```
+
+If you see it, the camera has fallen back to a single tiny frame buffer in internal RAM: the image is locked to QQVGA (160×120), it looks poor, and any `setResolution()` to something larger overflows that buffer — the driver then spams `cam_hal: FB-OVF` and the stream breaks.
+
+- **Seeed XIAO ESP32S3 Sense:** it has 8 MB of *octal* PSRAM, but you must select it. **Tools → PSRAM → `OPI PSRAM`** (not "QSPI PSRAM", not "Disabled"), with the board set to XIAO ESP32S3. Re-upload — the "No PSRAM" line should be gone.
+- **Other boards:** enable PSRAM under Tools (the option name varies — "OPI PSRAM", "QSPI PSRAM", or "Enabled"). Match it to what your module actually has.
+
+Once PSRAM is detected the camera double-buffers in PSRAM and `setResolution()` works normally.
+
+## "Camera: `FRAMESIZE_HD` gives `cam_hal: FB-OVF` / `net::ERR_INCOMPLETE_CHUNKED_ENCODING` even with PSRAM on"
+
+The largest frame sizes push the sensor's data rate hard, and the 16:9 HD mode is the flakiest — some modules (the XIAO's OV2640 among them) can't sustain it and drop frames, which surfaces in the browser console as `net::ERR_INCOMPLETE_CHUNKED_ENCODING`. Pardalote now rides out the occasional dropped frame rather than closing the stream, but a size that overflows *every* frame is the sensor's ceiling, not a bug. **Step down to `FRAMESIZE_SVGA` (800×600)** — it streams reliably on the XIAO.
 
 ## "NeoPixels don't light up"
 

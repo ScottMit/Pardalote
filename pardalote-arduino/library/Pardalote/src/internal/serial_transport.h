@@ -72,9 +72,34 @@ public:
 
     bool connected() const { return _connected; }
 
+    // -------- Listen mode (WiFi is the active transport, watching USB) --------
+    // A WiFi-active board arms this to sniff USB for a takeover probe WITHOUT
+    // committing to serial. Decoded messages go to the listen sink; no
+    // connect/disconnect events, no rx-timeout, _connected stays false. The
+    // core decides (from the message) whether to switch — at which point it
+    // calls begin() to promote to full connected mode.
+    void beginListen(PardaloteSerialMessageSink onListen);
+    void loopListen(unsigned long now);   // drain + decode, route to listen sink
+    bool listening() const { return _listening; }
+
+    // Boot-watch helpers: the WiFi config window (wifi_config.cpp) drains Serial
+    // itself (it also watches for the 'w' config key), so it feeds bytes to the
+    // listen decoder one at a time rather than calling loopListen(). A completed
+    // takeover probe fires the listen sink as usual. decoderInText() is true when
+    // the decoder is between envelopes, so a loose 'w' can be told from a 'w'
+    // byte inside an envelope body.
+    void feedListen(uint8_t b, unsigned long now) { if (_listening) _feed(b, now); }
+    bool decoderInText() const { return _state == ST_TEXT; }
+
+    // Emit one envelope while NOT connected — the listen-mode nudges
+    // (CMD_SERIAL_BUSY / CMD_AUTH reject). Normal send() no-ops until
+    // connected; this bypasses that guard.
+    void sendUnconnected(const uint8_t* data, size_t len);
+
 private:
     void _feed(uint8_t b, unsigned long now);
     void _envelopeDone(unsigned long now);
+    void _writeEnvelope(const uint8_t* data, size_t len);
     static uint8_t _crc8(const uint8_t* data, size_t len);
 
     // Decoder states. TEXT swallows the sketch's own debug bytes (the
@@ -89,9 +114,11 @@ private:
     size_t   _len  = 0;
     bool     _overflow  = false;
     bool     _connected = false;
+    bool     _listening = false;
     unsigned long _lastRx = 0;
 
     PardaloteSerialMessageSink _onMessage    = nullptr;
     PardaloteSerialEventSink   _onConnect    = nullptr;
     PardaloteSerialEventSink   _onDisconnect = nullptr;
+    PardaloteSerialMessageSink _onListen     = nullptr;
 };

@@ -30,6 +30,16 @@ void PardaloteSerialTransport::begin(PardaloteSerialMessageSink onMessage,
     _len = 0;
     _overflow  = false;
     _connected = false;
+    _listening = false;   // full connected mode — promote out of listen
+}
+
+void PardaloteSerialTransport::beginListen(PardaloteSerialMessageSink onListen) {
+    _onListen  = onListen;
+    _state = ST_TEXT;
+    _len = 0;
+    _overflow  = false;
+    _connected = false;
+    _listening = true;
 }
 
 void PardaloteSerialTransport::loop(unsigned long now) {
@@ -45,6 +55,18 @@ void PardaloteSerialTransport::loop(unsigned long now) {
     if (_connected && now - _lastRx > PARDALOTE_SERIAL_TIMEOUT_MS) {
         _connected = false;
         if (_onDisconnect) _onDisconnect();
+    }
+}
+
+// Listen-mode drain: decode probes but never connect. The listen sink may
+// call begin() to promote to connected mode (a takeover) — that clears
+// _listening, so the while-guard exits and leftover bytes are left for the
+// connected loop() to re-read from a fresh decoder.
+void PardaloteSerialTransport::loopListen(unsigned long now) {
+    while (_listening && Serial.available() > 0) {
+        int c = Serial.read();
+        if (c < 0) break;
+        _feed((uint8_t)c, now);
     }
 }
 
@@ -71,8 +93,10 @@ void PardaloteSerialTransport::_feed(uint8_t b, unsigned long now) {
 
         case ST_FRAME:
             if (b == 0x00) {        // closing delimiter — decode
+                _state = ST_DELIM;  // the closer doubles as the next opener —
+                                    // set BEFORE decode so a listen-sink switch
+                                    // (which re-begin()s and resets _state) wins
                 _envelopeDone(now);
-                _state = ST_DELIM;  // the closer doubles as the next opener
             } else if (_len < sizeof(_buf)) {
                 _buf[_len++] = b;
             } else {
@@ -99,6 +123,13 @@ void PardaloteSerialTransport::_envelopeDone(unsigned long now) {
     const size_t msgLen = w - 1;                       // last byte is the CRC
     if (_crc8(_buf, msgLen) != _buf[msgLen]) return;   // corrupted — drop, stay synced
 
+    // Listen mode: hand the message to the core's listen handler and never
+    // connect. The handler may promote us to connected mode (a takeover).
+    if (_listening) {
+        if (msgLen > 0 && _onListen) _onListen(_buf, msgLen);
+        return;
+    }
+
     _lastRx = now;
     if (!_connected) {
         _connected = true;
@@ -114,7 +145,17 @@ void PardaloteSerialTransport::_envelopeDone(unsigned long now) {
 // -------------------------------------------------------------------
 void PardaloteSerialTransport::send(const uint8_t* data, size_t len) {
     if (!_connected || len == 0) return;
+    _writeEnvelope(data, len);
+}
 
+// Emit one envelope regardless of _connected — used for the listen-mode
+// nudges before any client is committed.
+void PardaloteSerialTransport::sendUnconnected(const uint8_t* data, size_t len) {
+    if (len == 0) return;
+    _writeEnvelope(data, len);
+}
+
+void PardaloteSerialTransport::_writeEnvelope(const uint8_t* data, size_t len) {
     const uint8_t crc = _crc8(data, len);
     const size_t  total = len + 1;                       // data + CRC
     auto at = [&](size_t i) -> uint8_t { return i < len ? data[i] : crc; };

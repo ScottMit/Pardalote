@@ -90,7 +90,7 @@
 <h2 id="pardalotebegin">Pardalote.begin()</h2>
 <p>Starts Pardalote. Call once in <code>setup()</code>. Three forms:</p>
 <div class="sig sig-ino">Pardalote.<span class="fn">begin</span>()</div>
-<div class="sig sig-ino">Pardalote.<span class="fn">begin</span>(key)</div>
+<div class="sig sig-ino">Pardalote.<span class="fn">begin</span>(PARDALOTE_WIFI)</div>
 <div class="sig sig-ino">Pardalote.<span class="fn">begin</span>(PARDALOTE_SERIAL)</div>
 <table>
 <thead>
@@ -102,20 +102,29 @@
 <tbody>
 <tr>
 <td><code>begin()</code></td>
-<td>The default: joins WiFi (see <a href="wifi.html">WiFi configuration</a>) and starts the WebSocket server.</td>
+<td>The default: joins WiFi (see <a href="wifi.html">WiFi configuration</a>) and starts the WebSocket server, <strong>and</strong> listens on the USB cable. If a browser connects over USB with a deliberate port-picker gesture, the board <strong>drops WiFi and switches to USB</strong> (see <a href="connecting.html#switching-to-usb">switching to USB</a>). One-way — reboot to return to WiFi.</td>
 </tr>
 <tr>
-<td><code>begin(&quot;key&quot;)</code></td>
-<td>As above, plus a <strong>connection key</strong>: only browsers that pass the same key to <a href="connecting.html#connection-keys"><code>connect(ip, { key })</code></a> get in. An accident-prevention latch for shared networks — not security (the key travels unencrypted). Up to 32 characters.</td>
+<td><code>begin(PARDALOTE_WIFI)</code></td>
+<td>WiFi only. Same as <code>begin()</code> but <strong>does not</strong> listen on USB — the opt-out for &quot;nobody grabs my board over the cable.&quot;</td>
 </tr>
 <tr>
 <td><code>begin(PARDALOTE_SERIAL)</code></td>
-<td>Skips WiFi entirely and talks over the <strong>USB cable</strong> instead — the browser connects with <a href="connecting.html#connectserial"><code>connectSerial()</code></a>. No key concept: holding the cable is access.</td>
+<td>Skips WiFi entirely and talks over the <strong>USB cable</strong> only — the browser connects with <a href="connecting.html#connectserial"><code>connectSerial()</code></a>.</td>
 </tr>
 </tbody>
 </table>
-<p>WiFi is the default; serial is an explicit choice. The one exception is the <strong>UNO R4 Minima</strong> — it has no radio, so every <code>begin()</code> form starts the serial transport. There is no runtime WiFi→serial failover on WiFi-capable boards.</p>
+<p>The one exception is the <strong>UNO R4 Minima</strong> — it has no radio, so every <code>begin()</code> form starts the serial transport.</p>
 <p>In serial mode, <code>Serial.print</code> from your sketch still works — the output travels between protocol messages and appears in the browser as the <a href="connecting.html#connectserial"><code>'log'</code> event</a> (and in the Serial Monitor as usual when the browser isn't connected). Don't <code>Serial.write</code> raw binary; text is fine.</p>
+<h2 id="pardaloterequirekey">Pardalote.requireKey()</h2>
+<p>Optional. Call <strong>before</strong> <code>begin()</code> to require a <strong>connection key</strong> — only browsers that pass the same key to <a href="connecting.html#connection-keys"><code>connect(ip, { key })</code></a> or <a href="connecting.html#connection-keys"><code>connectSerial({ key })</code></a> get in. It works over <strong>both</strong> transports and composes with every <code>begin()</code> form.</p>
+<div class="sig sig-ino">Pardalote.<span class="fn">requireKey</span>(key)</div>
+<div class="code-ex"><span class="lang-badge lang-arduino">Arduino</span><pre><code><span class="kt">void</span><span class="w"> </span><span class="nf">setup</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">requireKey</span><span class="p">(</span><span class="s">&quot;robot-arm-3&quot;</span><span class="p">);</span><span class="w">   </span><span class="c1">// optional — before begin()</span>
+<span class="w">  </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">begin</span><span class="p">();</span><span class="w">                     </span><span class="c1">// or begin(PARDALOTE_WIFI) / begin(PARDALOTE_SERIAL)</span>
+<span class="p">}</span>
+</code></pre></div>
+<p>Over WiFi it's an accident-prevention latch against joining a neighbour's board on a shared network. Over USB — where the cable already picks the board — the key becomes a <strong>board-identity check</strong>: a student who grabbed the wrong physical board gets a clear &quot;wrong key for this board&quot; error instead of silently driving it. <strong>Not security</strong> — the key travels unencrypted (over the network, or in the clear on USB). Up to 32 characters.</p>
 <h2 id="pardaloterun">Pardalote.run()</h2>
 <p>Services the connection: handles incoming commands, runs polls and timed moves. Call every pass of <code>loop()</code> — keep the loop non-blocking so it runs often.</p>
 <div class="sig sig-ino">Pardalote.<span class="fn">run</span>()</div>

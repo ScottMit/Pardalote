@@ -83,7 +83,7 @@
       <h1>Camera</h1>
       <p class="lede">MJPEG video and JPEG snapshots from ESP32 camera boards, served over HTTP so video never competes with control messages.</p>
 <p>The camera extension streams MJPEG video and serves JPEG snapshots over a <strong>separate HTTP server</strong> — video never flows through the WebSocket, so it doesn't compete with control messages.</p>
-<p>Requires no third-party library beyond the ESP32 Arduino core (which includes <code>esp_camera</code> and <code>esp_http_server</code>). PSRAM must be present on the board.</p>
+<p>Requires no third-party library beyond the ESP32 Arduino core (which includes <code>esp_camera</code> and <code>esp_http_server</code>). PSRAM must be present <strong>and enabled in the build</strong> — on the Seeed XIAO ESP32S3 that means <strong>Tools → PSRAM → <code>OPI PSRAM</code></strong>. Without it the camera falls back to a single QQVGA buffer in internal RAM (poor image, <code>setResolution()</code> triggers <code>cam_hal: FB-OVF</code>); see <a href="troubleshooting.html#camera-poor-image-quality-stuck-at-low-resolution-or-cam_hal-fb-ovf-in-the-serial-monitor">Troubleshooting</a>.</p>
 <h2 id="arduino-setup">Arduino setup</h2>
 <p>Define your board model <strong>before</strong> including the camera header:</p>
 <div class="code-ex"><span class="lang-badge lang-arduino">Arduino</span><div class="bar">sketch.ino — camera setup</div><pre><code><span class="cp">#define CAMERA_MODEL_WROVER_KIT</span>
@@ -231,10 +231,12 @@
 </tr>
 <tr>
 <td><code>FRAMESIZE_HD</code></td>
-<td>1280×720</td>
+<td>1280×720 — see note</td>
 </tr>
 </tbody>
 </table>
+<p>Call it before or after <code>attach()</code> — either way the chosen size is applied once the stream starts, and it persists across reconnects.</p>
+<p><code>FRAMESIZE_HD</code> and the other largest sizes push the sensor hard; the 16:9 HD mode can trip <code>cam_hal: FB-OVF</code> on some modules (the XIAO's OV2640 among them) and drop the stream. If you hit that, step down to <code>FRAMESIZE_SVGA</code> (800×600), which streams reliably on the XIAO. See <a href="troubleshooting.html#camera-framesize_hd-gives-cam_hal-fb-ovf--neterr_incomplete_chunked_encoding-even-with-psram-on">Troubleshooting</a>.</p>
 <h2 id="setquality">setQuality()</h2>
 <p>JPEG compression level.</p>
 <div class="sig sig-js">arduino.cam.<span class="fn">setQuality</span>(quality)</div>

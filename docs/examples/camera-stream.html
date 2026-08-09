@@ -82,7 +82,7 @@
       <div class="code-ex scroll">
         <span class="lang-badge lang-js">JS</span>
         <div class="bar">sketch.js — the browser side</div>
-        <pre><code><span class="kd">const</span><span class="w"> </span><span class="nx">ARDUINO_IP</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;192.168.x.x&#39;</span><span class="p">;</span><span class="w">   </span><span class="c1">// Change this to your Arduino&#39;s IP</span>
+        <pre><code><span class="kd">const</span><span class="w"> </span><span class="nx">ARDUINO_IP</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;10.1.1.161&#39;</span><span class="p">;</span><span class="w">   </span><span class="c1">// Change this to your Arduino&#39;s IP</span>
 <span class="kd">const</span><span class="w"> </span><span class="nx">CAMERA_PORT</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">82</span><span class="p">;</span>
 
 <span class="kd">let</span><span class="w"> </span><span class="nx">arduino</span><span class="p">;</span>
@@ -94,6 +94,7 @@
 
 <span class="w">    </span><span class="nx">arduino</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">Arduino</span><span class="p">();</span>
 <span class="w">    </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;cam&#39;</span><span class="p">,</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">Camera</span><span class="p">());</span>
+<span class="w">                </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">cam</span><span class="p">.</span><span class="nx">setResolution</span><span class="p">(</span><span class="nx">FRAMESIZE_SVGA</span><span class="p">);</span><span class="w">     </span><span class="c1">// 800×600</span>
 <span class="w">    </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">connect</span><span class="p">(</span><span class="nx">ARDUINO_IP</span><span class="p">);</span>
 
 <span class="w">    </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;ready&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
@@ -225,7 +226,7 @@ HTTP      :82  ──── MJPEG stream ──→  &lt;img src=&quot;http://ip:
 <div class="code-ex"><span class="lang-badge lang-js">JS</span><pre><code><span class="c1">// Resolution — call before or after attach()</span>
 <span class="nx">arduino</span><span class="p">.</span><span class="nx">cam</span><span class="p">.</span><span class="nx">setResolution</span><span class="p">(</span><span class="nx">FRAMESIZE_QVGA</span><span class="p">);</span><span class="w">   </span><span class="c1">// 320×240  ← default</span>
 <span class="nx">arduino</span><span class="p">.</span><span class="nx">cam</span><span class="p">.</span><span class="nx">setResolution</span><span class="p">(</span><span class="nx">FRAMESIZE_VGA</span><span class="p">);</span><span class="w">    </span><span class="c1">// 640×480</span>
-<span class="nx">arduino</span><span class="p">.</span><span class="nx">cam</span><span class="p">.</span><span class="nx">setResolution</span><span class="p">(</span><span class="nx">FRAMESIZE_HD</span><span class="p">);</span><span class="w">     </span><span class="c1">// 1280×720</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">cam</span><span class="p">.</span><span class="nx">setResolution</span><span class="p">(</span><span class="nx">FRAMESIZE_HD</span><span class="p">);</span><span class="w">     </span><span class="c1">// 1280×720 — see Troubleshooting</span>
 
 <span class="c1">// JPEG quality: 0 = best image / highest bandwidth</span>
 <span class="c1">//              63 = worst image / lowest bandwidth</span>
@@ -265,7 +266,7 @@ HTTP      :82  ──── MJPEG stream ──→  &lt;img src=&quot;http://ip:
 </tr>
 </tbody>
 </table>
-<p>Higher resolutions require more bandwidth and may reduce frame rate. QVGA is a good starting point for most WiFi environments.</p>
+<p>Higher resolutions require more bandwidth and may reduce frame rate. QVGA is a good starting point for most WiFi environments. Anything above QQVGA also needs <strong>PSRAM enabled</strong>, and the largest sizes don't work on every sensor — see <a href="#troubleshooting">Troubleshooting</a> below.</p>
 <hr />
 <h2 id="snapshots">Snapshots</h2>
 <p>Capture a single JPEG still without interrupting the stream:</p>
@@ -315,6 +316,16 @@ HTTP      :82  ──── MJPEG stream ──→  &lt;img src=&quot;http://ip:
 <li>Reduce resolution with <code>setResolution(FRAMESIZE_QVGA)</code> or increase quality number (lower quality) with <code>setQuality(20)</code></li>
 <li>Move the Arduino closer to the WiFi access point</li>
 <li>Disable WiFi modem sleep — Pardalote does this automatically with <code>WiFi.setSleep(false)</code></li>
+</ul>
+<p><strong>Image is stuck at 160×120 (QQVGA) and <code>setResolution()</code> won't change it</strong></p>
+<ul>
+<li>Anything above QQVGA needs the board's <strong>PSRAM enabled and working</strong>. Without it the camera falls back to a single QQVGA (160×120) frame buffer in internal RAM, and any <code>setResolution()</code> to a larger size is refused — you'll see <code>[Camera] No PSRAM — using DRAM, forced to QQVGA</code> in the Serial Monitor. Fix PSRAM and the higher resolutions come back.</li>
+<li><strong>Seeed XIAO ESP32S3:</strong> it has 8 MB of octal PSRAM, but you must select it — <strong>Tools → PSRAM → <code>OPI PSRAM</code></strong> (not &quot;QSPI PSRAM&quot;, not &quot;Disabled&quot;). Re-flash; the &quot;No PSRAM&quot; line should be gone.</li>
+<li><strong>ESP32 WROVER:</strong> PSRAM is enabled automatically by the &quot;ESP32 Wrover Module&quot; board, so there's no PSRAM menu to set. If the Serial Monitor shows <code>esp_psram: SPI SRAM memory test fail … writes failed</code>, PSRAM <em>is</em> enabled but the module's chip is failing its power-on test — usually marginal power or a faulty module. Try a full power-cycle with a different USB cable/port, drop <strong>Tools → Flash Frequency → 40 MHz</strong>, and if it persists use a different WROVER (that PSRAM chip is likely bad).</li>
+</ul>
+<p><strong><code>FRAMESIZE_HD</code> stutters or drops the stream (<code>cam_hal: FB-OVF</code> / <code>net::ERR_INCOMPLETE_CHUNKED_ENCODING</code>)</strong></p>
+<ul>
+<li>The largest sizes push the sensor's data rate hard, and HD's 16:9 mode is the flakiest — some modules (the XIAO's OV2640 among them) can't sustain it and drop frames, which shows in the browser console as <code>net::ERR_INCOMPLETE_CHUNKED_ENCODING</code>. Pardalote now rides out the occasional dropped frame rather than closing the stream, but a size that overflows <em>every</em> frame is the sensor's ceiling, not a bug. Step down to <strong><code>FRAMESIZE_SVGA</code> (800×600)</strong>, which streams reliably on the XIAO.</li>
 </ul>
 <p><strong>XIAO ESP32S3 won't connect to WiFi</strong></p>
 <ul>

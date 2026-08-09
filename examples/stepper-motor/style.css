@@ -2,6 +2,8 @@
    Pardalote example — house style
    Matches the website ("Graph Line / Bauhaus"): white paper, graph-paper
    wash, Poppins, 1.5px ink outlines, teal / amber / orange accents.
+   Every example carries a ".brand" line ("Pardalote", 17px, logo yellow
+   #f2b705) above its .heading — keep it when copying (see .brand below).
    Copy this file as-is into new examples so they all stay in step.
    ========================================================================== */
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
@@ -46,6 +48,16 @@ main {
 }
 
 /* ---- header ---- */
+.brand {
+    font-family: 'Poppins', -apple-system, system-ui, sans-serif;
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    color: #f2b705;          /* pardalote yellow — matches "working together" on the home page */
+    margin-bottom: 2px;
+}
+.brand a { color: inherit; text-decoration: none; }
+.brand a:hover { text-decoration: underline; }
 .heading {
     font-size: 22px;
     font-weight: 700;

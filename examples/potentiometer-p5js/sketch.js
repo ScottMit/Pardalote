@@ -29,7 +29,7 @@ function draw() {
 
     // get reading from the Arduino
     let dial = arduino.analogRead(POTPIN);
-    let circleRadius = map(dial, 0, arduino.analogMax, 2, 300);
+    let circleRadius = map(dial, 0, arduino.analogMax, 10, 300);
     // for UNO the ADC range is 0-1023
     // for ESP32 the ADC range is 0-4095
 

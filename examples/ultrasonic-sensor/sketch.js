@@ -83,18 +83,23 @@ function drawUI(distance) {
     textAlign(LEFT);
 
     // Connection status
-    fill(arduino.connected ? TEAL : ORANGE);
-    textSize(14);
-    text(arduino.connected ? 'connected' : 'waiting for connection…', 20, 50);
-
-    // Distance readout
-    if (distance > 0) {
-        fill(INK);
-        textSize(28);
-        text(distance.toFixed(1) + ' cm', 20, 96);
-    } else {
-        fill(GREY);
+    if (arduino.connected){
+        fill(TEAL);
         textSize(14);
-        text('No object detected or out of range', 20, 90);
-    }
+        text('connected', 20, 50);
+        // Distance readout
+        if (distance > 0) {
+            fill(INK);
+            textSize(28);
+            text(distance.toFixed(1) + ' cm', 20, 96);
+        } else {
+            fill(GREY);
+            textSize(14);
+            text('No object detected or out of range', 20, 90);
+        }
+   } else {
+        fill(ORANGE);
+        textSize(14);
+        text('waiting for connection…', 20, 50);
+   }
 }

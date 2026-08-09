@@ -178,7 +178,7 @@ static void _wifiEnterConfig(WifiStore& s) {
 // -------------------------------------------------------------------
 // wifiConfigInit
 // -------------------------------------------------------------------
-void wifiConfigInit(WifiStore& s) {
+void wifiConfigInit(WifiStore& s, PardaloteBootProbe probe) {
 #ifdef PLATFORM_ESP32
     EEPROM.begin(sizeof(WifiStore));
 #endif
@@ -221,14 +221,23 @@ void wifiConfigInit(WifiStore& s) {
 
     // Skip the config window if we just came from it.
     if (!cameFromConfig) {
-        Serial.println(F("Press 'w' within 5 seconds to configure WiFi..."));
+        Serial.println(F("Press 'w' within 5 seconds to configure WiFi (or connect over USB)..."));
         t = millis();
-        while (millis() - t < 5000) {
-            if (Serial.available() && Serial.read() == 'w') {
-                _wifiEnterConfig(s);
-                break;
+        bool done = false;
+        while (!done && millis() - t < 5000) {
+            // Drain everything available each pass (not one byte per delay) so a
+            // USB takeover envelope isn't lost to a full FIFO.
+            while (Serial.available()) {
+                uint8_t b = (uint8_t)Serial.read();
+                if (probe) {
+                    int ev = probe(b);
+                    if (ev == 2) { done = true; break; }   // USB takeover — the core skips WiFi
+                    if (ev == 1) { _wifiEnterConfig(s); done = true; break; }
+                } else if (b == 'w') {
+                    _wifiEnterConfig(s); done = true; break;
+                }
             }
-            delay(50);
+            if (!done) delay(5);
         }
     }
 }

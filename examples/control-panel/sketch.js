@@ -21,6 +21,7 @@ let panelEl      = null;
 let currentBoard = null;   // name of the board currently rendered
 let manualBoard  = false;  // true if the user has manually chosen a board
 let manualDisconnect = false;
+let usbBusy = false;   // board on WiFi, silent USB reconnect refused (see 'usbBusy')
 
 function switchBoard(name) {
     if (!BOARDS[name]) {
@@ -43,9 +44,8 @@ function setup() {
     // render below it in <main> on plain paper
     const main = select('#head');
 
-    const top = createDiv().id('top').parent(main);
-    createDiv('Control panel').class('heading').parent(top);
-    statusEl = createDiv('status: starting…').id('status').parent(top);
+    // Heading + status live in index.html (#top); the sketch just drives status.
+    statusEl = select('#status');
 
     // Connection — WiFi (IP) or USB (Web Serial), remembered per browser
     let r = row(main, 'Board IP');
@@ -84,8 +84,12 @@ function setup() {
     });
     arduino.on('disconnect', () => {
         setConnected(false);
-        if (!manualDisconnect) setStatus('reconnecting…');
+        if (usbBusy) { usbBusy = false; setStatus('board is on WiFi — press Connect to switch it to USB'); }
+        else if (!manualDisconnect) setStatus('reconnecting…');
     });
+    // 'usbBusy': a silent USB reconnect reached a board that's on WiFi — it won't
+    // switch without a picker gesture. The 'disconnect' that follows shows the prompt.
+    arduino.on('usbBusy', () => { usbBusy = true; });
 
     // — Initial control panel: last board used, else the first known —
     const initial = BOARDS[saved.board] ? saved.board : Object.keys(BOARDS)[0];

@@ -8,8 +8,14 @@
 //
 // Wiring: two hobby servos on any two PWM-capable pins (defaults 9 and 10 in
 // the web page). Give the servos their own 5V supply with a common ground.
+
 #include <Pardalote.h>
 #include <PardaloteServo.h>
 
-void setup() { Pardalote.begin(); }
-void loop()  { Pardalote.run();   }
+void setup() {
+    Pardalote.begin();
+}
+
+void loop() {
+    Pardalote.run();
+}

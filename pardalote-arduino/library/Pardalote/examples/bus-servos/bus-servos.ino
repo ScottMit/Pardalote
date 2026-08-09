@@ -29,11 +29,7 @@
 
 void setup() {
     Pardalote.begin();
-    // USB instead of WiFi? Comment the line above and use this one, then pick
-    // "USB" in the browser example. The servo bus stays on Serial1 (D0/D1) —
-    // only the browser link moves to USB. Handy for ruling WiFi in or out when
-    // the board resets near a servo's firmware limit.
-    // Pardalote.begin(PARDALOTE_SERIAL);
+    // Connect on either USB or WiFi. Moving from USB to WiFi requires a board reset.
 }
 
 void loop() {

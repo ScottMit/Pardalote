@@ -15,6 +15,7 @@
     --orange:   #D3542B;   /* primary accent / warnings   */
     --teal:     #3FA9A0;   /* live / active               */
     --amber:    #E8A33D;   /* highlights / secondary      */
+    --green:    #3E9C54;   /* connected                   */
     --line:     #2B2420;   /* structural outlines         */
     --hair:     #d9d2c2;   /* soft dividers               */
     --grid:     #ededed;   /* graph-paper lines           */
@@ -45,6 +46,16 @@ main {
 }
 
 /* ---- header ---- */
+.brand {
+    font-family: 'Poppins', -apple-system, system-ui, sans-serif;
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    color: #f2b705;          /* pardalote yellow — matches "working together" on the home page */
+    margin-bottom: 2px;
+}
+.brand a { color: inherit; text-decoration: none; }
+.brand a:hover { text-decoration: underline; }
 .heading {
     font-size: 22px;
     font-weight: 700;
@@ -101,9 +112,13 @@ button, select {
 }
 button:hover { background: var(--ink); color: #fff; }
 
-/* primary action (Connect, etc.) */
+/* primary action (Connect): hover previews the green "connected" highlight */
 button.primary { background: var(--ink); color: #fff; }
-button.primary:hover { background: var(--orange); border-color: var(--orange); }
+button.primary:hover { background: var(--green); border-color: var(--green); color: #fff; }
+
+/* connected state (Connect button, WiFi or USB) */
+button.connected { background: var(--green); border-color: var(--green); color: #fff; }
+button.connected:hover { background: var(--green); border-color: var(--green); color: #fff; }
 
 /* highlighted toggle state */
 button.active { background: var(--teal); border-color: var(--teal); color: #fff; }

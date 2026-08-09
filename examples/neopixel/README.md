@@ -1,12 +1,12 @@
 # NeoPixel
 
-An interactive p5.js colour mixer that drives a NeoPixel LED strip in real time. Move the mouse — across the canvas for hue, up and down for brightness — and the strip follows the colour of the page.
+An interactive p5.js colour mixer that drives a NeoPixel LED strip in real time. Move the mouse across the canvas — left/right for hue, up/down for brightness — and the strip follows the colour under the cursor. Hover the centre for white.
 
 ## What This Example Does
 
-- Draws an HSB colour field on a 600×600 p5.js canvas
-- Samples the canvas colour at the mouse position and sets all 8 LEDs to match
-- The circle on screen shows the colour currently sent to the strip
+- Draws an HSB colour field on a 600×400 p5.js canvas
+- Samples the canvas colour under the mouse and sets all 8 LEDs to match — or white when the cursor is over the centre circle
+- The circle in the middle previews the colour currently sent to the strip
 
 ## Hardware Requirements
 
@@ -20,7 +20,7 @@ An interactive p5.js colour mixer that drives a NeoPixel LED strip in real time.
 |---|---|
 | VCC (red) | 5 V |
 | GND (black) | GND |
-| Data (white/yellow) | Pin 6 (configurable in sketch.js) |
+| Data (white/yellow) | Pin 11 (configurable in sketch.js) |
 
 For strips longer than ~30 LEDs use an external 5 V supply. Connect all grounds (Arduino, strip, supply) together. The data line still goes to the Arduino pin.
 
@@ -76,36 +76,40 @@ Install Pardalote itself by copying `pardalote-arduino/library/Pardalote/` into 
 let ArduinoIP = '192.168.1.42';   // your Arduino's IP
 ```
 
-To change the pin or number of LEDs, edit the `init()` call:
+To change the pin or number of LEDs, edit the two variables near the top:
 
 ```javascript
-arduino.strip.init(6, 8);     // pin 6, 8 pixels
+let pixelPin  = 11;   // data pin the strip is wired to
+let numPixels = 8;    // how many LEDs on the strip
 ```
 
 ### 3. Open the example
 
-Open `index.html` in a browser. Move the mouse — the page becomes the colour you mix, and the LEDs follow it. The dots along the bottom preview the strip.
+Open `index.html` in a browser. Move the mouse across the colour field — the LEDs follow the colour under the cursor, and the circle in the middle previews it. Hover the centre for white.
 
 ## How It Works
 
 ```javascript
 arduino = new Arduino();
-arduino.connect(ArduinoIP);
+arduino.add('strip', new NeoPixel());   // register the extension before connecting
 
-// Register the NeoPixel extension before connecting
-arduino.add('neoStrip1', new NeoPixel());
-arduino.strip.init(6, 8);          // pin 6, 8 pixels
-arduino.strip.setBrightness(50);   // 0–255
-arduino.strip.clear();
-arduino.strip.show();
+// configure the strip once the board is ready
+arduino.on('ready', () => {
+    arduino.strip.init(pixelPin, numPixels);  // pin 11, 8 pixels
+    arduino.strip.setBrightness(50);          // 0–255
+    arduino.strip.clear();
+    arduino.strip.show();
+});
+
+arduino.connect(ArduinoIP);
 ```
 
-In `draw()`, colour at the mouse position is sampled from the canvas and sent to the strip:
+In `draw()`, the colour under the mouse is sampled from the canvas and sent to the strip (or white when the cursor is over the centre circle):
 
 ```javascript
 let pixelColor = get(mouseX, mouseY);
 let neoColor = arduino.strip.Color(red(pixelColor), green(pixelColor), blue(pixelColor));
-arduino.strip.fill(neoColor, 0, 8);
+arduino.strip.fill(neoColor, 0, numPixels);
 arduino.strip.show();    // must call show() to push changes to the LEDs
 ```
 
@@ -124,7 +128,7 @@ Changes are buffered locally until `show()` is called — this means you can set
 ## Troubleshooting
 
 **"LEDs don't light up"**
-- Check VCC → 5 V, GND → GND, data → pin 6
+- Check VCC → 5 V, GND → GND, data → pin 11
 - Verify the sketch has `#include <PardaloteNeoPixel.h>`
 - Try a lower brightness: `arduino.strip.setBrightness(20)`
 - Always call `show()` after setting colours
@@ -132,7 +136,7 @@ Changes are buffered locally until `show()` is called — this means you can set
 **"Wrong colours"**
 - Most WS2812B strips use `NEO_GRB`. Try:
   ```javascript
-  arduino.strip.init(6, 8, NEO_GRB + NEO_KHZ800);
+  arduino.strip.init(11, 8, NEO_GRB + NEO_KHZ800);
   ```
 - SK6812 RGBW strips use `NEO_GRBW + NEO_KHZ800`
 

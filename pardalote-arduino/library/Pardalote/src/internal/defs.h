@@ -65,17 +65,32 @@
 #define CMD_PONG          0x09  // Arduino → JS: heartbeat response
 #define CMD_SYNC_COMPLETE 0x0A  // Arduino → JS: all announce frames sent; JS fires 'ready'
 #define CMD_MESSAGE       0x0B  // Both ways: user-defined key/value message (see Message Channel below)
-#define CMD_AUTH          0x0C  // Connection key (WebSocket transport only — the serial transport
-                                // implies physical possession and skips auth entirely).
-                                // JS → Arduino: no params + payload: UTF-8 key. Sent as the FIRST
-                                //   frame after the socket opens when connect() was given a key.
-                                // Arduino → JS: [reason] then the board closes the socket —
+#define CMD_AUTH          0x0C  // Connection key — set on the board with requireKey(), works over
+                                // BOTH transports. Over WiFi it latches against the wrong board on
+                                // a shared network; over USB the cable already picks the board, so
+                                // the key is a board-IDENTITY check ("is this the board my sketch
+                                // expects?") — it catches a student grabbing the wrong physical board.
+                                // JS → Arduino: no params + payload: UTF-8 key. Sent first after the
+                                //   socket opens (WiFi) or in the serial probe loop (USB).
+                                // Arduino → JS: [reason] then the board drops the client —
                                 //   1 = board requires a key and none arrived in time,
                                 //   2 = wrong key.
                                 // Success sends no AUTH reply: the normal HELLO is the acceptance.
                                 // This is an accident-prevention latch, not security: the key
-                                // crosses the network in cleartext (ws://, no TLS).
-// Next free core cmd: 0x0D.
+                                // crosses the wire in cleartext (ws:// no TLS, or plain over USB).
+#define CMD_SERIAL_BUSY   0x0D  // Arduino → JS (serial only): a WiFi-active board that is LISTENING
+                                // for a USB takeover received a plain probe (no takeover flag). It
+                                // means "I'm on WiFi — reconnect with a picker gesture to switch me
+                                // to USB." The board stays on WiFi. JS surfaces it as 'usbBusy' and
+                                // stops probing (no reconnect churn). See the transport listen/switch.
+#define CMD_REBOOT        0x0E  // Arduino → JS (serial): sent once at the very top of begin(), before
+                                // the boot-watch window. A machine-readable "I just (re)booted" marker
+                                // (a real framed message, NOT the human "=== Pardalote ===" banner —
+                                // that stays cosmetic). A browser still holding the port from a prior
+                                // session sees it and immediately resumes takeover-probing, so its probe
+                                // lands in the boot-watch window and the board switches straight back to
+                                // serial — the fast recovery from a reset while USB-connected.
+// Next free core cmd: 0x0F.
 
 // -------------------------------------------------------------------
 // WebSocket client capacity — shared by the core (per-client pin read
@@ -86,15 +101,22 @@
 #define PARDALOTE_MAX_CLIENTS 4
 
 // -------------------------------------------------------------------
-// Transport selection — Pardalote.begin(PARDALOTE_SERIAL) speaks the
-// same binary protocol over USB serial instead of WiFi + WebSocket
-// (COBS-framed with a CRC8 — see internal/serial_transport.h). WiFi is
-// the default on WiFi-capable boards (no runtime failover to serial);
-// on boards with no radio (UNO R4 Minima) every begin() form starts
-// serial, the only transport the hardware can have. The value is an
-// API token, not a wire constant.
+// Transport selection — tokens for begin(int). Values are API tokens,
+// not wire constants.
+//   begin()                 — WiFi + WebSocket AND listen on USB for a
+//                             deliberate (picker-gesture) takeover; the
+//                             board drops WiFi and switches to USB when one
+//                             arrives (one-way, reboot to return to WiFi).
+//   begin(PARDALOTE_WIFI)   — WiFi only; does NOT listen on USB (opt-out
+//                             so nobody grabs the board over the cable).
+//   begin(PARDALOTE_SERIAL) — USB serial only; WiFi never started. Speaks
+//                             the same binary protocol over Serial, COBS-
+//                             framed with a CRC8 (see serial_transport.h).
+// On boards with no radio (UNO R4 Minima) every form starts serial, the
+// only transport the hardware can have.
 // -------------------------------------------------------------------
 #define PARDALOTE_SERIAL 1
+#define PARDALOTE_WIFI   2
 
 // Longest connection key begin("key") accepts (excl. NUL). Longer keys
 // are truncated with a Serial warning.

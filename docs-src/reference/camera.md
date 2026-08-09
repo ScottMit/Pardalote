@@ -3,7 +3,7 @@ lede: MJPEG video and JPEG snapshots from ESP32 camera boards, served over HTTP 
 ---
 The camera extension streams MJPEG video and serves JPEG snapshots over a **separate HTTP server** — video never flows through the WebSocket, so it doesn't compete with control messages.
 
-Requires no third-party library beyond the ESP32 Arduino core (which includes `esp_camera` and `esp_http_server`). PSRAM must be present on the board.
+Requires no third-party library beyond the ESP32 Arduino core (which includes `esp_camera` and `esp_http_server`). PSRAM must be present **and enabled in the build** — on the Seeed XIAO ESP32S3 that means **Tools → PSRAM → `OPI PSRAM`**. Without it the camera falls back to a single QQVGA buffer in internal RAM (poor image, `setResolution()` triggers `cam_hal: FB-OVF`); see [Troubleshooting](troubleshooting.html#camera-poor-image-quality-stuck-at-low-resolution-or-cam_hal-fb-ovf-in-the-serial-monitor).
 
 ## Arduino setup
 
@@ -75,7 +75,11 @@ Frame size, using constants that match the ESP32 camera `framesize_t` enum.
 | `FRAMESIZE_HVGA` | 480×320 |
 | `FRAMESIZE_VGA` | 640×480 |
 | `FRAMESIZE_SVGA` | 800×600 |
-| `FRAMESIZE_HD` | 1280×720 |
+| `FRAMESIZE_HD` | 1280×720 — see note |
+
+Call it before or after `attach()` — either way the chosen size is applied once the stream starts, and it persists across reconnects.
+
+`FRAMESIZE_HD` and the other largest sizes push the sensor hard; the 16:9 HD mode can trip `cam_hal: FB-OVF` on some modules (the XIAO's OV2640 among them) and drop the stream. If you hit that, step down to `FRAMESIZE_SVGA` (800×600), which streams reliably on the XIAO. See [Troubleshooting](troubleshooting.html#camera-framesize_hd-gives-cam_hal-fb-ovf--neterr_incomplete_chunked_encoding-even-with-psram-on).
 
 ## setQuality()
 

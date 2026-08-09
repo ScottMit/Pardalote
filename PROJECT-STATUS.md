@@ -1,10 +1,10 @@
 # Pardalote — project status & handoff
 
 Working notes for continuing development. Pardalote is a browser-JS ⇄ Arduino
-library: the browser talks to the board over a WebSocket (custom binary
-protocol); the board runs the user's sketch plus opt-in extensions. Goal: let
-design students drive real hardware (servos, steppers, bus servos, LEDs, …)
-from p5.js with zero toolchain, eventually with LLM control.
+library: the browser talks to the board over USB or WebSocket (custom binary
+protocol); the board runs Pardalote plus opt-in extensions alongside the user's sketch. Goal: let
+design students drive real hardware (sensors, servos, steppers, bus servos, LEDs, …)
+from either Arduino or p5.js with zero toolchain.
 
 > **Read this first, then read the [README](README.md).** The README documents
 > the *public API*; this file captures *state, rationale, and what's left* —
@@ -254,13 +254,14 @@ plus two stub-fidelity fixes — `constrain` should be a macro, `IPAddress` need
   steps one past then snaps back (skip the step on the clamp tick).
 
 **Still unverified on hardware** — SC-series, sketch-created
-stepper/busservo/NeoPixel/Ultrasonic/IMU, the UNO R4 extension/actuator paths for
+stepper/busservo/NeoPixel/Ultrasonic/IMU, and the UNO R4 extension/actuator paths for
 everything EXCEPT bus servos (UNO R4 core transport, PWM, and now **bus servos**
-are confirmed — servo/stepper/NeoPixel/ultrasonic/IMU on the R4 remain open), and
-the camera. (Browser-driven servo, stepper, NeoPixel, ultrasonic, IMU and the
+are confirmed — servo/stepper/NeoPixel/ultrasonic/IMU on the R4 remain open).
+(Browser-driven servo, stepper, NeoPixel, ultrasonic, IMU and the
 whole messaging channel are now **confirmed on ESP32** — see the Phase 0–11 bench
 log above. **Bus servos are now confirmed on UNO R4, ESP32-WROVER and ESP32-C5,
-over WiFi and USB — see the entry just below.**)
+over WiFi and USB**, and **the camera is now confirmed on the XIAO ESP32S3** —
+see the two entries just below.)
 Details:
 
 ### ✅ Bus servos confirmed on hardware (2026-08 — UNO R4 WiFi, ESP32-WROVER, FireBeetle 2 ESP32-C5)
@@ -280,10 +281,55 @@ Exercised via the **bus-servos** and **leader-follower** examples
 `PLATFORM_ESP32` + custom-pin `Serial1.begin(baud, SERIAL_8N1, rx, tx)` on both
 the WROVER and the new C5 core. **Also the first confirmation of bus servos over
 the USB serial transport** (previously zero bench time) — including the UNO R4's
-native-USB CDC path. Still open on bus servos: **SC-series**, the
-`IOTimeOut`/range-clamp **robustness fixes (loose end 0)** — the R4 works while
-servos answer; that edge is the WiFi hang when a servo *stops* answering —
-`done`-poll timing edges, and sketch-created bus servos.
+native-USB CDC path. The `IOTimeOut`/range-clamp **robustness fixes (loose end
+0)** are now **landed** (2026-08) — the WiFi/JS hang when a servo *stops*
+answering (unplugged, faulted, or driver-board power loss) is fixed in firmware;
+**needs a re-upload to confirm on the bench.** Still open on bus servos:
+**SC-series**, `done`-poll timing edges, and sketch-created bus servos.
+
+### ✅ Camera confirmed on hardware (2026-08 — Seeed XIAO ESP32S3 Sense)
+**First camera bench time on any board** — the MJPEG-stream + snapshot path
+(`PardaloteCamera.h` + `camera.js`, `DEVICE_CAMERA 204`, `CMD_CAMERA_INIT/
+SET_RES/SET_QUALITY 0x30–0x32`) is now real-hardware-confirmed on the XIAO
+ESP32S3 over WiFi (camera is WiFi-only — the HTTP server is separate from the
+WebSocket). Confirmed working: `attach(82)` → HTTP server + live MJPEG stream in
+the browser, `setResolution()` **both before and after `attach()`** (see the fix
+below), quality changes, and resolution surviving a reconnect.
+
+**The gotcha that ate the first session — enable OPI PSRAM.** The XIAO ESP32S3
+(an ESP32-**S3R8**) has 8 MB of *octal* PSRAM, but the Arduino IDE defaults can
+leave `psramFound()` returning false. Symptom chain: Serial prints
+`[Camera] No PSRAM — using DRAM, forced to QQVGA`, the camera is pinned to QQVGA
+in DRAM, and any resolution change spams `cam_hal: FB-OVF` (the larger frame
+can't fit the single DRAM buffer) with a broken stream. **Fix: Tools → PSRAM →
+`OPI PSRAM`** (not "QSPI PSRAM", not Disabled). With PSRAM up, the init takes the
+`fb_count = 2` / `CAMERA_FB_IN_PSRAM` branch and resolution changes work. Now
+documented in `troubleshooting.md` + `camera.md`.
+
+**Three fixes landed + bench-verified this session:**
+- **`setResolution()`/`setQuality()` before `attach()` now works.** The board
+  reliably changes frame size only via the post-init `set_framesize()` path, so
+  `camera.js` `_sendInit()` now **replays** the desired framesize + quality right
+  after `CMD_CAMERA_INIT`. This makes the documented "call before or after
+  attach()" true, and — bonus — keeps resolution/quality in sync **across a
+  reconnect** (a reconnect re-inits the board at its defaults; the replay
+  re-applies the JS-side state). Verified on the bench.
+- **No-PSRAM set-res guard.** When the camera comes up in the DRAM/QQVGA
+  fallback (`_dramFallback`), `CMD_CAMERA_SET_RES` is refused with a clear
+  Serial line instead of guaranteeing FB-OVF. (Belt-and-braces — a working XIAO
+  never enters this path once OPI PSRAM is on.)
+- **Stream survives a dropped frame.** `_streamHandler` now skips up to 4
+  consecutive failed captures and only closes on the 5th, so a *transient*
+  FB-OVF (e.g. requesting `FRAMESIZE_HD`, which pushes the OV2640 too hard) no
+  longer tears down the HTTP connection with `ERR_INCOMPLETE_CHUNKED_ENCODING`.
+  **HD deliberately left available, not clamped** (Scott's call) — it works on
+  some sensors; the example README + `camera.md` note that it may FB-OVF on the
+  XIAO and to step down to **`FRAMESIZE_SVGA` (800×600)**, the reliable ceiling
+  here. A size that overflows *every* frame is the sensor's limit, not a bug.
+
+Still open on the camera: **sketch-created camera is deliberately not built**
+(singleton, ESP32-only — see the sketch-attach note below); other camera boards
+(WROVER-KIT, AI-Thinker, etc.) remain structural-only.
 
 **Still to confirm on real hardware** (items above are done; these remain — see the
 Phase 0–11 bench log for what the 2026-07 ESP32 run already cleared):
@@ -434,6 +480,22 @@ Phase 0–11 bench log for what the 2026-07 ESP32 run already cleared):
     board's Arduino + UI fields; `refreshConnectBtn(key)` toggles
     `Connect`/`Connected` + the `connected` class on `'ready'`/`'disconnect'`;
     `applyR4Pins(key)` / `applyTransport(key)` for the lock + IP-hide.
+  - **`'usbBusy'` handling (2026-08, listen-and-switch feature):** since the
+    standard connects with `connectSerial(PROMPT)` (always a gesture → the board
+    switches), `usbBusy` only fires on a *silent auto-reconnect* to a board that
+    came back on WiFi. Without a handler the `disconnect` that follows shows a
+    misleading "reconnecting…" (reconnect is actually disabled). Canonical snippet
+    to duplicate (a flag, because `'usbBusy'` fires just before `'disconnect'` and
+    `updateStatus()`/`setStatus()` would otherwise clobber the message):
+    ```js
+    let usbBusy = false;
+    arduino.on('disconnect', () => { /* …existing… */
+        if (usbBusy) { usbBusy = false; setStatus('board is on WiFi — press Connect to switch it to USB'); }
+        else if (!manualDisconnect) setStatus('reconnecting…'); });
+    arduino.on('usbBusy', () => { usbBusy = true; });
+    ```
+    Rolled into all seven tools (leader-follower uses per-board `leaderUsbBusy`/
+    `followerUsbBusy`). See [[listen-and-switch-transport]] / `PLAN-listen-and-switch.md`.
   - **Rejected**: a shared `examples/_lib/connect.js` — DRYer but adds a
     dependency that breaks copy-paste; duplication + this canonical note is the
     deliberate trade. Supersedes the [[deferred-modernise-shared-example-uis]]
@@ -1163,39 +1225,49 @@ it. See `src/internal/defs.h`.
    of dropped frames doesn't spam. Cheap, and it turns a green-tick-but-dead
    mystery into a one-line diagnosis.
 
-0. **Bus-servo robustness — two deferred fixes (2026-08, from a UNO R4 bench
-   session).** Root cause found and worth acting on before 1.0. When a bus
-   servo stops answering — wires jostled loose by a violent move, a servo
-   stalled/faulted at a firmware limit, or physically unplugged — the SCServo
-   library's blocking read (`SCSerial::readSCS`, `IOTimeOut = 100` ms) stalls
-   `loop()` for ~100 ms per failed transaction (up to ~300–400 ms with line
-   noise: `checkHead` + three `readSCS` calls). On the UNO R4 that is *exactly*
+0. **✅ DONE (2026-08) — Bus-servo robustness, two fixes.** Root cause found on
+   a UNO R4 bench session, then confirmed to bite **any WebSocket board, not
+   just the R4**. When a bus servo stops answering — wires jostled loose by a
+   violent move, a servo stalled/faulted at a firmware limit, physically
+   unplugged, or the driver board losing power (Scott's report: servo-board
+   power drop takes the WiFi/JS link down on both FireBeetle C5 and
+   ESP32-WROVER) — the SCServo library's blocking read (`SCSerial::readSCS`,
+   `IOTimeOut = 100` ms) stalls `loop()` for ~100 ms per failed transaction (up
+   to ~300–400 ms with line noise), ×N polled servos (~600 ms for six). That
+   starves `_ws.loop()`: on **ESP32** the WebSocket drops (WS is serviced in
+   `run()` → `_ws.loop()` before `loopAll()`); on the **UNO R4** it's *exactly*
    the documented `delay(100)` WiFiS3 killer (see the "UNO R4 WebSocket / PWM
-   lag" entry + arduinoWebSockets #909): every poll cycle blocks, the WebSocket
-   drops, and while the no-answer persists it never recovers — board looks hung
-   (no reboot banner, no serial msg, browser can't reconnect). **Confirmed on
-   the bench** by pulling the TX/RX/GND wires live: WiFi died, no recovery,
-   nothing on serial. This unifies the earlier "board resets near a firmware
-   limit" and "resets on a wild swing" reports — it's not power (Scott's rig is
-   isolated) and not a crash; it's a starved loop. Two fixes:
-   - **(a) Shrink `IOTimeOut`.** It's a public member of `SCSerial`, inherited
-     by `_st`/`_sc`, so set `_st.IOTimeOut = _sc.IOTimeOut = ~5` ms in the bus
-     setup (ensureBus/configureBus) — no library edit. A servo at 1 Mbps
-     answers in ~100 µs, so 100 ms is a 1000× margin; the shorter timeout only
-     affects the *failure* path (good reads already return as soon as the bytes
-     arrive), keeping `loop()` tight on a no-answer. This is the bus-servo
-     analogue of the `Wire.setTimeOut(50)` I2C fix already in the code.
-   - **(b) Range-clamp commanded position in the library.** `write()` (and
-     `_memberWrite`/`_memberSetEncode`/gesture) currently clamp only to soft
-     limits; with none set, an out-of-range count sails through, the servo
-     wraps it mod-4096 and swings the wrong way. Always `constrain(pos, 0,
-     resolution-1)` regardless of soft limits — a bus servo can't physically
-     exceed its count range, so a UI math slip should never reach the wire.
-   - **Done already (2026-08):** the *example* overflow that provoked this
+   lag" entry + arduinoWebSockets #909). Either way the board looks hung — no
+   reboot banner, no serial msg, browser can't reconnect. **Confirmed on the
+   bench** by pulling TX/RX/GND live and by servo-board power loss. This unifies
+   the earlier "board resets near a firmware limit" and "resets on a wild swing"
+   reports — it's not power to the *host* and not a crash; it's a starved loop.
+   Two fixes, both now landed:
+   - **(a) ✅ Shrunk `IOTimeOut` to 5 ms.** `IOTimeOut` is a public member of
+     `SCSerial`, inherited by `_st`/`_sc`; set `_st.IOTimeOut = _sc.IOTimeOut =
+     5` in `ensureBus()` (`PardaloteBusServo.h`) — no library edit. A servo at
+     1 Mbps answers in well under 1 ms, so 5 ms is a big margin; the shorter
+     timeout only affects the *failure* path (good reads return as soon as the
+     bytes arrive), capping a fully-silent six-servo poll at ~30 ms instead of
+     ~600 ms and keeping `loop()` tight. Bus-servo analogue of the
+     `Wire.setTimeOut(50)` I2C fix already in the code. **Needs a re-upload to
+     each board.**
+   - **(b) ✅ Range-clamp commanded position, firmware + JS.** An out-of-range
+     count wraps mod-resolution and swings the servo the wrong way. Firmware:
+     `writePos()` now `constrain(pos, 0, isSC?1023:4095)` (the choke-point for
+     browser write, sketch write, and gesture), the SyncWrite handler clamps
+     its own `positions[]` (it bypasses `writePos`), and `echoTarget()` mirrors
+     the clamp so the browser caches the value the board actually applied. JS:
+     `busServo.js` `_clampPos()` now always clamps to `[0, resolution-1]` before
+     soft limits — the single choke-point for `write`/`writeTimed`/`_member*`/
+     gesture, so the amber needle, `whenDone` timing, and group speed-matching
+     stay honest. Firmware clamp is the hardware safety net (covers non-browser
+     sources); JS clamp keeps the browser's model truthful. **Firmware side
+     needs a re-upload.**
+   - **Done earlier (2026-08):** the *example* overflow that provoked this
      (bus-servos dial `atan2()+HALF_PI` fed to an unclamped `map(…,-PI,PI,…)`,
-     overshooting to ~5120) is fixed — the mouse→counts result is now wrapped
-     into `[0, resolution)`. That closes the specific trigger; (a) and (b) are
-     the defence-in-depth so *no* bad count or dead servo can wedge the R4.
+     overshooting to ~5120) was already fixed — the mouse→counts result is
+     wrapped into `[0, resolution)`. (a)/(b) are the defence-in-depth on top.
    - **Strategic framing (Scott's call, 2026-08):** don't chase R4-WiFi
      bulletproofing forever — the RA4M1 + WiFiS3 "keep `loop()` tight" rule is
      architectural. The blocking surface is finite (I2C ✅, bus-servo UART ← (a),

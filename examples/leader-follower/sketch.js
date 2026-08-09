@@ -70,6 +70,7 @@ const SYNC_Y = 168, FLIP_Y = 192, BTN_W = 58, BTN_H = 18;
 let leader, follower, followerGroup;
 let leaderReady = false, followerReady = false;
 let leaderManualDisc = false, followerManualDisc = false;
+let leaderUsbBusy = false, followerUsbBusy = false;   // board on WiFi, silent USB reconnect refused
 let relayActive = false, relayTimer = null, lastRelayed = {};
 
 // Per-joint mapping: sync captures both arms' current positions as matched
@@ -117,9 +118,8 @@ function boardCtx(key) {
 function setup() {
     const main = select('main');
 
-    const top = createDiv().id('top').parent(main);
-    createDiv('Leader → Follower').class('heading').parent(top);
-    statusEl = createDiv('status: starting…').id('status').parent(top);
+    // Heading + status live in index.html (#top); the sketch just drives status.
+    statusEl = select('#status');
 
     // Each board: WiFi/USB transport, IP (WiFi only), connect/disconnect, and
     // its bus-UART RX/TX pins (locked to 1/2 when a UNO R4 connects).
@@ -157,11 +157,17 @@ function setup() {
 
     leader.on('ready', onLeaderReady);
     leader.on('disconnect', () => { leaderReady = false; onBoardDisconnected('leader'); if (relayActive) stopRelay();
-        if (!leaderManualDisc) updateStatus('leader reconnecting…'); else updateStatus(); });
+        if (leaderUsbBusy) { leaderUsbBusy = false; updateStatus('leader is on WiFi — press Connect to switch it to USB'); }
+        else if (!leaderManualDisc) updateStatus('leader reconnecting…'); else updateStatus(); });
+    // 'usbBusy': a silent USB reconnect reached a board that's on WiFi — it won't
+    // switch without a picker gesture. The 'disconnect' that follows shows the prompt.
+    leader.on('usbBusy', () => { leaderUsbBusy = true; });
 
     follower.on('ready', onFollowerReady);
     follower.on('disconnect', () => { followerReady = false; onBoardDisconnected('follower'); if (relayActive) stopRelay();
-        if (!followerManualDisc) updateStatus('follower reconnecting…'); else updateStatus(); });
+        if (followerUsbBusy) { followerUsbBusy = false; updateStatus('follower is on WiFi — press Connect to switch it to USB'); }
+        else if (!followerManualDisc) updateStatus('follower reconnecting…'); else updateStatus(); });
+    follower.on('usbBusy', () => { followerUsbBusy = true; });
 
     // Follower group — writes all six joints in ONE Feetech SyncWrite packet
     // (one WebSocket message) so they move together each relay tick.

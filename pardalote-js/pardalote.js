@@ -32,7 +32,14 @@ const CMD_SYNC_COMPLETE = 0x0A;  // Arduino → JS: all announce frames sent; tr
 const CMD_MESSAGE       = 0x0B;  // Both ways: user-defined key/value message (see the message channel)
 const CMD_AUTH          = 0x0C;  // JS → Arduino: connection key (payload). Arduino → JS: [reason]
                                  // rejection (1 = key required, 2 = wrong key) — fires 'authFail'
-                                 // and stops auto-reconnect. WebSocket transport only.
+                                 // and stops auto-reconnect. Works over both transports (over USB
+                                 // the key is a board-identity check — catches the wrong board).
+const CMD_SERIAL_BUSY   = 0x0D;  // Arduino → JS (serial): a WiFi-active board that got a plain
+                                 // (gesture-less) probe. "I'm on WiFi — reconnect with a picker
+                                 // gesture to switch me to USB." Fires 'usbBusy', stops probing.
+const CMD_REBOOT        = 0x0E;  // Arduino → JS (serial): sent at boot. A browser still holding the
+                                 // port resumes takeover-probing so the board switches straight back
+                                 // to serial — fast recovery from a reset while USB-connected.
 
 // Device-scoped share command — the VALUE is reserved across all extension
 // device IDs. Ar→JS: [logicalId] + payload: name. The core intercepts it
@@ -474,7 +481,7 @@ function _serialEnvelope(msg) {
 // even if it never noticed the previous page go away.
 // -------------------------------------------------------------------
 class _SerialLink {
-    constructor(port) {
+    constructor(port, opts = {}) {
         this.port      = port;
         this.onopen    = null;
         this.onclose   = null;
@@ -482,10 +489,18 @@ class _SerialLink {
         this.onmessage = null;
         this.onlog     = null;
 
+        // takeover: probe carries the "switch a WiFi board to USB" flag (only
+        // when a picker gesture authorised it). key: board-identity key, sent
+        // as a CMD_AUTH frame in the probe loop when set.
+        this._takeover = !!opts.takeover;
+        this._key      = opts.key || null;
+
         this._writer = null;
         this._reader = null;
         this._closed = false;
         this._probeTimer = null;
+        this._noReplyTimer = null;
+        this._sawReply = false;
 
         // Envelope decoder state: 0 = text, 1 = just saw 0x00, 2 = in frame.
         this._state = 0;
@@ -504,11 +519,28 @@ class _SerialLink {
         this._readPromise = this._readLoop();   // deliberately not awaited here
         if (this.onopen) this.onopen();
         // Probe until the board answers (it may be rebooting — opening the
-        // port toggles DTR, which resets many boards).
-        this._probeTimer = setInterval(() => {
-            try { this.send(encodeFrame(CMD_HELLO, 0, [])); } catch (_) {}
-        }, 500);
-        try { this.send(encodeFrame(CMD_HELLO, 0, [])); } catch (_) {}
+        // port toggles DTR, which resets many boards). Each tick sends the key
+        // first (if set) then the HELLO probe carrying the takeover flag, so a
+        // board that DTR-reset into WiFi-listen mode still sees both after it
+        // comes back up.
+        this._probeTimer = setInterval(() => this._probe(), 500);
+        this._probe();
+        // One-time "no response yet" hint if nothing answers within the grace
+        // window (keep probing — an ESP32 may still be rebooting).
+        this._noReplyTimer = setTimeout(() => {
+            if (this._sawReply || this._closed) return;
+            if (this.onlog) this.onlog(
+                'No response from the board over USB yet — it may still be booting, ' +
+                'may not be running a Pardalote sketch, or may be WiFi-only ' +
+                '(begin(PARDALOTE_WIFI) boards do not accept USB).');
+        }, 4500);
+    }
+
+    _probe() {
+        try {
+            if (this._key) this.send(encodeFrame(CMD_AUTH, 0, [], this._key));
+            this.send(encodeFrame(CMD_HELLO, 0, this._takeover ? [1] : []));
+        } catch (_) {}
     }
 
     async _readLoop() {
@@ -569,13 +601,26 @@ class _SerialLink {
         if (!decoded || decoded.length < 1) return;
         const msg = decoded.subarray(0, decoded.length - 1);
         if (_crc8(msg) !== decoded[decoded.length - 1]) return;   // corrupted — drop, stay synced
+        this._sawReply = true;
         this._stopProbe();   // the board is talking — stop knocking
         if (this.onmessage && msg.length)
             this.onmessage({ data: msg.slice().buffer });
     }
 
     _stopProbe() {
-        if (this._probeTimer) { clearInterval(this._probeTimer); this._probeTimer = null; }
+        if (this._probeTimer)   { clearInterval(this._probeTimer); this._probeTimer = null; }
+        if (this._noReplyTimer) { clearTimeout(this._noReplyTimer); this._noReplyTimer = null; }
+    }
+
+    // Restart probing on the SAME open port (no reopen — reopening risks another
+    // DTR reset). Used when the board announced a reboot (CMD_REBOOT): resume
+    // takeover-probing so a probe lands in the board's boot-watch window and it
+    // switches straight back to serial.
+    resumeProbe() {
+        if (this._closed || this._probeTimer) return;   // gone, or already probing
+        this._sawReply = false;
+        this._probeTimer = setInterval(() => this._probe(), 500);
+        this._probe();
     }
 
     send(buf) {
@@ -830,9 +875,10 @@ class Arduino {
         // _SerialLink; both expose the same handler surface.
         this._transportKind = 'ws';
         this._serialPort    = null;   // granted Web Serial port, kept for reconnects
+        this._serialTakeover = false; // gesture authorised a WiFi→USB switch (one-shot)
 
-        // Connection key (WebSocket only) — sent as the first frame after
-        // the socket opens; see connect(ip, { key }).
+        // Connection key — sent as the first frame after a WS socket opens, or
+        // in the serial probe loop; see connect(ip, { key }) / connectSerial({ key }).
         this._key = null;
 
         // Reconnection state
@@ -959,20 +1005,29 @@ class Arduino {
     //                                    the first frame; a board started with
     //                                    Pardalote.begin("k") refuses clients
     //                                    whose key doesn't match ('authFail').
-    //   connectSerial()                — USB serial via Web Serial (Chrome/
-    //                                    Edge). Must be called from a user
-    //                                    gesture (a click) the first time —
-    //                                    the browser shows a port picker. A
-    //                                    previously granted port is reused
-    //                                    without a picker; pass PROMPT (i.e.
-    //                                    { prompt: true }) to force one.
-    //                                    No key concept: the cable IS access.
+    //   connectSerial(opts?)           — USB serial via Web Serial (Chrome/
+    //                                    Edge). Call from a user gesture (a
+    //                                    click); the browser shows a port
+    //                                    picker. A previously granted port is
+    //                                    reused without a picker; pass PROMPT
+    //                                    ({ prompt: true }) to force one.
+    //                                    A connect from a real user gesture (a
+    //                                    click) authorises pulling a board off
+    //                                    WiFi onto USB — even one that silently
+    //                                    reuses a granted port. An automatic
+    //                                    connect (page load, background tab) has
+    //                                    no gesture, so a WiFi board answers
+    //                                    'usbBusy' instead of switching.
+    //                                    opts.key sets a board-identity key
+    //                                    (see requireKey() on the board): a
+    //                                    wrong key is refused with 'authFail'.
     // -------------------------------------------------------------------
     connect(ip, portOrOpts = 81) {
         const opts = (typeof portOrOpts === 'object' && portOrOpts !== null)
                    ? portOrOpts : { port: portOrOpts };
         this._transportKind = 'ws';
         this._key      = opts.key || null;
+        this._serialTakeover = false;      // switching to WiFi ends any serial takeover authority
         this.deviceIP  = `ws://${ip}:${opts.port ?? 81}/`;
         this._reconnectAttempts = 0;
         this._reconnectDisabled = false;   // re-enable after an earlier disconnect()
@@ -991,16 +1046,30 @@ class Arduino {
             this._error('Web Serial is not supported in this browser — use Chrome or Edge, or connect over WiFi');
             return this;
         }
+        // Takeover authority = the user deliberately asked for this connection,
+        // i.e. there is transient user activation (a real click) as connectSerial
+        // runs. That gesture is the consent to pull a WiFi board over to USB.
+        // We capture it BEFORE any await (an await can expire the activation).
+        // NB: it is NOT "did the picker appear" — a click that silently reuses an
+        // already-granted port is still a genuine gesture and must authorise the
+        // switch. A page-load / background auto-connect has no activation, so it
+        // can reconnect a board already on serial but a WiFi-listening board will
+        // refuse it (CMD_SERIAL_BUSY → 'usbBusy') rather than switch silently.
+        const gesture = (navigator.userActivation)
+                      ? navigator.userActivation.isActive
+                      : false;
         let port = opts.port || null;
+        let usedPicker = false;
         if (!port && !opts.prompt) {
             // Reuse a previously granted port (works without a user gesture,
-            // so a returning visit can auto-connect).
+            // so a returning visit can auto-connect a still-serial board).
             const granted = await navigator.serial.getPorts();
             if (granted.length === 1) port = granted[0];
         }
         if (!port) {
             try {
                 port = await navigator.serial.requestPort();
+                usedPicker = true;
             } catch (_) {
                 this._error('no serial port selected');
                 return this;
@@ -1009,7 +1078,10 @@ class Arduino {
 
         this._transportKind = 'serial';
         this._serialPort = port;
-        this._key      = null;             // serial needs no key — the cable is possession
+        // A picker always implies a gesture; a reused port needs the activation
+        // check above. Either way, a deliberate connect authorises the switch.
+        this._serialTakeover = usedPicker || gesture;
+        this._key      = opts.key || null;   // board-identity key (optional, both transports)
         this.deviceIP  = 'serial';
         this._reconnectAttempts = 0;
         this._reconnectDisabled = false;
@@ -1085,6 +1157,14 @@ class Arduino {
     }
 
     _closeSocket() {
+        // Stop the current heartbeat FIRST. We null the socket's handlers below
+        // (so a late close can't double-fire 'disconnect'), which also means the
+        // onclose that normally calls _stopHeartbeat() won't fire — leaving the
+        // old transport's heartbeat ticking into the next connection. On a
+        // WiFi→USB switch that stale heartbeat fires "no pong" during the board's
+        // reboot window and tears down the in-flight serial link (→ reconnect
+        // churn). Stopping it here makes a switch clean.
+        this._stopHeartbeat();
         if (!this.socket) return;
         const s = this.socket;
         this.socket    = null;
@@ -1157,7 +1237,15 @@ class Arduino {
     // the WebSocket handler surface, so everything downstream (HELLO,
     // heartbeat, flush, reconnect backoff) is shared.
     _connectSerialLink() {
-        const link = new _SerialLink(this._serialPort);
+        // Takeover authority persists for the whole gesture-initiated session —
+        // across auto-reconnects — so a board that reboots (e.g. an ESP32 DTR
+        // reset, or a hardware reset while USB-connected) can be switched back to
+        // serial without a fresh click. It's set ONLY by a real user gesture
+        // (see connectSerial) and cleared on disconnect()/connect(), so a fresh
+        // page load or a background tab still starts with no authority — a
+        // silent auto-connect can't recapture a WiFi board.
+        const takeover = this._serialTakeover;
+        const link = new _SerialLink(this._serialPort, { takeover, key: this._key });
         this.socket = link;
 
         link.onopen = () => {
@@ -1232,6 +1320,7 @@ class Arduino {
 
     disconnect() {
         this._reconnectDisabled = true;   // suppress auto-reconnect until connect() is called again
+        this._serialTakeover = false;     // a manual disconnect ends the gesture's takeover authority
         if (this._reconnectTimeout) {
             clearTimeout(this._reconnectTimeout);
             this._reconnectTimeout = null;
@@ -1244,8 +1333,10 @@ class Arduino {
     // Connection-level events: 'connect', 'disconnect', 'ready', 'announce',
     // 'warn', 'error' (see _notify), plus 'reconnecting', 'reboot', 'share',
     // 'message', 'change', 'frame', 'authFail' (board refused this client's
-    // key — auto-reconnect stops), and 'log' (serial transport only: the
-    // sketch's Serial.print output, one line per event).
+    // key — auto-reconnect stops), 'usbBusy' (serial only: the board is on
+    // WiFi and needs a picker gesture to switch to USB — auto-reconnect stops),
+    // and 'log' (serial transport only: the sketch's Serial.print output,
+    // one line per event).
     // -------------------------------------------------------------------
     on(event, fn)  { (this._cbs[event] ||= []).push(fn); return this; }
     off(event, fn) {
@@ -1407,6 +1498,8 @@ class Arduino {
         if (frame.cmd === CMD_ANNOUNCE) { this._onAnnounce(frame); return; }
         if (frame.cmd === CMD_PONG)     { this._onPong();          return; }
         if (frame.cmd === CMD_AUTH)     { this._onAuthFail(frame); return; }
+        if (frame.cmd === CMD_SERIAL_BUSY) { this._onUsbBusy();    return; }
+        if (frame.cmd === CMD_REBOOT)   { this._onReboot();        return; }
 
         // Message channel — routed by cmd (the flags in the target high byte
         // can push it past RESERVED_START, so the range check would misroute).
@@ -1523,6 +1616,31 @@ class Arduino {
         this._lastPong = Date.now();
     }
 
+    // The board announced (over serial) that it just (re)booted — e.g. a reset
+    // while USB-connected. The port is still open, so rather than wait for the
+    // heartbeat to time out (which would reopen the port and DTR-reset the board
+    // again), we resume takeover-probing on the same link. The board is opening
+    // its boot-watch window; our probe lands in it and it switches straight back
+    // to serial. Give the link a fresh liveness window so the heartbeat doesn't
+    // fire mid-recovery; the HELLO that follows the switch restarts everything.
+    _onReboot() {
+        if (this._transportKind !== 'serial') return;
+        this._lastPong = Date.now();
+        if (this.socket && typeof this.socket.resumeProbe === 'function') this.socket.resumeProbe();
+    }
+
+    // A WiFi-active board that we probed over USB without a picker gesture:
+    // it won't switch off WiFi for a silent (getPorts) connect. Tell the user
+    // to reconnect with a gesture, and stop probing (no churn) — one click on
+    // Connect raises the picker and authorises the switch.
+    _onUsbBusy() {
+        const message = 'this board is on WiFi — click Connect (which raises the ' +
+                        'port picker) to switch it to USB';
+        this._emit('usbBusy', { message });
+        this._error(message);
+        this.disconnect();   // sets _reconnectDisabled until the next connect()
+    }
+
     // The board refused this client: CMD_AUTH [reason] arrives just before
     // it closes the socket. Reconnecting would only be refused again, so
     // auto-reconnect stops — the student gets one clear error, not a
@@ -1531,7 +1649,7 @@ class Arduino {
         const reason  = frame.params[0] ?? 0;
         const message = reason === 2
             ? 'connection refused — wrong key for this board'
-            : 'connection refused — this board requires a key: connect(ip, { key: "…" })';
+            : 'connection refused — this board requires a key: connectSerial({ key: "…" }) or connect(ip, { key: "…" })';
         this._emit('authFail', { reason, message });
         this._error(message);
         this.disconnect();   // sets _reconnectDisabled until the next connect()
@@ -1877,6 +1995,11 @@ class Arduino {
 
     digitalWrite(pin, value) {
         pin = this._resolvePin(pin);
+        // Accept HIGH/LOW (1/0) or a boolean (true/false) — normalise to an
+        // integer 0/1 so the frame carries an int param. A raw boolean would
+        // otherwise be encoded as a float (encodeFrame keys off
+        // Number.isInteger) and the board would misread the pin state.
+        value = value ? 1 : 0;
         this._pinValues.set(pin, value);  // stored for announce sync and _onSyncComplete replay
         this._pinOrigins.set(pin, 'browser');   // this page claims the pin — replayed on reconnect
         this.send(encodeFrame(CMD_DIGITAL_WRITE, pin, [value]));

@@ -59,6 +59,7 @@ function switchTransport() {
 transportEl.onchange = switchTransport;
 
 let manualDisconnect = false;
+let usbBusy = false;   // board on WiFi, silent USB reconnect refused (see 'usbBusy')
 async function doConnect() {
     persistConn();
     manualDisconnect = false;
@@ -183,7 +184,12 @@ document.getElementById('monitor').onchange = (e) => {
 
 // --- Connection indicator ---
 arduino.on('ready',      () => { setConnected(true); setStatus('ready'); });
-arduino.on('disconnect', () => { setConnected(false); if (!manualDisconnect) setStatus('reconnecting…'); });
+arduino.on('disconnect', () => { setConnected(false);
+    if (usbBusy) { usbBusy = false; setStatus('board is on WiFi — press Connect to switch it to USB'); }
+    else if (!manualDisconnect) setStatus('reconnecting…'); });
+// 'usbBusy': a silent USB reconnect reached a board that's on WiFi — it won't
+// switch without a picker gesture. The 'disconnect' that follows shows the prompt.
+arduino.on('usbBusy', () => { usbBusy = true; });
 
 function setStatus(s) {
     document.getElementById('status').textContent = 'status: ' + s;

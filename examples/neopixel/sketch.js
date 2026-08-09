@@ -15,8 +15,6 @@ let numPixels = 8;
 
 function setup() {
     createCanvas(600, 400);
-    createDiv('Move the mouse: across for hue, up and down for brightness. '
-        + 'The dots along the bottom preview the strip.').class('hint').parent(select('main'));
     colorMode(HSB);
 
     // create Arduino and register the NeoPixel strip
@@ -33,30 +31,45 @@ function setup() {
 
     // open the WebSocket connection
     arduino.connect(ArduinoIP);
+
+    // draw color field on screen
+    noStroke();
+    for (let i = 0; i < width; i++) {
+        let newH = map(i, 0, width, 0, 360);
+        for (let j = 0; j < height; j++) {
+            let newB = map(j, 0, height, 110, 0);
+            fill(newH, 255, newB);
+            rect(i, j, 1, 1);
+        }
+    }
+    colorMode(RGB);
 }
 
 function draw() {
-    // mix a colour with the mouse: x = hue, y = brightness
-    let h = map(mouseX, 0, width, 0, 360);
-    let b = map(mouseY, 0, height, 100, 15);
-    let c = color(h, 90, b);
+    let circleRadius = 50;
+    let neoColor;
+    // set NeoPixel colors based on mouse location
+    if (dist(mouseX, mouseY, width / 2, height / 2) < circleRadius){
+        // make white
+        neoColor = arduino.strip.Color(255, 255, 255);
+        fill(255);
+    } else {
+        // get pixel color at mouse location
+        let pixelColor = get(mouseX, mouseY);
+        fill(pixelColor);
+        // calculate NeoPixel color
+        neoColor = arduino.strip.Color(red(pixelColor), green(pixelColor), blue(pixelColor));
+    }
 
-    // the canvas IS the colour…
-    background(c);
-
-    // …and the strip matches it. fill(color, first_pixel, count), then
+    // fill the strip. fill(color, first_pixel, count), then
     // show() sends the buffered colours to the Arduino (rate-limited by
     // the library, so calling it every frame is fine).
     if (arduino.connected) {
-        let neoColor = arduino.strip.Color(red(c), green(c), blue(c));
         arduino.strip.fill(neoColor, 0, numPixels);
         arduino.strip.show();
     }
 
-    // preview the strip: one dot per pixel along the bottom
-    stroke(0, 0, 100); strokeWeight(2); fill(c);
-    for (let i = 0; i < numPixels; i++) {
-        let x = map(i, 0, numPixels - 1, 60, width - 60);
-        circle(x, height - 40, 24);
-    }
+    // preview the colour on a central circle
+    circle(width / 2, height / 2, circleRadius*2);
 }
+

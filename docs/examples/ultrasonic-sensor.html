@@ -139,20 +139,25 @@
 <span class="w">    </span><span class="nx">textAlign</span><span class="p">(</span><span class="nx">LEFT</span><span class="p">);</span>
 
 <span class="w">    </span><span class="c1">// Connection status</span>
-<span class="w">    </span><span class="nx">fill</span><span class="p">(</span><span class="nx">arduino</span><span class="p">.</span><span class="nx">connected</span><span class="w"> </span><span class="o">?</span><span class="w"> </span><span class="nx">TEAL</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="nx">ORANGE</span><span class="p">);</span>
-<span class="w">    </span><span class="nx">textSize</span><span class="p">(</span><span class="mf">14</span><span class="p">);</span>
-<span class="w">    </span><span class="nx">text</span><span class="p">(</span><span class="nx">arduino</span><span class="p">.</span><span class="nx">connected</span><span class="w"> </span><span class="o">?</span><span class="w"> </span><span class="s1">&#39;connected&#39;</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;waiting for connection…&#39;</span><span class="p">,</span><span class="w"> </span><span class="mf">20</span><span class="p">,</span><span class="w"> </span><span class="mf">50</span><span class="p">);</span>
-
-<span class="w">    </span><span class="c1">// Distance readout</span>
-<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nx">distance</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mf">0</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="nx">fill</span><span class="p">(</span><span class="nx">INK</span><span class="p">);</span>
-<span class="w">        </span><span class="nx">textSize</span><span class="p">(</span><span class="mf">28</span><span class="p">);</span>
-<span class="w">        </span><span class="nx">text</span><span class="p">(</span><span class="nx">distance</span><span class="p">.</span><span class="nx">toFixed</span><span class="p">(</span><span class="mf">1</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="s1">&#39; cm&#39;</span><span class="p">,</span><span class="w"> </span><span class="mf">20</span><span class="p">,</span><span class="w"> </span><span class="mf">96</span><span class="p">);</span>
-<span class="w">    </span><span class="p">}</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="nx">fill</span><span class="p">(</span><span class="nx">GREY</span><span class="p">);</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nx">arduino</span><span class="p">.</span><span class="nx">connected</span><span class="p">){</span>
+<span class="w">        </span><span class="nx">fill</span><span class="p">(</span><span class="nx">TEAL</span><span class="p">);</span>
 <span class="w">        </span><span class="nx">textSize</span><span class="p">(</span><span class="mf">14</span><span class="p">);</span>
-<span class="w">        </span><span class="nx">text</span><span class="p">(</span><span class="s1">&#39;No object detected or out of range&#39;</span><span class="p">,</span><span class="w"> </span><span class="mf">20</span><span class="p">,</span><span class="w"> </span><span class="mf">90</span><span class="p">);</span>
-<span class="w">    </span><span class="p">}</span>
+<span class="w">        </span><span class="nx">text</span><span class="p">(</span><span class="s1">&#39;connected&#39;</span><span class="p">,</span><span class="w"> </span><span class="mf">20</span><span class="p">,</span><span class="w"> </span><span class="mf">50</span><span class="p">);</span>
+<span class="w">        </span><span class="c1">// Distance readout</span>
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nx">distance</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mf">0</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="nx">fill</span><span class="p">(</span><span class="nx">INK</span><span class="p">);</span>
+<span class="w">            </span><span class="nx">textSize</span><span class="p">(</span><span class="mf">28</span><span class="p">);</span>
+<span class="w">            </span><span class="nx">text</span><span class="p">(</span><span class="nx">distance</span><span class="p">.</span><span class="nx">toFixed</span><span class="p">(</span><span class="mf">1</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="s1">&#39; cm&#39;</span><span class="p">,</span><span class="w"> </span><span class="mf">20</span><span class="p">,</span><span class="w"> </span><span class="mf">96</span><span class="p">);</span>
+<span class="w">        </span><span class="p">}</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="nx">fill</span><span class="p">(</span><span class="nx">GREY</span><span class="p">);</span>
+<span class="w">            </span><span class="nx">textSize</span><span class="p">(</span><span class="mf">14</span><span class="p">);</span>
+<span class="w">            </span><span class="nx">text</span><span class="p">(</span><span class="s1">&#39;No object detected or out of range&#39;</span><span class="p">,</span><span class="w"> </span><span class="mf">20</span><span class="p">,</span><span class="w"> </span><span class="mf">90</span><span class="p">);</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">   </span><span class="p">}</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nx">fill</span><span class="p">(</span><span class="nx">ORANGE</span><span class="p">);</span>
+<span class="w">        </span><span class="nx">textSize</span><span class="p">(</span><span class="mf">14</span><span class="p">);</span>
+<span class="w">        </span><span class="nx">text</span><span class="p">(</span><span class="s1">&#39;waiting for connection…&#39;</span><span class="p">,</span><span class="w"> </span><span class="mf">20</span><span class="p">,</span><span class="w"> </span><span class="mf">50</span><span class="p">);</span>
+<span class="w">   </span><span class="p">}</span>
 <span class="p">}</span>
 </code></pre>
       </div>
