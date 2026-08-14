@@ -26,13 +26,15 @@ have no meaning outside the development history.
 
 ### The system
 
-- Browser JS ⇄ Arduino over a compact binary WebSocket protocol.
+- Browser JS ⇄ Arduino over a compact binary protocol — the same
+  frames over WiFi (a WebSocket) or over a USB cable (Web Serial).
   Arduino-mirroring verbs (`pinMode`, `digitalWrite`, `analogRead`, …)
   are safe to call every frame of a p5.js draw loop — reads return a
   local mirror, kept live by the board. Multi-user by default: every
   connecting browser receives full state before `ready`, and all
   browsers (and the sketch) stay in sync.
-- Extensions, each an opt-in firmware header + JS file: **Servo**,
+- Extensions — each an opt-in Arduino `#include`; on the JS side they
+  all ship in the one bundle: **Servo**,
   **Stepper**, **Bus servo** (Feetech ST/SC), **NeoPixel**,
   **Ultrasonic**, **IMU**, **Camera** (ESP32), **Rotary encoder**.
   Coordinated multi-actuator moves via **Groups** (arrive-together
