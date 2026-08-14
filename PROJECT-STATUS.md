@@ -12,29 +12,30 @@ from either Arduino or p5.js with zero toolchain.
 
 ---
 
-## 📦 Release status: preparing 1.0.0 (2026-07)
+## 📦 Release status: 1.0.0 released (2026-08-14)
 
-Everything before this is **unversioned beta** — the v2.x folder naming has no
-release meaning. The first proper release is **Pardalote 1.0.0**, protocol
-**v1.0**. Release notes live in [CHANGELOG.md](CHANGELOG.md), which also
-defines the versioning policy (one product version for firmware + JS in
-lockstep; the wire protocol versions independently and is checked in the
-HELLO handshake). Canonical version locations: `library.properties` (Arduino),
-`pardalote-js/package.json` (JS), `PARDALOTE_VERSION` in `defs.h` and
-`Arduino.version` in `pardalote.js` for runtime introspection.
+**Pardalote 1.0.0 is released**, protocol **v1.0**. Everything before was
+unversioned beta — the v2.x folder naming had no release meaning. Two GitHub
+repos, one product version:
+- **[ScottMit/Pardalote](https://github.com/ScottMit/Pardalote)** — this monorepo
+  (firmware + JS + docs + examples + website). GitHub Release tagged `v1.0.0`
+  carries `Pardalote-1.0.0.zip` (Arduino library) and `pardalote-js-1.0.0.zip`
+  (bundle + per-board pin maps).
+- **[ScottMit/Pardalote-arduino](https://github.com/ScottMit/Pardalote-arduino)** —
+  the Arduino **Library Manager** mirror (library files at the repo root, tag
+  `1.0.0`, GPL LICENSE at root). Its registry PR merged 2026-08-14; **every future
+  tag auto-indexes — no more PRs.**
 
-**Release checklist** (repeat for every release):
-1. Bump `library.properties` + `package.json` (+ `PARDALOTE_VERSION`,
-   `Arduino.version`); bump `PROTOCOL_VERSION_*` only if the wire changed.
-2. Write the CHANGELOG entry.
-3. Rebuild docs (`docs-src/build_reference.py`, `build_examples.py`).
-4. Run the JS smoke tests and firmware syntax checks; bench-test on hardware.
-5. Tag `vX.Y.Z`; attach a zip of `pardalote-arduino/library/Pardalote` and a
-   zip of `pardalote-js` to the GitHub release.
+Release notes live in [CHANGELOG.md](CHANGELOG.md), which defines the versioning
+policy (one product version for firmware + JS in lockstep; the wire protocol
+versions independently and is checked in the HELLO handshake). Canonical version
+locations: `library.properties` (Arduino), `pardalote-js/package.json` (JS),
+`PARDALOTE_VERSION` in `defs.h`, and `Arduino.version` (= `PARDALOTE_VERSION` in
+`pardalote-core.js`) for runtime introspection.
 
-Still blocking 1.0.0: hardware bench test of the 2026-07 API overhaul
-(per-client thresholds, continuous digital watch, 10 ms analog sampling,
-pin handles, encoder extension) — see the caveat below.
+**Cutting the next release: follow [RELEASING.md](RELEASING.md)** — the full
+checklist (version bumps, `build-release.sh` for rebuild + artifacts + mirror
+regeneration, then the manual push/release/tag steps for both repos).
 
 ---
 
