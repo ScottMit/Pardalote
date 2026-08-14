@@ -16,7 +16,7 @@ Pardalote versions **two things independently**:
   between any JS build and any firmware build. The JS side checks it on
   connect and reports a MAJOR mismatch on the `error` channel.
 
-## [1.0.0] — unreleased
+## [1.0.0] — 2026-08-14
 
 First release. Everything before this was unversioned beta; earlier
 internal numbers (v2.x folder names, a transitional "protocol v1.1")
