@@ -2,7 +2,7 @@
 // Camera Example
 // Streams MJPEG video from an ESP32-S3 camera into a p5.js canvas.
 // by Scott Mitchell
-// GPL-3.0 License
+// GPL-3.0-or-later License
 // ==============================================================
 
 const ARDUINO_IP  = '10.1.1.161';   // Change this to your Arduino's IP

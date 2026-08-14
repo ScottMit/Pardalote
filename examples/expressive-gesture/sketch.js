@@ -17,7 +17,7 @@
 // each servo's angle as it goes, so nothing needs homing, and uneven lanes
 // are padded so both servos arrive together.
 // House style: see style.css — shared by every Pardalote example.
-// by Scott Mitchell — GPL-3.0
+// by Scott Mitchell — GPL-3.0-or-later
 // ==============================================================
 
 // --- The gestures. Data, so the same definition drives the hardware, the

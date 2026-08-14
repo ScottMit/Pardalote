@@ -3,7 +3,7 @@
 // Pardalote NeoPixel Extension
 // Part of Pardalote — version in package.json
 // by Scott Mitchell
-// GPL-3.0 License
+// GPL-3.0-or-later License
 //
 // Mirrors the Adafruit NeoPixel library API where possible.
 // Pixel changes are buffered locally and only sent on show(),

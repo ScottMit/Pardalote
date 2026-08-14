@@ -3,7 +3,7 @@
 // The Arduino sketch created this servo — the browser gets it
 // automatically as arduino.pan. No arduino.add(), no attach().
 // by Scott Mitchell
-// GPL-3.0 License
+// GPL-3.0-or-later License
 // ==============================================================
 
 let ArduinoIP = '192.168.x.x';   // Change this to your Arduino's IP

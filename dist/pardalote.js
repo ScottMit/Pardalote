@@ -12,7 +12,7 @@
 // Arduino to JavaScript Binary WebSocket Communication
 // Part of Pardalote — version in package.json
 // by Scott Mitchell
-// GPL-3.0 License
+// GPL-3.0-or-later License
 // ==============================================================
 
 // Product version — the release humans see. Canonical copy lives in
@@ -2501,7 +2501,7 @@ class Group {
 // Pardalote Servo Extension
 // Part of Pardalote — version in package.json
 // by Scott Mitchell
-// GPL-3.0 License
+// GPL-3.0-or-later License
 //
 // Mirrors the Arduino Servo library API where possible.
 //
@@ -3264,7 +3264,7 @@ registerExtensionType(Servo);
 // Pardalote Serial Bus Servo Extension
 // Part of Pardalote — version in package.json
 // by Scott Mitchell
-// GPL-3.0 License
+// GPL-3.0-or-later License
 //
 // Serial-bus smart servos on a shared half-duplex UART:
 //   - Feetech ST / SMS series (0–4095 counts) — e.g. STS3215, the servo in
@@ -4105,7 +4105,7 @@ registerExtensionType(BusServo);
 // Pardalote Stepper Motor Extension
 // Part of Pardalote — version in package.json
 // by Scott Mitchell
-// GPL-3.0 License
+// GPL-3.0-or-later License
 //
 // Mirrors the AccelStepper API (non-blocking motion). Targets and motion
 // profiles are sent to the Arduino, which generates the step pulses on
@@ -4963,7 +4963,7 @@ registerExtensionType(Stepper);
 // Pardalote NeoPixel Extension
 // Part of Pardalote — version in package.json
 // by Scott Mitchell
-// GPL-3.0 License
+// GPL-3.0-or-later License
 //
 // Mirrors the Adafruit NeoPixel library API where possible.
 // Pixel changes are buffered locally and only sent on show(),
@@ -5396,7 +5396,7 @@ registerExtensionType(NeoPixel);
 // Pardalote Ultrasonic Sensor Extension
 // Part of Pardalote — version in package.json
 // by Scott Mitchell
-// GPL-3.0 License
+// GPL-3.0-or-later License
 //
 // Supports 3-wire and 4-wire sensors (HC-SR04, JSN-SR04T, etc.)
 //
@@ -5674,7 +5674,7 @@ registerExtensionType(Ultrasonic);
 // Pardalote Generic IMU Extension
 // Part of Pardalote — version in package.json
 // by Scott Mitchell
-// GPL-3.0 License
+// GPL-3.0-or-later License
 //
 // Supports MPU-6050, MPU-6500, MPU-9250, MPU-9255,
 //          LSM6DS3, LSM6DSOX (and future sensors added to
@@ -6124,7 +6124,7 @@ registerExtensionType(IMU);
 // Pardalote Rotary Encoder Extension (quadrature)
 // Part of Pardalote — version in package.json
 // by Scott Mitchell
-// GPL-3.0 License
+// GPL-3.0-or-later License
 //
 // Quadrature encoders: KY-040 style knobs, optical/magnetic motor
 // shaft encoders. The BOARD counts edges in interrupt handlers (a 4x
@@ -6385,7 +6385,7 @@ registerExtensionType(Encoder);
 // Pardalote Camera Extension
 // Part of Pardalote — version in package.json
 // by Scott Mitchell
-// GPL-3.0 License
+// GPL-3.0-or-later License
 //
 // Streams MJPEG video and fetches JPEG snapshots from an
 // ESP32-S3 camera module via HTTP. Video never flows over the

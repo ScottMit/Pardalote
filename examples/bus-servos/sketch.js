@@ -6,7 +6,7 @@
 // read live position/load/temperature back, and free a joint to hand-pose it.
 // House style: see style.css — shared by every Pardalote example.
 // by Scott Mitchell
-// GPL-3.0 License
+// GPL-3.0-or-later License
 // ==============================================================
 
 // --- Saved settings (browser localStorage) -----------------------------

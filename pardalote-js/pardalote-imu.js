@@ -3,7 +3,7 @@
 // Pardalote Generic IMU Extension
 // Part of Pardalote — version in package.json
 // by Scott Mitchell
-// GPL-3.0 License
+// GPL-3.0-or-later License
 //
 // Supports MPU-6050, MPU-6500, MPU-9250, MPU-9255,
 //          LSM6DS3, LSM6DSOX (and future sensors added to

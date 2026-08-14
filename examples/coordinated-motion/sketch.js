@@ -8,7 +8,7 @@
 // still arrives together on each leg of the sweep.
 // House style: see style.css — shared by every Pardalote example.
 // by Scott Mitchell
-// GPL-3.0 License
+// GPL-3.0-or-later License
 // ==============================================================
 
 // Per-type config. low/high are the sweep endpoints in each motor's own units;

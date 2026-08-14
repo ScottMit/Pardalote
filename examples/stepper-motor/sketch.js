@@ -13,7 +13,7 @@
 //   • setHome / home + 'homeFail'     — re-zero + seek-switch homing routine
 // House style: see style.css — shared by every Pardalote example.
 // by Scott Mitchell
-// GPL-3.0 License
+// GPL-3.0-or-later License
 // ==============================================================
 
 // --- Saved settings (browser localStorage) -----------------------------

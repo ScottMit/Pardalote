@@ -3,7 +3,7 @@
 // Basic example: read an analog input and draw with it.
 // Turn the knob and the circle grows and shrinks in real time.
 // by Scott Mitchell
-// GPL-3.0 License
+// GPL-3.0-or-later License
 // ==============================================================
 
 let ArduinoIP = '172.20.10.4';   // Change this to your Arduino's IP

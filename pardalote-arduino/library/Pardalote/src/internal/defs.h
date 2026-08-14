@@ -3,7 +3,7 @@
 // Pardalote Protocol Constants
 // Part of Pardalote — version in library.properties
 // by Scott Mitchell
-// GPL-3.0 License
+// GPL-3.0-or-later License
 // ==============================================================
 
 #ifndef DEFS_H

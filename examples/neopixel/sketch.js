@@ -3,7 +3,7 @@
 // Basic example: mix a colour with the mouse and the LED strip
 // follows it live. Across the canvas = hue, up and down = brightness.
 // by Scott Mitchell
-// GPL-3.0 License
+// GPL-3.0-or-later License
 // ==============================================================
 
 let ArduinoIP = '172.20.10.6';   // Change this to your Arduino's IP

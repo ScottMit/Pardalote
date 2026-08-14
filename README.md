@@ -1795,7 +1795,7 @@ On connect, the Arduino sends its full current state — pin modes, output value
 
 ## License
 
-GNU General Public License v3.0
+GNU General Public License v3.0 or later (`GPL-3.0-or-later`)
 
 ## Author
 

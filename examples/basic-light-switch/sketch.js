@@ -2,7 +2,7 @@
 // Basic light switch
 // Basic example showing how to use p5.js to control an LED with Pardalote
 // by Scott Mitchell
-// GPL-3.0 License
+// GPL-3.0-or-later License
 // ==============================================================
 
 let ArduinoIP = '192.168.x.x';   // Change this to your Arduino's IP

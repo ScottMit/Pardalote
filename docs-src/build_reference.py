@@ -134,7 +134,7 @@ NAV = """<nav class="site-nav">
 FOOTER = """<footer class="site-footer">
   <div class="wrap">
     <span>Pardalote — created by Scott Mitchell for design education and creative technology.</span>
-    <span><a href="index.html">Reference</a> · <a href="{gh}">GitHub</a> · GPL-3.0</span>
+    <span><a href="index.html">Reference</a> · <a href="{gh}">GitHub</a> · GPL-3.0-or-later</span>
   </div>
 </footer>""".format(gh=GH)
 

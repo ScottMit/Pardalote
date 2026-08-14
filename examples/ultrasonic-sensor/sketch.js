@@ -3,7 +3,7 @@
 // Basic example: read an HC-SR04 distance sensor and visualise it.
 // The bar fills (and shifts teal → orange) as an object gets closer.
 // by Scott Mitchell
-// GPL-3.0 License
+// GPL-3.0-or-later License
 // ==============================================================
 
 let ArduinoIP = '192.168.x.x';   // Change this to your Arduino's IP

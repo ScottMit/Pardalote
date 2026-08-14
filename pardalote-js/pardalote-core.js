@@ -3,7 +3,7 @@
 // Arduino to JavaScript Binary WebSocket Communication
 // Part of Pardalote — version in package.json
 // by Scott Mitchell
-// GPL-3.0 License
+// GPL-3.0-or-later License
 // ==============================================================
 
 // Product version — the release humans see. Canonical copy lives in

@@ -3,7 +3,7 @@
 // Pardalote Servo Extension
 // Part of Pardalote — version in package.json
 // by Scott Mitchell
-// GPL-3.0 License
+// GPL-3.0-or-later License
 //
 // Mirrors the Arduino Servo library API where possible.
 //

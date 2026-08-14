@@ -3,6 +3,6 @@
   "version": "1.0.0",
   "description": "Arduino to JavaScript communication over binary WebSockets \u2014 drive real hardware from p5.js with zero toolchain.",
   "main": "../dist/pardalote.js",
-  "license": "GPL-3.0",
+  "license": "GPL-3.0-or-later",
   "private": true
 }

@@ -3,7 +3,7 @@
 // Pardalote Serial Bus Servo Extension
 // Part of Pardalote — version in package.json
 // by Scott Mitchell
-// GPL-3.0 License
+// GPL-3.0-or-later License
 //
 // Serial-bus smart servos on a shared half-duplex UART:
 //   - Feetech ST / SMS series (0–4095 counts) — e.g. STS3215, the servo in

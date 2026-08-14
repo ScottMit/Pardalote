@@ -3,7 +3,7 @@
 // Pardalote Ultrasonic Sensor Extension
 // Part of Pardalote — version in package.json
 // by Scott Mitchell
-// GPL-3.0 License
+// GPL-3.0-or-later License
 //
 // Supports 3-wire and 4-wire sensors (HC-SR04, JSN-SR04T, etc.)
 //
