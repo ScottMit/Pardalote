@@ -192,7 +192,7 @@ Lower values give smoother motion but use more I²C bandwidth and WiFi. **On the
 Include the `pardalote.js` bundle (core + every extension) before your sketch:
 
 ```html
-<script src="../../dist/pardalote.js"></script>
+<script src="../../lib/pardalote.js"></script>
 <script src="sketch.js"></script>
 ```
 

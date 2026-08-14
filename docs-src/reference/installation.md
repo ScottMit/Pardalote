@@ -48,7 +48,7 @@ No install step: copy `pardalote.js` next to your web page and include it with a
 <script src="sketch.js"></script>
 ```
 
-Advanced: the modular sources live in `pardalote-js/` (`pardalote-core.js` plus one `pardalote-<device>.js` per extension) if you would rather include only specific files. The bundle is simply those concatenated, rebuilt with `build_pardalote.py`. Board pin maps (`pardalote-pins-*.js`) are per-board and are never bundled — include the one for your board.
+Advanced: the modular sources live in `lib/src/` (`pardalote-core.js` plus one `pardalote-<device>.js` per extension) if you would rather include only specific files. The bundle is simply those concatenated, rebuilt with `build_pardalote.py`. Board pin maps (`pardalote-pins-*.js`) are per-board and are never bundled — include the one for your board.
 
 ## A minimal sketch
 

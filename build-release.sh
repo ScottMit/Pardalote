@@ -3,9 +3,11 @@
 # build-release.sh — prepare a Pardalote release (see RELEASING.md).
 #
 # Does the deterministic mechanical work:
-#   - rebuild dist/pardalote.js (JS bundle) and docs/ + llms*.txt
-#   - node --check the bundle + modular sources
+#   - rebuild lib/pardalote.js (JS bundle) and docs/ + llms*.txt
+#   - node --check the bundle + pin maps + modular sources
 #   - build the two release artifacts into ./release-artifacts/
+#       * Pardalote-<ver>.zip       — the Arduino library
+#       * pardalote-js-<ver>.zip    — bundle + pin maps + examples + README + LICENSE
 #   - regenerate the Library-Manager mirror repo (clean commit + tag, authored as Scott)
 #   - run arduino-lint on the mirror if it's installed
 #
@@ -40,10 +42,10 @@ say "1/5  Rebuild JS bundle + docs"
 "$VENV/python" "$MONO/docs-src/build_llms.py"      >/dev/null
 echo "  bundle + docs regenerated"
 
-say "2/5  node --check (bundle + modular sources)"
+say "2/5  node --check (bundle + pin maps + modular sources)"
 command -v node >/dev/null || die "node not found"
-node --check "$MONO/dist/pardalote.js"
-for f in "$MONO"/pardalote-js/*.js; do node --check "$f"; done
+node --check "$MONO/lib/pardalote.js"
+for f in "$MONO"/lib/pardalote-pins-*.js "$MONO"/lib/src/*.js; do node --check "$f"; done
 echo "  all JS parses clean"
 
 say "3/5  Build release artifacts -> release-artifacts/"
@@ -51,10 +53,29 @@ OUT="$MONO/release-artifacts"
 rm -rf "$OUT"; mkdir -p "$OUT"
 # Arduino library: unpacks to Pardalote/ with library.properties at its root
 ( cd "$MONO/pardalote-arduino/library" && zip -rq "$OUT/Pardalote-$VERSION.zip" Pardalote -x '*.DS_Store' )
-# JS: the bundle + the three per-board pin maps, staged under pardalote-js-<ver>/
-STAGE="$OUT/pardalote-js-$VERSION"; mkdir -p "$STAGE"
-cp "$MONO/dist/pardalote.js" "$STAGE/"
-cp "$MONO"/pardalote-js/pardalote-pins-*.js "$STAGE/"
+# JS package: bundle + pin maps (lib/, minus src/) + examples + README + LICENSE.
+# Layout mirrors the repo so each example's ../../lib/pardalote.js resolves.
+STAGE="$OUT/pardalote-js-$VERSION"
+mkdir -p "$STAGE/lib"
+cp "$MONO/lib/pardalote.js" "$MONO"/lib/pardalote-pins-*.js "$STAGE/lib/"
+rsync -a --exclude='.DS_Store' "$MONO/examples/" "$STAGE/examples/"
+cp "$MONO/LICENSE" "$STAGE/LICENSE"
+cat > "$STAGE/README.md" <<PKG
+# Pardalote $VERSION — JavaScript
+
+The browser / p5.js side of Pardalote. Include the one bundle:
+
+    <script src="lib/pardalote.js"></script>
+
+Optionally add your board's pin aliases from \`lib/\`, e.g.
+
+    <script src="lib/pardalote-pins-uno-r4-wifi.js"></script>
+
+Runnable examples are in \`examples/\` — open any \`index.html\` in Chrome or Edge.
+
+Full guide, API reference, and protocol docs: https://github.com/ScottMit/Pardalote
+License: GPL-3.0-or-later (see LICENSE).
+PKG
 ( cd "$OUT" && zip -rq "$OUT/pardalote-js-$VERSION.zip" "pardalote-js-$VERSION" && rm -rf "$STAGE" )
 ls -1 "$OUT"
 
@@ -88,7 +109,7 @@ cat <<EOF
 
 $(printf '\033[1m== Done — manual steps remain (see RELEASING.md) ==\033[0m')
   Monorepo (ScottMit/Pardalote):
-    1. Update docs/download.html links to v$VERSION (steps 5 in RELEASING.md)
+    1. Update docs/download.html links to v$VERSION (step 5 in RELEASING.md)
     2. Commit + push main (GitHub Desktop)
     3. GitHub Release: tag v$VERSION, attach both zips in release-artifacts/
   Mirror (ScottMit/Pardalote-arduino):

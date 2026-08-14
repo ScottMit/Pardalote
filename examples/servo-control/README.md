@@ -115,7 +115,7 @@ on screen (and noted in the log). A PWM servo has no position feedback:
 Include the `pardalote.js` bundle (core + every extension) before your sketch:
 
 ```html
-<script src="../../dist/pardalote.js"></script>
+<script src="../../lib/pardalote.js"></script>
 <script src="sketch.js"></script>
 ```
 

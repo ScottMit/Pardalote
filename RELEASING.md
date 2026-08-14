@@ -17,9 +17,9 @@ Versioning policy: firmware + JS share one product version in lockstep. `MAJOR` 
 
 ### 1. Bump the version (4 canonical spots + protocol if the wire changed)
 - `pardalote-arduino/library/Pardalote/library.properties` → `version=`
-- `pardalote-js/package.json` → `"version":`
+- `lib/package.json` → `"version":`
 - `pardalote-arduino/library/Pardalote/src/internal/defs.h` → `#define PARDALOTE_VERSION`
-- `pardalote-js/pardalote-core.js` → `const PARDALOTE_VERSION` (this feeds `Arduino.version`)
+- `lib/src/pardalote-core.js` → `const PARDALOTE_VERSION` (this feeds `Arduino.version`)
 - **Only if the wire format changed:** `PROTOCOL_VERSION_MAJOR/MINOR` in `defs.h`
 
 ### 2. Write the CHANGELOG entry
@@ -30,11 +30,11 @@ Needs the docs venv (one-time: `python3 -m venv .venv && .venv/bin/pip install m
 ```bash
 ./build-release.sh
 ```
-This rebuilds the JS bundle (`dist/pardalote.js`) and the docs (`docs/`, `llms*.txt`), builds both release artifacts into `release-artifacts/`, and regenerates the mirror repo (clean commit + tag). See the script for the individual steps if you want to run them by hand.
+This rebuilds the JS bundle (`lib/pardalote.js`) and the docs (`docs/`, `llms*.txt`), builds both release artifacts into `release-artifacts/`, and regenerates the mirror repo (clean commit + tag). See the script for the individual steps if you want to run them by hand.
 
 ### 4. Verify
 - Firmware compiles on ESP32 + UNO R4 (your bench/toolchain — no `arduino-cli` in the dev env).
-- `node --check dist/pardalote.js` and the modular sources parse clean (the script does this).
+- `node --check lib/pardalote.js` and the modular sources parse clean (the script does this).
 - `arduino-lint --library-manager submit` passes clean on the mirror (the script runs it if `arduino-lint` is installed).
 
 ### 5. Update the download-page links

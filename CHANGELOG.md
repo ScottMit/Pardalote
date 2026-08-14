@@ -16,6 +16,19 @@ Pardalote versions **two things independently**:
   between any JS build and any firmware build. The JS side checks it on
   connect and reports a MAJOR mismatch on the `error` channel.
 
+## [Unreleased]
+
+- **License:** adopted the current SPDX identifier `GPL-3.0-or-later` (was the
+  deprecated `GPL-3.0`) across `library.properties`, `package.json`, and every
+  source-file notice. The GPLv3 LICENSE text is unchanged.
+- **Repo layout:** the browser JavaScript moved from `pardalote-js/` + `dist/`
+  into a single `lib/` folder — the generated bundle is now `lib/pardalote.js`,
+  the per-board pin maps sit at `lib/`, and the modular sources moved to
+  `lib/src/`. Examples and `build_pardalote.py` updated to match.
+- **JS release package:** `pardalote-js-<ver>.zip` now ships the runnable
+  `examples/` and a `LICENSE` alongside the bundle + pin maps, laid out so the
+  examples run straight from the download.
+
 ## [1.0.0] — 2026-08-14
 
 First release. Everything before this was unversioned beta; earlier

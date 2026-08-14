@@ -120,7 +120,7 @@ Increase with `setTimeout()` for longer range; decrease to speed up failed reads
 Include the `pardalote.js` bundle (core + every extension) before your sketch:
 
 ```html
-<script src="../../dist/pardalote.js"></script>
+<script src="../../lib/pardalote.js"></script>
 <script src="sketch.js"></script>
 ```
 

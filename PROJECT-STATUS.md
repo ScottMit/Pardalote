@@ -29,9 +29,9 @@ repos, one product version:
 Release notes live in [CHANGELOG.md](CHANGELOG.md), which defines the versioning
 policy (one product version for firmware + JS in lockstep; the wire protocol
 versions independently and is checked in the HELLO handshake). Canonical version
-locations: `library.properties` (Arduino), `pardalote-js/package.json` (JS),
+locations: `library.properties` (Arduino), `lib/package.json` (JS),
 `PARDALOTE_VERSION` in `defs.h`, and `Arduino.version` (= `PARDALOTE_VERSION` in
-`pardalote-core.js`) for runtime introspection.
+`lib/src/pardalote-core.js`) for runtime introspection.
 
 **Cutting the next release: follow [RELEASING.md](RELEASING.md)** — the full
 checklist (version bumps, `build-release.sh` for rebuild + artifacts + mirror
@@ -1542,8 +1542,9 @@ library edits (a stale `pardalote.js` will silently run old code — bump the po
 or add `?v=`).
 
 ## File layout
-- `pardalote-js/` — browser library (`pardalote.js` core + `Group`, one file per
-  extension) and per-board pin aliases.
+- `lib/` — browser library: generated `pardalote.js` bundle + per-board pin
+  aliases at the root; modular sources (`pardalote-core.js` + one per extension)
+  in `lib/src/`. Built by `build_pardalote.py`.
 - `pardalote-arduino/library/Pardalote/src/` — firmware: `Pardalote.{h,cpp}`,
   `Pardalote<Extension>.h`, `internal/{defs,protocol,extensions,…}`.
 - `examples/` — browser (p5.js) examples. `…/examples/*/` (IDE) — minimal `.ino`s.

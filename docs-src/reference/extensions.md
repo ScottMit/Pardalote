@@ -33,7 +33,7 @@ Each extension automatically gets a logical ID based on its type. Multiple insta
 <script src="sketch.js"></script>
 ```
 
-Every extension (Servo, Stepper, BusServo, NeoPixel, Ultrasonic, IMU, Encoder, Camera) is already inside the bundle — you just `arduino.add(...)` the ones you use. (Advanced: the modular sources in `pardalote-js/` — `pardalote-core.js` plus one `pardalote-<device>.js` each — can be included individually instead; the bundle is exactly those concatenated.)
+Every extension (Servo, Stepper, BusServo, NeoPixel, Ultrasonic, IMU, Encoder, Camera) is already inside the bundle — you just `arduino.add(...)` the ones you use. (Advanced: the modular sources in `lib/src/` — `pardalote-core.js` plus one `pardalote-<device>.js` each — can be included individually instead; the bundle is exactly those concatenated.)
 
 ## Enabling extensions in the firmware
 

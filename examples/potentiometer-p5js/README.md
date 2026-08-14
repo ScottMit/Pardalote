@@ -70,10 +70,10 @@ const POTPIN = A0;  // the pin your potentiometer's wiper is on
 
 Names like `A0` come from a **pin-alias file** loaded in `index.html`. This
 example ships with the ESP32-WROVER aliases; if you're on a different board,
-swap the script line for the matching file from `pardalote-js/`:
+swap the script line for the matching file from `lib/`:
 
 ```html
-<script src="../../pardalote-js/pardalote-pins-esp32-wrover-dev.js"></script>
+<script src="../../lib/pardalote-pins-esp32-wrover-dev.js"></script>
 ```
 
 | Board | Pin-alias file |

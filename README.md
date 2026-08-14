@@ -576,7 +576,7 @@ arduino.digitalWrite(LED_BUILTIN, HIGH);
 arduino.imu.attach(SDA);
 ```
 
-Available pin files (in `pardalote-js/`):
+Available pin files (in `lib/`):
 
 | File | Board |
 |---|---|
@@ -625,7 +625,7 @@ Each extension automatically gets a logical ID based on its type. Multiple insta
 <script src="sketch.js"></script>
 ```
 
-Every extension (Servo, Stepper, BusServo, NeoPixel, Ultrasonic, IMU, Encoder, Camera) is already inside the bundle — just `arduino.add(...)` the ones you use. Advanced users can instead include the modular sources in `pardalote-js/` (`pardalote-core.js` + one `pardalote-<device>.js` each); the bundle is exactly those concatenated, rebuilt with `build_pardalote.py`.
+Every extension (Servo, Stepper, BusServo, NeoPixel, Ultrasonic, IMU, Encoder, Camera) is already inside the bundle — just `arduino.add(...)` the ones you use. Advanced users can instead include the modular sources in `lib/src/` (`pardalote-core.js` + one `pardalote-<device>.js` each); the bundle is exactly those concatenated, rebuilt with `build_pardalote.py`.
 
 ---
 
@@ -1670,24 +1670,23 @@ Pardalote/
 │               ├── IMU/
 │               └── camera-stream/
 │
-├── dist/
-│   └── pardalote.js                       # Distribution bundle (generated) — include this
+├── build_pardalote.py                     # Rebuilds lib/pardalote.js from lib/src/
 │
-├── build_pardalote.py                     # Rebuilds dist/pardalote.js from the sources below
-│
-├── pardalote-js/                          # Modular sources (source of truth)
-│   ├── pardalote-core.js                  # Core library
-│   ├── pardalote-servo.js                 # Servo extension
-│   ├── pardalote-stepper.js               # Stepper extension
-│   ├── pardalote-bus-servo.js             # Serial bus servo extension
-│   ├── pardalote-neopixel.js              # NeoPixel extension
-│   ├── pardalote-ultrasonic.js            # Ultrasonic extension
-│   ├── pardalote-imu.js                   # IMU extension
-│   ├── pardalote-encoder.js               # Encoder extension
-│   ├── pardalote-camera.js                # Camera extension (ESP32-S3)
-│   ├── pardalote-pins-uno-r4-wifi.js      # Pin aliases for UNO R4 WiFi
-│   ├── pardalote-pins-esp32-wrover-dev.js # Pin aliases for ESP32-WROVER-DEV
-│   └── pardalote-pins-firebeetle2-esp32-c5.js
+├── lib/                                    # Browser JavaScript library
+│   ├── pardalote.js                        # Distribution bundle (generated) — include this
+│   ├── pardalote-pins-uno-r4-wifi.js       # Pin aliases for UNO R4 WiFi
+│   ├── pardalote-pins-esp32-wrover-dev.js  # Pin aliases for ESP32-WROVER-DEV
+│   ├── pardalote-pins-firebeetle2-esp32-c5.js
+│   └── src/                                # Modular sources (source of truth)
+│       ├── pardalote-core.js               # Core library
+│       ├── pardalote-servo.js              # Servo extension
+│       ├── pardalote-stepper.js            # Stepper extension
+│       ├── pardalote-bus-servo.js          # Serial bus servo extension
+│       ├── pardalote-neopixel.js           # NeoPixel extension
+│       ├── pardalote-ultrasonic.js         # Ultrasonic extension
+│       ├── pardalote-imu.js                # IMU extension
+│       ├── pardalote-encoder.js            # Encoder extension
+│       └── pardalote-camera.js             # Camera extension (ESP32-S3)
 │
 └── examples/
     ├── basic-light-switch/         # digitalWrite — no p5.js
