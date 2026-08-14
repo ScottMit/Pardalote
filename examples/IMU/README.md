@@ -189,11 +189,10 @@ Lower values give smoother motion but use more I²C bandwidth and WiFi. **On the
 
 ## Script loading order
 
-`pardalote.js` must load before `imu.js`:
+Include the `pardalote.js` bundle (core + every extension) before your sketch:
 
 ```html
-<script src="../../pardalote-js/pardalote.js"></script>
-<script src="../../pardalote-js/imu.js"></script>
+<script src="../../dist/pardalote.js"></script>
 <script src="sketch.js"></script>
 ```
 
@@ -227,14 +226,13 @@ Lower values give smoother motion but use more I²C bandwidth and WiFi. **On the
 
 ```
 IMU/
-├── index.html      # Canvas page (loads p5.js, pardalote.js, imu.js)
+├── index.html      # Canvas page (loads p5.js and the pardalote.js bundle)
 ├── sketch.js       # IMU setup, complementary filter, 3D render
 ├── style.css       # Dark HUD overlay
 └── README.md       # This file
 
-pardalote-js/
-├── pardalote.js    # Core Pardalote library
-└── imu.js          # Generic IMU extension
+dist/
+└── pardalote.js    # Pardalote bundle (core + all extensions)
 ```
 
 ## Next Steps

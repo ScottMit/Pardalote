@@ -294,9 +294,8 @@ Saved: YourWiFiName
 </table>
 <p>Increase with <code>setTimeout()</code> for longer range; decrease to speed up failed reads.</p>
 <h2 id="script-loading-order">Script loading order</h2>
-<p><code>pardalote.js</code> must load before <code>ultrasonic.js</code>:</p>
-<pre><code><span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;../../pardalote-js/pardalote.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
-<span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;../../pardalote-js/ultrasonic.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
+<p>Include the <code>pardalote.js</code> bundle (core + every extension) before your sketch:</p>
+<pre><code><span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;../../dist/pardalote.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
 <span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;sketch.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
 </code></pre>
 <h2 id="troubleshooting">Troubleshooting</h2>
@@ -323,13 +322,12 @@ Saved: YourWiFiName
 </ul>
 <h2 id="file-structure">File Structure</h2>
 <pre><code>ultrasonic-sensor/
-├── index.html      # Canvas page (loads p5.js, pardalote.js, ultrasonic.js)
+├── index.html      # Canvas page (loads p5.js and the pardalote.js bundle)
 ├── sketch.js       # Sensor setup and distance visualisation
 └── README.md       # This file
 
-pardalote-js/
-├── pardalote.js    # Core Pardalote library
-└── ultrasonic.js   # Ultrasonic extension
+dist/
+└── pardalote.js    # Pardalote bundle (core + all extensions)
 </code></pre>
 <h2 id="next-steps">Next Steps</h2>
 <ul>

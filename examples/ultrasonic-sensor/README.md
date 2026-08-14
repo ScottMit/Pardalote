@@ -117,11 +117,10 @@ Increase with `setTimeout()` for longer range; decrease to speed up failed reads
 
 ## Script loading order
 
-`pardalote.js` must load before `ultrasonic.js`:
+Include the `pardalote.js` bundle (core + every extension) before your sketch:
 
 ```html
-<script src="../../pardalote-js/pardalote.js"></script>
-<script src="../../pardalote-js/ultrasonic.js"></script>
+<script src="../../dist/pardalote.js"></script>
 <script src="sketch.js"></script>
 ```
 
@@ -148,13 +147,12 @@ Increase with `setTimeout()` for longer range; decrease to speed up failed reads
 
 ```
 ultrasonic-sensor/
-├── index.html      # Canvas page (loads p5.js, pardalote.js, ultrasonic.js)
+├── index.html      # Canvas page (loads p5.js and the pardalote.js bundle)
 ├── sketch.js       # Sensor setup and distance visualisation
 └── README.md       # This file
 
-pardalote-js/
-├── pardalote.js    # Core Pardalote library
-└── ultrasonic.js   # Ultrasonic extension
+dist/
+└── pardalote.js    # Pardalote bundle (core + all extensions)
 ```
 
 ## Next Steps

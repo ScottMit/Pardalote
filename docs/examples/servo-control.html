@@ -162,9 +162,8 @@ applied, already clamped to any soft limits — so a clamped command is visible
 on screen (and noted in the log). A PWM servo has no position feedback:
 <code>angle</code> is the commanded value, which for a hobby servo <em>is</em> its state.</p>
 <h2 id="script-loading-order">Script loading order</h2>
-<p><code>pardalote.js</code> must load before <code>servo.js</code>:</p>
-<pre><code><span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;../../pardalote-js/pardalote.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
-<span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;../../pardalote-js/servo.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
+<p>Include the <code>pardalote.js</code> bundle (core + every extension) before your sketch:</p>
+<pre><code><span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;../../dist/pardalote.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
 <span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;sketch.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
 </code></pre>
 <h2 id="troubleshooting">Troubleshooting</h2>
@@ -185,13 +184,12 @@ on screen (and noted in the log). A PWM servo has no position feedback:
 </ul>
 <h2 id="file-structure">File Structure</h2>
 <pre><code>servo-control/
-├── index.html      # Canvas page (loads p5.js, pardalote.js, servo.js)
+├── index.html      # Canvas page (loads p5.js and the pardalote.js bundle)
 ├── sketch.js       # Servo control and visualisation
 └── README.md       # This file
 
-pardalote-js/
-├── pardalote.js    # Core Pardalote library
-└── servo.js        # Servo extension
+dist/
+└── pardalote.js    # Pardalote bundle (core + all extensions)
 </code></pre>
 <h2 id="next-steps">Next Steps</h2>
 <ul>

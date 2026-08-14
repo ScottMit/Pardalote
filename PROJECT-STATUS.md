@@ -1225,6 +1225,112 @@ it. See `src/internal/defs.h`.
    of dropped frames doesn't spam. Cheap, and it turns a green-tick-but-dead
    mystery into a one-line diagnosis.
 
+0b. **✅ DONE + bench-confirmed (2026-08) — Bus-servo LOST-servo poll back-off.**
+   Follows the loose-end-0 IOTimeOut work. A power brownout under load (Scott's was
+   a loose servo-power connector) makes all bus servos stop answering at once; each
+   periodic read then blocks up to `IOTimeOut` (5 ms) in `FeedBack()`, and the poll
+   loop reads every due servo per `loop()` pass — so ~6 dead servos ≈ 30 ms of
+   blocking per pass, sustained through the outage. On the **UNO R4** that starved
+   the WiFiS3 / native-USB transport and dropped the connection (WiFi *and* USB);
+   **ESP32 rode it out** (headroom + FreeRTOS yield) — so this was R4-specific
+   transport fragility, servo loss itself being a hardware/power issue.
+   **Fix (`PardaloteBusServo.h`):** per-servo back-off — a read returning −1 sets
+   `_lostRetryAt[id] = now + BUSSERVO_LOST_RETRY_MS` (500 ms) and further reads of
+   that servo are skipped until then, so a dead servo is polled ~2 Hz instead of
+   every pass. Responding servos (`_found == 1`) are never throttled → zero effect
+   on normal poll rate / relay latency; only cost is LOST→found recovery noticed up
+   to 500 ms later (tunable). **Bench-confirmed on BOTH UNO R4 and ESP32 (2026-08,
+   Scott): no loss of WiFi or USB through a servo power dropout, and servos
+   reconnect when power is restored.** Deliberately back-off ONLY (not the per-loop
+   read cap — would add relay-latency read-spread on the R4; see 0c). See
+   [[busservo-lost-backoff]].
+
+0c. **Leader–follower relay latency (2026-08, open — Scott to pick up).** On the
+   bench (two 6-servo arms, `examples/leader-follower/`) the follower's response
+   to the leader lags more than expected, and intermediate values are visibly
+   dropped to catch up — noticeable on ESP32, **more so on the UNO R4**. The drop
+   is partly by design: the write path coalesces (leading value immediate, rapid
+   follow-ups → one trailing send) to avoid queue build-up / R4 loop-starvation.
+   So this is a *pipeline* question, not a bug: the relay chain is board poll rate
+   (leader positions → browser) → transport round-trip → follower SyncWrite
+   throttle/threshold, and the R4 has the least `loop()` headroom to push any of
+   them faster. Levers to explore: the leader read/poll interval, the SyncWrite
+   throttle + change threshold, and whether the R4 can sustain a higher relay
+   rate at all. **Separate from** the bus-servo LOST back-off fix
+   ([[busservo-lost-backoff]]) — that fixes the servo-dropout crash and neither
+   improves nor worsens this latency (it doesn't touch the healthy poll rate).
+
+0d. **Unify the write-side rate-limiter (2026-08, design note — came out of the
+   0c latency trace).** Observation: outbound *read* streaming is unified — every
+   extension shares `ExtReadPoll` with its interval+threshold gate
+   (`internal/extensions.h`, `gate()`) — but outbound *write* rate-limiting is
+   fragmented. `analogWrite` has a proper leading-immediate / trailing-coalesced /
+   threshold scheduler (`_pwmScheduleWrite`/`_pwmSend`, `pardalote.js`); `group.write`
+   builds one SyncWrite and flushes immediately; and every streaming *example*
+   hand-rolls its own copy of the scheduler in userland (leader-follower's
+   `relayTick` = `RELAY_MS` interval + `RELAY_THRESH` deadband + `lastRelayed`
+   last-value-wins is exactly `_pwmScheduleWrite` re-implemented). So the "good
+   scheduler" exists but only `analogWrite` may use it.
+   - **Why this is NOT a blanket-unify.** The two write kinds have different data
+     semantics and the difference is real: a PWM pin write is **scalar and
+     idempotent** — dropping intermediate values and landing only the latest is
+     *lossless* (the pin ends where you asked), so coalescing is free. A
+     `group.write` is a **coordinated atomic latch** ("these N latch together,
+     now"), and `writeTimed`/`gesture` carry duration semantics — routing them
+     through a trailing-send timer would break "arrive together", desync the
+     `whenDone`/`_armDone` promises (they assume the frame leaves when `write()` is
+     called), and for a relay would *add* latency. So coordinated writes must stay
+     immediate.
+   - **Proposal (keep the layering, share the code):** (1) extract the
+     leading-immediate / trailing-coalesced / threshold logic out of the PWM path
+     into a small helper keyed by an arbitrary string (not a pin); `analogWrite`
+     becomes one caller. (2) Give single-actuator streaming writes
+     (`servo.write`, `busServo.write`) an **opt-in** `writeThrottle` that routes
+     through the same helper — so a `draw()`-loop / mouse-drag write gets the
+     protection `analogWrite` already has, without each sketch re-implementing it.
+     (3) Leave `group.write`/`writeTimed`/`gesture` **immediate by default** — an
+     app that needs to pace a *group* stream still does it at the app layer (as
+     `relayTick` does), because only the app knows the coordination cadence.
+     Result: writes get the one-implementation story reads already have, minus the
+     "analogWrite-only" asymmetry, without corrupting coordinated semantics.
+   - **Caveat — this is a cleanup, not the 0c lever.** For the leader–follower
+     relay the stream is *already* paced, so more coalescing won't help; the 0c win
+     is the opposite (event-driven relay off the leader's `'change'` event to
+     *remove* a scheduling stage). Track this note as code-quality; keep 0c as the
+     latency work. [[deferred-modernise-shared-example-uis]] is a separate batch.
+
+0e. **✅ DONE (2026-08) — JS distribution bundle + file-naming convention.**
+   Root cause of a recurring bench mystery, finally pinned: the **p5.js Web
+   Editor** preprocesses each *separate* local `.js` file through
+   esprima/escodegen and throws `this[o] is not a function` on the extension
+   files as standalone programs (`escodegen.js` / `jsPreprocess.js`). It is NOT
+   a syntax bug in our code — proven because concatenating an extension into the
+   core file, with zero code changes, fixes it (Scott's test). The big core file
+   escapes the editor's preprocessing; the small standalone extension files don't.
+   **Fix shipped:** a single all-in-one bundle **`dist/pardalote.js`** (core +
+   all eight device extensions), generated by **`build_pardalote.py`** from the
+   modular sources in `pardalote-js/`. It's the only file a sketch includes, and
+   collapses the old "core + extensions + sketch, in order" load dance to one
+   `<script>`. Verified: `node --check` clean, and the neopixel example renders
+   and runs from the bundle in a browser (WS errors only — no board). **Naming
+   convention (locked, follows JS-ecosystem tradition = lowercase/kebab
+   filenames):** bundle `pardalote.js`; core `pardalote-core.js`; extensions
+   `pardalote-<device>.js` (e.g. `pardalote-bus-servo.js`, `pardalote-neopixel.js`);
+   per-board pin maps stay `pardalote-pins-<board>.js` and are **never bundled**
+   (mutually exclusive). All ~20 example `index.html`, the example READMEs, the
+   `docs-src` reference sources, README, CHANGELOG, and the regenerated
+   `docs/`+`llms` were swept to the bundle. **Deliberately asymmetric:** the
+   **Arduino side stays modular** (opt-in `#include`s) — each extension pulls its
+   own third-party lib and some are platform-gated (Camera ESP32-only), so
+   bundling there would force every lib installed + bloat the R4 + break UNO R4
+   compilation. Browser has none of those costs. The one seam this creates
+   (browser has a device the board didn't compile in) is exactly loose-end 0a.
+   **Note:** the core source is now `pardalote-core.js`; older `pardalote-js/
+   pardalote.js:NNN` code links in this file and in `PLAN-listen-and-switch.md`
+   predate the rename (content identical, line numbers hold — just the path
+   changed). Docs regen needs a venv with `markdown-it-py mdit-py-plugins
+   pygments` (see [[docs-build-pipeline]]).
+
 0. **✅ DONE (2026-08) — Bus-servo robustness, two fixes.** Root cause found on
    a UNO R4 bench session, then confirmed to bite **any WebSocket board, not
    just the R4**. When a bus servo stops answering — wires jostled loose by a

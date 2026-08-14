@@ -86,13 +86,13 @@ If you are using a code editor you can run the web server there.
 ```
 Arduino                          Browser
 ────────────────────────────────────────────────────────
-WebSocket :81  ←──── control ────→  pardalote.js / camera.js
+WebSocket :81  ←──── control ────→  pardalote.js (Camera extension)
 HTTP      :82  ──── MJPEG stream ──→  <img src="http://ip:82/stream">
 ```
 
 1. `arduino.connect()` opens a WebSocket on port 81.
 2. On `ready`, `arduino.cam.attach(CAMERA_PORT)` sends a `CMD_CAMERA_INIT` frame to the Arduino over the WebSocket. The Arduino initialises the camera hardware and starts an HTTP server on the requested port.
-3. The Arduino echoes the confirmed port back. `camera.js` sets an `<img>` element's `src` to `http://<ip>:<port>/stream` and emits the `stream` event.
+3. The Arduino echoes the confirmed port back. The Camera extension sets an `<img>` element's `src` to `http://<ip>:<port>/stream` and emits the `stream` event.
 4. The browser fetches the MJPEG stream directly over HTTP — the WebSocket is only used for the initial handshake and any subsequent control commands (resolution, quality).
 5. In `draw()`, `image(camEl, 0, 0, width, height)` renders the current frame to the p5.js canvas.
 

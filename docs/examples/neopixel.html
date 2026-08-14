@@ -62,11 +62,11 @@
       <div class="code-ex scroll">
         <span class="lang-badge lang-js">JS</span>
         <div class="bar">sketch.js — the browser side</div>
-        <pre><code><span class="kd">let</span><span class="w"> </span><span class="nx">ArduinoIP</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;192.168.x.x&#39;</span><span class="p">;</span><span class="w">   </span><span class="c1">// Change this to your Arduino&#39;s IP</span>
+        <pre><code><span class="kd">let</span><span class="w"> </span><span class="nx">ArduinoIP</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;172.20.10.6&#39;</span><span class="p">;</span><span class="w">   </span><span class="c1">// Change this to your Arduino&#39;s IP</span>
 
 <span class="kd">let</span><span class="w"> </span><span class="nx">arduino</span><span class="p">;</span>
 
-<span class="kd">let</span><span class="w"> </span><span class="nx">pixelPin</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">11</span><span class="p">;</span>
+<span class="kd">let</span><span class="w"> </span><span class="nx">pixelPin</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">18</span><span class="p">;</span>
 <span class="kd">let</span><span class="w"> </span><span class="nx">numPixels</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">8</span><span class="p">;</span>
 
 <span class="kd">function</span><span class="w"> </span><span class="nx">setup</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
@@ -248,9 +248,8 @@ Saved: YourWiFiName
 </code></pre></div>
 <p>Changes are buffered locally until <code>show()</code> is called — this means you can set many pixels in one <code>draw()</code> pass and send them all in a single message.</p>
 <h2 id="script-loading-order">Script loading order</h2>
-<p><code>pardalote.js</code> must load before <code>neoPixel.js</code>:</p>
-<pre><code><span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;../../pardalote-js/pardalote.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
-<span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;../../pardalote-js/neoPixel.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
+<p>Include the <code>pardalote.js</code> bundle (core + every extension) before your sketch:</p>
+<pre><code><span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;../../dist/pardalote.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
 <span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;sketch.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
 </code></pre>
 <h2 id="troubleshooting">Troubleshooting</h2>
@@ -281,13 +280,12 @@ Saved: YourWiFiName
 </ul>
 <h2 id="file-structure">File Structure</h2>
 <pre><code>neopixel/
-├── index.html      # Canvas page (loads p5.js, pardalote.js, neoPixel.js)
+├── index.html      # Canvas page (loads p5.js and the pardalote.js bundle)
 ├── sketch.js       # NeoPixel colour picker
 └── README.md       # This file
 
-pardalote-js/
-├── pardalote.js    # Core Pardalote library
-└── neoPixel.js     # NeoPixel extension
+dist/
+└── pardalote.js    # Pardalote bundle (core + all extensions)
 </code></pre>
 <h2 id="next-steps">Next Steps</h2>
 <ul>

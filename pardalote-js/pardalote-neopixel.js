@@ -197,8 +197,8 @@ class NeoPixel extends Extension {
         // the strip — otherwise barely-visible first colours would be lost.
         const last = this._pixelBuffer.get(index);
         if (last !== undefined) {
-            const dist = Math.sqrt(
-                (r-last.r)**2 + (gv-last.g)**2 + (bv-last.b)**2 + (wv-last.w)**2);
+            const dr = r-last.r, dg = gv-last.g, db = bv-last.b, dw = wv-last.w;
+            const dist = Math.sqrt(dr*dr + dg*dg + db*db + dw*dw);
             if (dist <= this.threshold) return this;
         }
 
@@ -227,8 +227,8 @@ class NeoPixel extends Extension {
         for (let i = first; i < end && i < this._numPixels; i++) {
             const last = this._pixelBuffer.get(i);
             if (last === undefined) { changed = true; break; }
-            const dist = Math.sqrt(
-                (r-last.r)**2 + (gv-last.g)**2 + (bv-last.b)**2 + (wv-last.w)**2);
+            const dr = r-last.r, dg = gv-last.g, db = bv-last.b, dw = wv-last.w;
+            const dist = Math.sqrt(dr*dr + dg*dg + db*db + dw*dw);
             if (dist > this.threshold) { changed = true; break; }
         }
 

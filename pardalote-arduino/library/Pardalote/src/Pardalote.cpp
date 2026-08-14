@@ -127,17 +127,32 @@ void PardaloteClass::_beginWifi() {
     _bootTakeover = false;
     if (_bootWatch) _serialT.beginListen(_serialListenTrampoline);
 
-    wifiConfigInit(_wifiStore, _bootWatch ? _bootProbeByte : nullptr);
-    _bootWatch = false;
+    PardaloteBootProbe probe = _bootWatch ? _bootProbeByte : nullptr;
+    wifiConfigInit(_wifiStore, probe);
 
     if (_bootTakeover) {
+        _bootWatch = false;
         Serial.println(F("[Pardalote] USB takeover at boot — skipping WiFi, starting serial"));
         _beginSerial();
         return;
     }
 
     _platformInit();
-    wifiConfigConnect(_wifiStore);
+
+    // Keep watching USB through the (blocking) WiFi connect. A takeover during a
+    // slow or unreachable connect aborts it and goes serial too — covering the
+    // case where the boot-watch window was missed because something else held
+    // the port during boot (e.g. the Arduino IDE Serial Monitor). _bootWatch is
+    // still set, so _handleListenMessage flags _bootTakeover rather than running
+    // the runtime switch (whose WiFi teardown assumes the WS server is up).
+    if (!wifiConfigConnect(_wifiStore, probe)) {
+        _bootWatch = false;
+        WiFi.disconnect();   // drop the half-open association (radio stays on)
+        Serial.println(F("[Pardalote] USB takeover during WiFi connect — starting serial"));
+        _beginSerial();
+        return;
+    }
+    _bootWatch = false;
 
 #ifdef PLATFORM_UNO_R4
     // WiFiS3 sets WL_CONNECTED before DHCP completes — wait for a real IP
@@ -487,11 +502,15 @@ void PardaloteClass::_handleListenMessage(uint8_t* data, size_t len) {
 // envelope decoder; a completed takeover probe sets _bootTakeover. A loose 'w'
 // (between envelopes) is the WiFi config keystroke.
 int PardaloteClass::_bootProbeByte(uint8_t b) { return Pardalote._handleBootByte(b); }
+// Returns: 2 = USB takeover, 1 = loose 'w' (config key), 3 = other loose text (a
+// menu keystroke — the caller uses the raw byte), 0 = a 0x00 delimiter or a byte
+// consumed by an in-progress envelope (not menu input).
 int PardaloteClass::_handleBootByte(uint8_t b) {
-    const bool looseText = _serialT.decoderInText();   // between envelopes?
     _serialT.feedListen(b, millis());                  // completed envelope → _handleListenMessage
-    if (_bootTakeover)             return 2;            // USB takeover — skip WiFi
-    if (looseText && b == 'w')     return 1;            // config keystroke
+    if (_bootTakeover)                          return 2;   // USB takeover — skip WiFi
+    // A byte that leaves the decoder in TEXT and isn't a 0x00 delimiter is loose
+    // input, not envelope data — so it can double as config-menu keystrokes.
+    if (b != 0x00 && _serialT.decoderInText())  return (b == 'w') ? 1 : 3;
     return 0;
 }
 

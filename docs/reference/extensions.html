@@ -100,18 +100,12 @@
 </code></pre></div>
 <p>Each extension automatically gets a logical ID based on its type. Multiple instances of the same type are supported.</p>
 <h2 id="script-loading-order">Script loading order</h2>
-<p><code>pardalote.js</code> must load before any extension files. Extension files must load before your sketch:</p>
+<p><code>pardalote.js</code> is the all-in-one bundle — core plus every device extension — so a single script tag is all you need, loaded before your sketch:</p>
 <div class="code-ex"><div class="bar">index.html — script loading order</div><pre><code><span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;pardalote.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
-<span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;pardalote-pins-esp32-wrover-dev.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>  <span class="cm">&lt;!-- optional --&gt;</span>
-<span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;servo.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>       <span class="cm">&lt;!-- optional extensions --&gt;</span>
-<span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;stepper.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
-<span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;busServo.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
-<span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;neoPixel.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
-<span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;ultrasonic.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
-<span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;imu.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
-<span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;camera.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
+<span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;pardalote-pins-esp32-wrover-dev.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>  <span class="cm">&lt;!-- optional pin aliases --&gt;</span>
 <span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;sketch.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
 </code></pre></div>
+<p>Every extension (Servo, Stepper, BusServo, NeoPixel, Ultrasonic, IMU, Encoder, Camera) is already inside the bundle — you just <code>arduino.add(...)</code> the ones you use. (Advanced: the modular sources in <code>pardalote-js/</code> — <code>pardalote-core.js</code> plus one <code>pardalote-&lt;device&gt;.js</code> each — can be included individually instead; the bundle is exactly those concatenated.)</p>
 <h2 id="enabling-extensions-in-the-firmware">Enabling extensions in the firmware</h2>
 <p>Extensions are opt-in on the Arduino side too. Add the headers you need to your sketch:</p>
 <div class="code-ex"><span class="lang-badge lang-arduino">Arduino</span><div class="bar">sketch.ino — opt-in extensions</div><pre><code><span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;Pardalote.h&gt;</span>

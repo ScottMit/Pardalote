@@ -10,11 +10,10 @@
 
 ## Minimal working project
 
-Three files. Script load order matters.
+Three files. `pardalote.js` is the all-in-one bundle (core + every device extension); include it before your sketch.
 
 ```html index.html
 <script src="pardalote.js"></script>
-<script src="servo.js"></script>      <!-- only the extension files you use -->
 <script src="sketch.js"></script>
 ```
 

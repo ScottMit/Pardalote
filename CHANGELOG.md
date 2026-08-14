@@ -70,6 +70,23 @@ have no meaning outside the development history.
   folded into protocol v1.0 pre-release. (Replaces the earlier `begin("key")`
   form.)
 
+### JavaScript distribution
+
+- **`dist/pardalote.js` is the all-in-one bundle** — the core plus every
+  device extension (Servo, Stepper, BusServo, NeoPixel, Ultrasonic, IMU,
+  Encoder, Camera), and the single file a sketch includes. It's generated
+  from the modular sources in `pardalote-js/` (`pardalote-core.js` plus one
+  `pardalote-<device>.js` each) by `build_pardalote.py`. The Arduino side
+  stays modular — extensions are opt-in `#include`s — because each pulls in
+  its own third-party library and some are platform-gated; the browser has
+  no such cost, so it bundles.
+- **Why bundle the JS:** the p5.js Web Editor preprocesses each *separate*
+  local file through esprima/escodegen and throws on the extension files as
+  standalone programs; concatenated into one file they load cleanly. The
+  bundle also collapses the old "core + extensions + sketch, in order" load
+  dance to a single `<script>`. Board pin maps (`pardalote-pins-*.js`) are
+  per-board and mutually exclusive, so they are never bundled.
+
 ### Notable design decisions (for readers of the beta code)
 
 - **Looking is decoupled from telling.** Digital input pins are watched

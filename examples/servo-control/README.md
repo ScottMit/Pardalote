@@ -112,11 +112,10 @@ on screen (and noted in the log). A PWM servo has no position feedback:
 
 ## Script loading order
 
-`pardalote.js` must load before `servo.js`:
+Include the `pardalote.js` bundle (core + every extension) before your sketch:
 
 ```html
-<script src="../../pardalote-js/pardalote.js"></script>
-<script src="../../pardalote-js/servo.js"></script>
+<script src="../../dist/pardalote.js"></script>
 <script src="sketch.js"></script>
 ```
 
@@ -138,13 +137,12 @@ on screen (and noted in the log). A PWM servo has no position feedback:
 
 ```
 servo-control/
-├── index.html      # Canvas page (loads p5.js, pardalote.js, servo.js)
+├── index.html      # Canvas page (loads p5.js and the pardalote.js bundle)
 ├── sketch.js       # Servo control and visualisation
 └── README.md       # This file
 
-pardalote-js/
-├── pardalote.js    # Core Pardalote library
-└── servo.js        # Servo extension
+dist/
+└── pardalote.js    # Pardalote bundle (core + all extensions)
 ```
 
 ## Next Steps

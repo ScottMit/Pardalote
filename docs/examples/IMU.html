@@ -67,7 +67,7 @@
 <span class="c1">// ── Tuning ───────────────────────────────────────────────────</span>
 <span class="kd">const</span><span class="w"> </span><span class="nx">POLL_MS</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">50</span><span class="p">;</span><span class="w">    </span><span class="c1">// sensor poll interval ms (50 Hz)</span>
 
-<span class="c1">// Complementary filter blend factor.</span>
+<span class="c1">// Filter blend factor.</span>
 <span class="c1">// Higher → trusts gyro more (responsive but drifts over time).</span>
 <span class="c1">// Lower  → trusts accel more (stable but noisy during motion).</span>
 <span class="kd">const</span><span class="w"> </span><span class="nx">ALPHA</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.96</span><span class="p">;</span>
@@ -483,9 +483,8 @@ Saved: YourWiFiName
 </code></pre></div>
 <p>Lower values give smoother motion but use more I²C bandwidth and WiFi. <strong>On the UNO R4 WiFi and older ESP32 boards (WROVER class) keep this at 50 ms or higher</strong> — faster polling can hang the I²C bus on those chips. Newer ESP32-S3 / C3 boards can handle 20 ms (50 Hz) reliably.</p>
 <h2 id="script-loading-order">Script loading order</h2>
-<p><code>pardalote.js</code> must load before <code>imu.js</code>:</p>
-<pre><code><span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;../../pardalote-js/pardalote.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
-<span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;../../pardalote-js/imu.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
+<p>Include the <code>pardalote.js</code> bundle (core + every extension) before your sketch:</p>
+<pre><code><span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;../../dist/pardalote.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
 <span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;sketch.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
 </code></pre>
 <h2 id="troubleshooting">Troubleshooting</h2>
@@ -521,14 +520,13 @@ Saved: YourWiFiName
 </ul>
 <h2 id="file-structure">File Structure</h2>
 <pre><code>IMU/
-├── index.html      # Canvas page (loads p5.js, pardalote.js, imu.js)
+├── index.html      # Canvas page (loads p5.js and the pardalote.js bundle)
 ├── sketch.js       # IMU setup, complementary filter, 3D render
 ├── style.css       # Dark HUD overlay
 └── README.md       # This file
 
-pardalote-js/
-├── pardalote.js    # Core Pardalote library
-└── imu.js          # Generic IMU extension
+dist/
+└── pardalote.js    # Pardalote bundle (core + all extensions)
 </code></pre>
 <h2 id="next-steps">Next Steps</h2>
 <ul>

@@ -6,12 +6,12 @@
 // GPL-3.0 License
 // ==============================================================
 
-let ArduinoIP = '192.168.x.x';   // Change this to your Arduino's IP
+let ArduinoIP = '172.20.10.4';   // Change this to your Arduino's IP
 
 let arduino;
 
 // Arduino pins - Change this to match the pin you are using.
-const POTPIN = A0;   // UNO IO 14 / ESP32 IO 36
+const POTPIN = 14;   // UNO IO 14 / ESP32 IO 36
 
 function setup() {
     createCanvas(600, 600);

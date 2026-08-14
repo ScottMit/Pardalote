@@ -62,12 +62,12 @@
       <div class="code-ex scroll">
         <span class="lang-badge lang-js">JS</span>
         <div class="bar">sketch.js — the browser side</div>
-        <pre><code><span class="kd">let</span><span class="w"> </span><span class="nx">ArduinoIP</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;192.168.x.x&#39;</span><span class="p">;</span><span class="w">   </span><span class="c1">// Change this to your Arduino&#39;s IP</span>
+        <pre><code><span class="kd">let</span><span class="w"> </span><span class="nx">ArduinoIP</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;172.20.10.4&#39;</span><span class="p">;</span><span class="w">   </span><span class="c1">// Change this to your Arduino&#39;s IP</span>
 
 <span class="kd">let</span><span class="w"> </span><span class="nx">arduino</span><span class="p">;</span>
 
 <span class="c1">// Arduino pins - Change this to match the pin you are using.</span>
-<span class="kd">const</span><span class="w"> </span><span class="nx">POTPIN</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">A0</span><span class="p">;</span><span class="w">   </span><span class="c1">// UNO IO 14 / ESP32 IO 36</span>
+<span class="kd">const</span><span class="w"> </span><span class="nx">POTPIN</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">14</span><span class="p">;</span><span class="w">   </span><span class="c1">// UNO IO 14 / ESP32 IO 36</span>
 
 <span class="kd">function</span><span class="w"> </span><span class="nx">setup</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
 <span class="w">    </span><span class="nx">createCanvas</span><span class="p">(</span><span class="mf">600</span><span class="p">,</span><span class="w"> </span><span class="mf">600</span><span class="p">);</span>
@@ -258,13 +258,13 @@ e.g. <code>const POTPIN = 36;</code> — they always work.)</p>
 </ul>
 <h2 id="file-structure">File Structure</h2>
 <pre><code>potentiometer-p5js/
-├── index.html      # Canvas page (loads p5.js and pardalote.js)
+├── index.html      # Canvas page (loads p5.js and the pardalote.js bundle)
 ├── sketch.js       # p5.js setup() and draw()
 ├── style.css       # Pardalote example house style
 └── README.md       # This file
 
-pardalote-js/
-└── pardalote.js    # Core Pardalote library (loaded from here)
+dist/
+└── pardalote.js    # Pardalote bundle (core + all extensions)
 </code></pre>
 <h2 id="next-steps">Next Steps</h2>
 <ul>

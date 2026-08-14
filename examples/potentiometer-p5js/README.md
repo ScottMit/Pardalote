@@ -132,13 +132,13 @@ Use `arduino.analogMax` rather than a hard-coded value to make your sketch porta
 
 ```
 potentiometer-p5js/
-├── index.html      # Canvas page (loads p5.js and pardalote.js)
+├── index.html      # Canvas page (loads p5.js and the pardalote.js bundle)
 ├── sketch.js       # p5.js setup() and draw()
 ├── style.css       # Pardalote example house style
 └── README.md       # This file
 
-pardalote-js/
-└── pardalote.js    # Core Pardalote library (loaded from here)
+dist/
+└── pardalote.js    # Pardalote bundle (core + all extensions)
 ```
 
 ## Next Steps

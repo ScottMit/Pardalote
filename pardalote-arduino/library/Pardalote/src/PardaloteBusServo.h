@@ -51,6 +51,11 @@
 
 #define MAX_BUS_SERVOS      16
 #define BUSSERVO_DEF_BAUD   1000000UL
+// While a servo isn't answering, retry its poll read at most this often (ms)
+// rather than every due interval — keeps a bus-wide dropout from blocking loop()
+// on the IOTimeOut every pass (which drops the UNO R4's transport). Lower =
+// snappier LOST→found recovery, more blocking during an outage.
+#define BUSSERVO_LOST_RETRY_MS  500UL
 
 // STS/SMS EEPROM register addresses (for ops the high-level API doesn't wrap).
 #define BUSSERVO_ADDR_MODE      33
@@ -102,6 +107,10 @@ private:
     // -1 = unknown/detached. Cached so announce() can replay it to late clients
     // without re-pinging (a blocking bus read). Mirrors the _fwLimit* cache.
     inline static int8_t  _found[MAX_BUS_SERVOS] = {};
+    // Per-servo back-off: while a servo is not answering, its next allowed poll
+    // read (millis). Keeps a dead servo from blocking loop() every pass. See the
+    // periodic-read loop and BUSSERVO_LOST_RETRY_MS.
+    inline static uint32_t _lostRetryAt[MAX_BUS_SERVOS] = {};
 
     // Sketch-created bus servos (PardaloteBusServo.attach("name", servoId)).
     // The name is what the browser binds (arduino.<name>); announce() replays a
@@ -920,8 +929,21 @@ public:
             ExtReadPoll& p = _polls[i];
             if (!p.due(now)) continue;
             if (!validId(p.instance) || !_attached[p.instance]) { p.instance = -1; continue; }
+            const int id = p.instance;
+
+            // Back-off for a servo that has stopped answering: poll it slowly
+            // (BUSSERVO_LOST_RETRY_MS) instead of on every due interval. Each read
+            // to a dead servo blocks up to IOTimeOut (5 ms); a bus-wide dropout
+            // (e.g. a power brownout under load) would otherwise block loop() ~5 ms
+            // per servo EVERY pass, and on the UNO R4 that sustained blocking
+            // starves the WiFiS3/native-USB transport and drops the connection.
+            // Responding servos (found == 1) are never throttled — full poll rate,
+            // no effect on relay latency. The one cost is that recovery is noticed
+            // up to BUSSERVO_LOST_RETRY_MS later.
+            if (_found[id] == 0 && (int32_t)(now - _lostRetryAt[id]) < 0) continue;
+
             FrameBuilder fb;
-            const int32_t pos = buildRead(fb, p.instance);
+            const int32_t pos = buildRead(fb, id);
 
             // Live presence off the read result (pos == -1 means no answer):
             // a servo that appears (e.g. driver board powered up after boot) or
@@ -929,7 +951,6 @@ public:
             // accurate — and logs the change to Serial, matching the browser's
             // 'presence' event. (JS tracks the browser side from this same pos.)
             const int8_t nowFound = (pos != -1) ? 1 : 0;
-            const int id = p.instance;
             if (nowFound != _found[id]) {
                 _found[id] = nowFound;
                 Serial.print(F("BusServo ")); Serial.print(id);
@@ -937,6 +958,8 @@ public:
                 Serial.println(nowFound ? F(" — now responding [found]")
                                         : F(" — stopped responding [LOST]"));
             }
+            // Still not answering — schedule the next retry a back-off away.
+            if (nowFound == 0) _lostRetryAt[id] = now + BUSSERVO_LOST_RETRY_MS;
 
             for (uint8_t c = 0; c < PARDALOTE_MAX_CLIENTS; c++)
                 if (p.gate(c, pos, now)) Pardalote.sendFrame(c, fb);

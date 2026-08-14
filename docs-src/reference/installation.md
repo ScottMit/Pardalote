@@ -40,15 +40,15 @@ Restart Arduino IDE — Pardalote now appears under **File → Examples → Pard
 
 ## The Pardalote JavaScript library
 
-No install step: copy `pardalote.js` (plus any extension files you want) next to your web page and include it with a script tag. `pardalote.js` must load before any extension file, and extensions before your sketch:
+No install step: copy `pardalote.js` next to your web page and include it with a script tag. `pardalote.js` is the all-in-one bundle — it contains the core **plus every device extension** (Servo, Stepper, BusServo, NeoPixel, Ultrasonic, IMU, Encoder, Camera), so it is the only Pardalote file you need. It must load before your sketch:
 
 ```html index.html — script loading order
 <script src="pardalote.js"></script>
-<script src="pardalote-pins-esp32-wrover-dev.js"></script>  <!-- optional pin aliases -->
-<script src="servo.js"></script>       <!-- optional extensions -->
-<script src="neoPixel.js"></script>
+<script src="pardalote-pins-esp32-wrover-dev.js"></script>  <!-- optional pin aliases for your board -->
 <script src="sketch.js"></script>
 ```
+
+Advanced: the modular sources live in `pardalote-js/` (`pardalote-core.js` plus one `pardalote-<device>.js` per extension) if you would rather include only specific files. The bundle is simply those concatenated, rebuilt with `build_pardalote.py`. Board pin maps (`pardalote-pins-*.js`) are per-board and are never bundled — include the one for your board.
 
 ## A minimal sketch
 

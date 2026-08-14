@@ -93,16 +93,39 @@ static char _wifiReadChar() {
     return c;
 }
 
+// Read the main menu keystroke, watching USB for a takeover so the board stays
+// reachable over USB while idling in network management. Returns the keystroke,
+// or sets *tookOver and returns 0 if a USB takeover probe arrived. (Sub-prompts —
+// SSID / password / y-n — are active-typing states and are not watched.)
+static char _wifiReadMenuChar(PardaloteBootProbe probe, bool* tookOver) {
+    *tookOver = false;
+    for (;;) {
+        while (Serial.available()) {
+            uint8_t b = (uint8_t)Serial.read();
+            if (probe) {
+                int ev = probe(b);
+                if (ev == 2) { *tookOver = true; return 0; }   // USB takeover
+                if (ev != 1 && ev != 3) continue;              // delimiter / envelope byte — not menu input
+            }
+            if (b != '\r' && b != '\n' && b != ' ') { Serial.println((char)b); return (char)b; }
+        }
+        delay(5);
+    }
+}
+
 // -------------------------------------------------------------------
-// Configuration menu — returns on exit.
+// Configuration menu. Returns true on normal exit, false if a USB takeover
+// arrived at the menu prompt (the caller then starts serial).
 // -------------------------------------------------------------------
-static void _wifiEnterConfig(WifiStore& s) {
+static bool _wifiEnterConfig(WifiStore& s, PardaloteBootProbe probe = nullptr) {
     Serial.println(F("\n=== WiFi Configuration ==="));
 
     for (;;) {
         Serial.println(F("\n[a]dd  [d]elete  [c]lear all  [s]how  [x] exit"));
         Serial.print(F("> "));
-        char cmd = _wifiReadChar();
+        bool tookOver = false;
+        char cmd = _wifiReadMenuChar(probe, &tookOver);
+        if (tookOver) return false;   // USB takeover — abort config, go serial
 
         // ── Add ──
         if (cmd == 'a') {
@@ -170,7 +193,7 @@ static void _wifiEnterConfig(WifiStore& s) {
 
         // ── Exit ──
         } else if (cmd == 'x') {
-            return;
+            return true;
         }
     }
 }
@@ -212,7 +235,9 @@ void wifiConfigInit(WifiStore& s, PardaloteBootProbe probe) {
     } else {
         while (_wifiCount(s) == 0) {
             Serial.println(F("No WiFi networks stored."));
-            _wifiEnterConfig(s);
+            // A takeover here sets _bootTakeover via `probe`; return so _beginWifi
+            // sees it and starts serial instead of looping (still 0 networks).
+            if (!_wifiEnterConfig(s, probe)) return;
             cameFromConfig = true;
         }
     }
@@ -232,7 +257,10 @@ void wifiConfigInit(WifiStore& s, PardaloteBootProbe probe) {
                 if (probe) {
                     int ev = probe(b);
                     if (ev == 2) { done = true; break; }   // USB takeover — the core skips WiFi
-                    if (ev == 1) { _wifiEnterConfig(s); done = true; break; }
+                    // ev == 1 is a 'w' (enter config); ev == 3 is other loose text
+                    // (ignored here). A takeover inside config sets _bootTakeover,
+                    // which _beginWifi checks after this returns.
+                    if (ev == 1) { _wifiEnterConfig(s, probe); done = true; break; }
                 } else if (b == 'w') {
                     _wifiEnterConfig(s); done = true; break;
                 }
@@ -242,10 +270,28 @@ void wifiConfigInit(WifiStore& s, PardaloteBootProbe probe) {
     }
 }
 
+// Wait up to `ms` for WiFi to connect, draining USB for a takeover along the
+// way (so a blocking connect can be interrupted). Returns:
+//   1 = WiFi connected, 2 = USB takeover, 0 = timed out (not connected).
+static int _waitConnectOrTakeover(unsigned long ms, PardaloteBootProbe probe) {
+    unsigned long t = millis() + ms;
+    while (millis() < t) {
+        if (WiFi.status() == WL_CONNECTED) return 1;
+        if (probe) {
+            // Drain fully each pass so a takeover envelope isn't lost to the FIFO.
+            while (Serial.available()) {
+                if (probe((uint8_t)Serial.read()) == 2) return 2;
+            }
+        }
+        delay(20);
+    }
+    return (WiFi.status() == WL_CONNECTED) ? 1 : 0;
+}
+
 // -------------------------------------------------------------------
 // wifiConfigConnect — tries secrets.h first, then EEPROM entries.
 // -------------------------------------------------------------------
-void wifiConfigConnect(WifiStore& s) {
+bool wifiConfigConnect(WifiStore& s, PardaloteBootProbe probe) {
 #ifdef PLATFORM_UNO_R4
     if (WiFi.status() == WL_NO_MODULE) {
         Serial.println(F("WiFi module not found"));
@@ -264,9 +310,9 @@ void wifiConfigConnect(WifiStore& s) {
             } else {
                 WiFi.begin(_pardaloteSecrets.ssid);
             }
-            unsigned long t = millis() + 10000;
-            while (WiFi.status() != WL_CONNECTED && millis() < t) delay(500);
-            if (WiFi.status() == WL_CONNECTED) return;
+            int r = _waitConnectOrTakeover(10000, probe);
+            if (r == 1) return true;
+            if (r == 2) return false;   // USB takeover — caller starts serial
             Serial.println(F("Failed."));
             WiFi.disconnect();
             delay(200);
@@ -278,16 +324,16 @@ void wifiConfigConnect(WifiStore& s) {
             Serial.print(F("Trying: "));
             Serial.println(s.nets[i].ssid);
             WiFi.begin(s.nets[i].ssid, s.nets[i].pass);
-            unsigned long t = millis() + 10000;
-            while (WiFi.status() != WL_CONNECTED && millis() < t) delay(500);
-            if (WiFi.status() == WL_CONNECTED) return;
+            int r = _waitConnectOrTakeover(10000, probe);
+            if (r == 1) return true;
+            if (r == 2) return false;   // USB takeover — caller starts serial
             Serial.println(F("Failed."));
             WiFi.disconnect();
             delay(200);
         }
 
         Serial.println(F("Could not connect to any network."));
-        _wifiEnterConfig(s);
+        if (!_wifiEnterConfig(s, probe)) return false;   // USB takeover in config → serial
     }
 }
 

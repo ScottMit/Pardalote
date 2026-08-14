@@ -97,8 +97,8 @@ basic-light-switch/
 ├── sketch.js       # Arduino connection and button handlers
 └── README.md       # This file
 
-pardalote-js/
-└── pardalote.js    # Core Pardalote library (loaded from here)
+dist/
+└── pardalote.js    # Pardalote bundle (core + all extensions)
 ```
 
 ## Next Steps

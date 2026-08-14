@@ -117,11 +117,10 @@ Changes are buffered locally until `show()` is called — this means you can set
 
 ## Script loading order
 
-`pardalote.js` must load before `neoPixel.js`:
+Include the `pardalote.js` bundle (core + every extension) before your sketch:
 
 ```html
-<script src="../../pardalote-js/pardalote.js"></script>
-<script src="../../pardalote-js/neoPixel.js"></script>
+<script src="../../dist/pardalote.js"></script>
 <script src="sketch.js"></script>
 ```
 
@@ -153,13 +152,12 @@ Changes are buffered locally until `show()` is called — this means you can set
 
 ```
 neopixel/
-├── index.html      # Canvas page (loads p5.js, pardalote.js, neoPixel.js)
+├── index.html      # Canvas page (loads p5.js and the pardalote.js bundle)
 ├── sketch.js       # NeoPixel colour picker
 └── README.md       # This file
 
-pardalote-js/
-├── pardalote.js    # Core Pardalote library
-└── neoPixel.js     # NeoPixel extension
+dist/
+└── pardalote.js    # Pardalote bundle (core + all extensions)
 ```
 
 ## Next Steps

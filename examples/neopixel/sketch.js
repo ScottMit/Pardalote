@@ -6,11 +6,11 @@
 // GPL-3.0 License
 // ==============================================================
 
-let ArduinoIP = '192.168.x.x';   // Change this to your Arduino's IP
+let ArduinoIP = '172.20.10.6';   // Change this to your Arduino's IP
 
 let arduino;
 
-let pixelPin = 11;
+let pixelPin = 18;
 let numPixels = 8;
 
 function setup() {

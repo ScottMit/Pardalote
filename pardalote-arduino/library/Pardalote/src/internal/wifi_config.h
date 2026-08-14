@@ -55,8 +55,10 @@ typedef int (*PardaloteBootProbe)(uint8_t b);
 // config window it also watches USB for a takeover via `probe` (see above).
 void wifiConfigInit(WifiStore& s, PardaloteBootProbe probe = nullptr);
 
-// Tries each available network in order:
-// secrets.h first (if bound), then EEPROM entries.
-// Returns once connected. If all networks fail, drops into the
-// Serial config menu so the user can fix credentials, then retries.
-void wifiConfigConnect(WifiStore& s);
+// Tries each available network in order: secrets.h first (if bound), then
+// EEPROM entries. Returns true once connected. If all networks fail it drops
+// into the Serial config menu, then retries. While waiting for a connection it
+// also drains USB via `probe` (see PardaloteBootProbe): if a takeover arrives
+// it stops trying WiFi and returns FALSE, so the caller starts serial instead —
+// the fallback when WiFi is slow/unreachable but a browser wants USB.
+bool wifiConfigConnect(WifiStore& s, PardaloteBootProbe probe = nullptr);

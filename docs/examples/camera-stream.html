@@ -94,7 +94,6 @@
 
 <span class="w">    </span><span class="nx">arduino</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">Arduino</span><span class="p">();</span>
 <span class="w">    </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;cam&#39;</span><span class="p">,</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">Camera</span><span class="p">());</span>
-<span class="w">                </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">cam</span><span class="p">.</span><span class="nx">setResolution</span><span class="p">(</span><span class="nx">FRAMESIZE_SVGA</span><span class="p">);</span><span class="w">     </span><span class="c1">// 800×600</span>
 <span class="w">    </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">connect</span><span class="p">(</span><span class="nx">ARDUINO_IP</span><span class="p">);</span>
 
 <span class="w">    </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;ready&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
@@ -211,13 +210,13 @@
 <h2 id="how-it-works">How it works</h2>
 <pre><code>Arduino                          Browser
 ────────────────────────────────────────────────────────
-WebSocket :81  ←──── control ────→  pardalote.js / camera.js
+WebSocket :81  ←──── control ────→  pardalote.js (Camera extension)
 HTTP      :82  ──── MJPEG stream ──→  &lt;img src=&quot;http://ip:82/stream&quot;&gt;
 </code></pre>
 <ol>
 <li><code>arduino.connect()</code> opens a WebSocket on port 81.</li>
 <li>On <code>ready</code>, <code>arduino.cam.attach(CAMERA_PORT)</code> sends a <code>CMD_CAMERA_INIT</code> frame to the Arduino over the WebSocket. The Arduino initialises the camera hardware and starts an HTTP server on the requested port.</li>
-<li>The Arduino echoes the confirmed port back. <code>camera.js</code> sets an <code>&lt;img&gt;</code> element's <code>src</code> to <code>http://&lt;ip&gt;:&lt;port&gt;/stream</code> and emits the <code>stream</code> event.</li>
+<li>The Arduino echoes the confirmed port back. The Camera extension sets an <code>&lt;img&gt;</code> element's <code>src</code> to <code>http://&lt;ip&gt;:&lt;port&gt;/stream</code> and emits the <code>stream</code> event.</li>
 <li>The browser fetches the MJPEG stream directly over HTTP — the WebSocket is only used for the initial handshake and any subsequent control commands (resolution, quality).</li>
 <li>In <code>draw()</code>, <code>image(camEl, 0, 0, width, height)</code> renders the current frame to the p5.js canvas.</li>
 </ol>
