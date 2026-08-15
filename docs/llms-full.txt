@@ -134,20 +134,6 @@ A few patterns repeat across the whole API:
 - A web browser
 - A code or text editor
 
-## Arduino libraries
-
-Install via Arduino IDE → Tools → Manage Libraries. Only install what your hardware needs:
-
-| Library | Needed for |
-|---|---|
-| `WebSocketsServer` (Markus Sattler) | Always required on WiFi boards (not needed on the UNO R4 Minima — its serial-only build compiles the WiFi path out) |
-| `Adafruit NeoPixel` | LED strips |
-| `ESP32Servo` | Servos on ESP32 |
-| `AccelStepper` (Mike McCauley) | Stepper motors |
-| `SCServo` (Feetech/Waveshare) | Serial bus servos — install **"SCServo" by FT&WS** from the Library Manager, or a ZIP from the Waveshare wiki / Feetech SDK |
-
-No extra library is needed for the IMU extension — it reads sensor registers directly over I2C. The camera extension needs only the ESP32 Arduino core.
-
 ## The Pardalote Arduino library
 
 The easiest way is the **Library Manager**: in the Arduino IDE open **Tools → Manage Libraries…**, search for **Pardalote**, and click **Install**. The IDE offers to also install the required dependency (`WebSockets` by Markus Sattler) — accept it. Pardalote then appears under **File → Examples → Pardalote**, and future updates arrive through the Library Manager too.
@@ -162,6 +148,19 @@ The easiest way is the **Library Manager**: in the Arduino IDE open **Tools → 
 | macOS | `~/Documents/Arduino/libraries/` |
 | Windows | `Documents\Arduino\libraries\` |
 | Linux | `~/Arduino/libraries/` |
+
+## Additional Arduino libraries
+
+Some hardware will require additional Arduino libraries. Install these via Arduino IDE → Tools → Manage Libraries. Only install what your hardware needs:
+
+| Library | Needed for |
+|---|---|
+| `Adafruit NeoPixel` | LED strips |
+| `ESP32Servo` | Servos on ESP32 |
+| `AccelStepper` (Mike McCauley) | Stepper motors |
+| `SCServo` (Feetech/Waveshare) | Serial bus servos — install **"SCServo" by FT&WS** from the Library Manager, or a ZIP from the Waveshare wiki / Feetech SDK |
+
+No extra library is needed for the IMU extension — it reads sensor registers directly over I2C. The camera extension needs only the ESP32 Arduino core.
 
 ## The Pardalote JavaScript library
 

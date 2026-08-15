@@ -93,39 +93,6 @@
 <li>A web browser</li>
 <li>A code or text editor</li>
 </ul>
-<h2 id="arduino-libraries">Arduino libraries</h2>
-<p>Install via Arduino IDE → Tools → Manage Libraries. Only install what your hardware needs:</p>
-<table>
-<thead>
-<tr>
-<th>Library</th>
-<th>Needed for</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>WebSocketsServer</code> (Markus Sattler)</td>
-<td>Always required on WiFi boards (not needed on the UNO R4 Minima — its serial-only build compiles the WiFi path out)</td>
-</tr>
-<tr>
-<td><code>Adafruit NeoPixel</code></td>
-<td>LED strips</td>
-</tr>
-<tr>
-<td><code>ESP32Servo</code></td>
-<td>Servos on ESP32</td>
-</tr>
-<tr>
-<td><code>AccelStepper</code> (Mike McCauley)</td>
-<td>Stepper motors</td>
-</tr>
-<tr>
-<td><code>SCServo</code> (Feetech/Waveshare)</td>
-<td>Serial bus servos — install <strong>&quot;SCServo&quot; by FT&amp;WS</strong> from the Library Manager, or a ZIP from the Waveshare wiki / Feetech SDK</td>
-</tr>
-</tbody>
-</table>
-<p>No extra library is needed for the IMU extension — it reads sensor registers directly over I2C. The camera extension needs only the ESP32 Arduino core.</p>
 <h2 id="the-pardalote-arduino-library">The Pardalote Arduino library</h2>
 <p>The easiest way is the <strong>Library Manager</strong>: in the Arduino IDE open <strong>Tools → Manage Libraries…</strong>, search for <strong>Pardalote</strong>, and click <strong>Install</strong>. The IDE offers to also install the required dependency (<code>WebSockets</code> by Markus Sattler) — accept it. Pardalote then appears under <strong>File → Examples → Pardalote</strong>, and future updates arrive through the Library Manager too.</p>
 <p><strong>Manual install</strong> — for a specific version, or a build not yet in the index. Download the Arduino library ZIP from the <a href="../download.html">download page</a>, then either:</p>
@@ -155,6 +122,35 @@
 </tr>
 </tbody>
 </table>
+<h2 id="additional-arduino-libraries">Additional Arduino libraries</h2>
+<p>Some hardware will require additional Arduino libraries. Install these via Arduino IDE → Tools → Manage Libraries. Only install what your hardware needs:</p>
+<table>
+<thead>
+<tr>
+<th>Library</th>
+<th>Needed for</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Adafruit NeoPixel</code></td>
+<td>LED strips</td>
+</tr>
+<tr>
+<td><code>ESP32Servo</code></td>
+<td>Servos on ESP32</td>
+</tr>
+<tr>
+<td><code>AccelStepper</code> (Mike McCauley)</td>
+<td>Stepper motors</td>
+</tr>
+<tr>
+<td><code>SCServo</code> (Feetech/Waveshare)</td>
+<td>Serial bus servos — install <strong>&quot;SCServo&quot; by FT&amp;WS</strong> from the Library Manager, or a ZIP from the Waveshare wiki / Feetech SDK</td>
+</tr>
+</tbody>
+</table>
+<p>No extra library is needed for the IMU extension — it reads sensor registers directly over I2C. The camera extension needs only the ESP32 Arduino core.</p>
 <h2 id="the-pardalote-javascript-library">The Pardalote JavaScript library</h2>
 <p>No install step: copy <code>pardalote.js</code> next to your web page and include it with a script tag. <code>pardalote.js</code> is the all-in-one bundle — it contains the core <strong>plus every device extension</strong> (Servo, Stepper, BusServo, NeoPixel, Ultrasonic, IMU, Encoder, Camera), so it is the only Pardalote file you need. It must load before your sketch:</p>
 <div class="code-ex"><div class="bar">index.html — script loading order</div><pre><code><span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;pardalote.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
