@@ -127,7 +127,12 @@
 </table>
 <p>No extra library is needed for the IMU extension — it reads sensor registers directly over I2C. The camera extension needs only the ESP32 Arduino core.</p>
 <h2 id="the-pardalote-arduino-library">The Pardalote Arduino library</h2>
-<p>Pardalote ships as an Arduino library. Install it by copying the <code>Pardalote</code> folder from the download into your Arduino libraries folder:</p>
+<p>The easiest way is the <strong>Library Manager</strong>: in the Arduino IDE open <strong>Tools → Manage Libraries…</strong>, search for <strong>Pardalote</strong>, and click <strong>Install</strong>. The IDE offers to also install the required dependency (<code>WebSockets</code> by Markus Sattler) — accept it. Pardalote then appears under <strong>File → Examples → Pardalote</strong>, and future updates arrive through the Library Manager too.</p>
+<p><strong>Manual install</strong> — for a specific version, or a build not yet in the index. Download the Arduino library ZIP from the <a href="../download.html">download page</a>, then either:</p>
+<ul>
+<li><strong>Sketch → Include Library → Add .ZIP Library…</strong> and select the ZIP, or</li>
+<li>unzip the <code>Pardalote</code> folder into your Arduino libraries folder and restart the IDE:</li>
+</ul>
 <table>
 <thead>
 <tr>
@@ -150,7 +155,6 @@
 </tr>
 </tbody>
 </table>
-<p>Restart Arduino IDE — Pardalote now appears under <strong>File → Examples → Pardalote</strong>.</p>
 <h2 id="the-pardalote-javascript-library">The Pardalote JavaScript library</h2>
 <p>No install step: copy <code>pardalote.js</code> next to your web page and include it with a script tag. <code>pardalote.js</code> is the all-in-one bundle — it contains the core <strong>plus every device extension</strong> (Servo, Stepper, BusServo, NeoPixel, Ultrasonic, IMU, Encoder, Camera), so it is the only Pardalote file you need. It must load before your sketch:</p>
 <div class="code-ex"><div class="bar">index.html — script loading order</div><pre><code><span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;pardalote.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
