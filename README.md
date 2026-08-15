@@ -1,8 +1,10 @@
 # Pardalote
 
-Control Arduino hardware directly from a web browser — over WiFi (no cables, no server, no Node.js) or, when a network isn't an option, over the USB cable with the same code. Write JavaScript that reads sensors and drives LEDs, servos (PWM and serial bus), stepper motors, and NeoPixel strips — with an API that mirrors Arduino's own function names, and [groups](#groups) that move multiple actuators together.
+Control Arduino hardware directly from a web browser — over WiFi or USB (no server, no Node.js). Write JavaScript that reads sensors and drives LEDs, servos (PWM and serial bus), stepper motors, and NeoPixel strips — with an API that mirrors Arduino's own function names.
 
-Designed for creative coders, design students, and makers who want to connect physical hardware to web interfaces with minimal setup.
+Designed for creative coders, design students, and makers who want to connect physical hardware to web interfaces with minimal effort.
+
+For examples and reference docs, see the [Pardalote Website](https://scottmit.github.io/Pardalote/).
 
 ---
 
