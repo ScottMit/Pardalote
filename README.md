@@ -30,15 +30,15 @@ No extra library is needed for the IMU extension — it reads sensor registers d
 
 ### Pardalote library
 
-Pardalote ships as an Arduino library. Install it by copying the `pardalote-arduino/library/Pardalote/` folder of this repo into your Arduino libraries folder:
+The easiest way is the **Library Manager**: in the Arduino IDE open **Tools → Manage Libraries…**, search **Pardalote**, and click **Install**. Accept the prompt to also install the required **WebSockets** dependency (by Markus Sattler). Pardalote then appears under **File → Examples → Pardalote**, and updates arrive the same way.
+
+**Manual install** — for a specific version, or a build not yet in the index. Download the Arduino library ZIP from the [releases page](https://github.com/ScottMit/Pardalote/releases), then either use **Sketch → Include Library → Add .ZIP Library…**, or unzip the `Pardalote` folder into your Arduino libraries folder and restart the IDE:
 
 | OS | Libraries folder |
 |---|---|
 | macOS | `~/Documents/Arduino/libraries/` |
 | Windows | `Documents\Arduino\libraries\` |
 | Linux | `~/Arduino/libraries/` |
-
-Restart Arduino IDE — Pardalote should now appear under **File → Examples → Pardalote**.
 
 ---
 
@@ -1634,7 +1634,7 @@ Each extension self-registers when included — no other changes required. Only 
 Pardalote/
 ├── pardalote-arduino/
 │   └── library/
-│       └── Pardalote/                       # ← install this folder as an Arduino library
+│       └── Pardalote/                       # ← the Arduino library (published to the Library Manager)
 │           ├── library.properties
 │           ├── keywords.txt
 │           ├── src/
