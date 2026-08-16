@@ -1303,7 +1303,7 @@ The write family paces what you **send** (min ms between writes; skip deltas und
 
 **Returns** a snapshot of all servo state.
 
-See also: Groups · Bus servo · Servo example · Expressive gesture example
+See also: Groups · Bus servo · Servo example
 
 ---
 
@@ -2011,7 +2011,7 @@ await arm.home(1500).whenDone({ timeout: 30000 });
 
 `stop()` halts every member's motion — the group counterpart of `member.stop()` (to stop polling, use `read(END)`). `getState()` returns `{ name, members: { shoulder: {...}, base: {...}, ... } }`.
 
-See also: Servo · Stepper · Bus servo · Coordinated motion example · Expressive gesture example
+See also: Servo · Stepper · Bus servo · Coordinated motion example
 
 ---
 

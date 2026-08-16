@@ -228,4 +228,4 @@ The write family paces what you **send** (min ms between writes; skip deltas und
 
 **Returns** a snapshot of all servo state.
 
-See also: [Groups](groups.html) · [Bus servo](bus-servo.html) · [Servo example](../examples/servo-control.html) · [Expressive gesture example](../examples/expressive-gesture.html)
+See also: [Groups](groups.html) · [Bus servo](bus-servo.html) · [Servo example](../examples/servo-control.html)

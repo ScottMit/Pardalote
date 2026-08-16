@@ -140,4 +140,4 @@ await arm.home(1500).whenDone({ timeout: 30000 });
 
 `stop()` halts every member's motion — the group counterpart of `member.stop()` (to stop polling, use `read(END)`). `getState()` returns `{ name, members: { shoulder: {...}, base: {...}, ... } }`.
 
-See also: [Servo](servo.html) · [Stepper](stepper.html) · [Bus servo](bus-servo.html) · [Coordinated motion example](../examples/coordinated-motion.html) · [Expressive gesture example](../examples/expressive-gesture.html)
+See also: [Servo](servo.html) · [Stepper](stepper.html) · [Bus servo](bus-servo.html) · [Coordinated motion example](../examples/coordinated-motion.html)

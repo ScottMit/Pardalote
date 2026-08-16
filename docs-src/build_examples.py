@@ -93,9 +93,6 @@ EXAMPLES = {
     "leader-follower": ("Leader → Follower",
         "Teleoperate a robot arm by hand: move a leader arm and a second follower arm mirrors it live, joint for joint — the LeRobot leader/follower rig, in the browser across two boards.",
         "🕹️", "linear-gradient(135deg,#d9ece8,#5fa89e)", ["Motion", "Tool"], "Advanced"),
-    "expressive-gesture": ("Expressive gesture",
-        "Author animation-style motion: a pan/tilt head plays nods, shakes and curious tilts built from eased gesture segments — and shows you the code for each.",
-        "🙂", "linear-gradient(135deg,#f0e6dc,#e0a86d)", ["Motion", "Tool"], "Advanced"),
     "neopixel": ("NeoPixel",
         "Mix a colour by moving the mouse across a hue-and-brightness field, and an LED strip follows the colour under your cursor live.",
         "🌈", "linear-gradient(135deg,#f3dce8,#d989b8)", ["Light", "p5.js"], "Intermediate"),
@@ -146,9 +143,6 @@ G_SERVO_H   = '<path d="M5 13a7 7 0 0 1 14 0"/><circle cx="12" cy="13" r="2.2"/>
 G_SERVO_P   = '<path d="M4 17a8 8 0 0 1 16 0"/><line x1="4" y1="17" x2="20" y2="17"/><line x1="12" y1="17" x2="17.5" y2="12"/><circle cx="12" cy="17" r="1.4"/>'
 G_GEAR      = '<circle cx="12" cy="12" r="5.5"/><circle cx="12" cy="12" r="2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.1 5.1l2.1 2.1M16.8 16.8l2.1 2.1M18.9 5.1l-2.1 2.1M7.2 16.8l-2.1 2.1"/>'
 G_ARM       = '<rect x="3" y="18" width="6" height="3" rx="1"/><path d="M6 18l4-6 6 2"/><circle cx="10" cy="12" r="1.1"/><path d="M16 14l2.2-2M16 14l2.2 2"/>'
-# pan/tilt head with a motion arc — the expressive-gesture example
-G_HEAD      = ('<circle cx="12" cy="10" r="6"/><circle cx="9.6" cy="9" r="0.9"/><circle cx="14.4" cy="9" r="0.9"/>'
-               '<line x1="12" y1="16" x2="12" y2="19"/><path d="M7.5 21h9"/><path d="M19.6 6.4a5.5 5.5 0 0 1 .3 4.4"/>')
 # three linked servos in series (44-wide) — the bus-servo chain
 G_BUS       = ('<rect x="4" y="9" width="8" height="10" rx="1.5"/><circle cx="8" cy="7" r="2"/><line x1="8" y1="7" x2="10.3" y2="5.6"/>'
                '<rect x="18" y="9" width="8" height="10" rx="1.5"/><circle cx="22" cy="7" r="2"/><line x1="22" y1="7" x2="24.3" y2="5.6"/>'
@@ -182,7 +176,6 @@ ICONS = {
     "bus-servos":                 (44, G_BUS),   # three linked servos
     "coordinated-motion":         (24, G_ARM),   # articulated arm
     "leader-follower":            (44, _pair(G_ARM, G_ARM)),   # two arms: leader + follower
-    "expressive-gesture":         (24, G_HEAD),  # pan/tilt head
     "neopixel":                   (24, G_STRIP),
     "ultrasonic-sensor":          (24, G_SONAR),
     "IMU":                        (24, G_AXES),
@@ -241,7 +234,6 @@ ARDUINO = {
     "stepper-motor":              IDE + "/stepper-motor/stepper-motor.ino",
     "bus-servos":                 IDE + "/bus-servos/bus-servos.ino",
     "coordinated-motion":         IDE + "/coordinated-motion/coordinated-motion.ino",
-    "expressive-gesture":         IDE + "/expressive-gesture/expressive-gesture.ino",
     "neopixel":                   IDE + "/neopixel/neopixel.ino",
     "ultrasonic-sensor":          IDE + "/ultrasonic-sensor/ultrasonic-sensor.ino",
     "IMU":                        IDE + "/IMU/IMU.ino",
@@ -279,7 +271,7 @@ def code_card(label, code, lang):
             '        <pre><code>' + body + '</code></pre>\n'
             '      </div>')
 
-NO_CODE = {"control-panel", "messaging", "servo-control", "stepper-motor", "bus-servos", "coordinated-motion", "leader-follower", "expressive-gesture"}   # tool pages — don't show source
+NO_CODE = {"control-panel", "messaging", "servo-control", "stepper-motor", "bus-servos", "coordinated-motion", "leader-follower"}   # tool pages — don't show source
 
 def code_cols(slug):
     if slug in NO_CODE:
