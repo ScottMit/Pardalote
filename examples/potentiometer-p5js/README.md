@@ -66,24 +66,12 @@ let ArduinoIP = '192.168.1.42';  // your Arduino's IP
 const POTPIN = A0;  // the pin your potentiometer's wiper is on
 ```
 
-### 2a. Pin aliases — match the script to your board
+### 2a. Pin aliases
 
-Names like `A0` come from a **pin-alias file** loaded in `index.html`. This
-example ships with the ESP32-WROVER aliases; if you're on a different board,
-swap the script line for the matching file from `lib/`:
-
-```html
-<script src="../../lib/pardalote-pins-esp32-wrover-dev.js"></script>
-```
-
-| Board | Pin-alias file |
-|---|---|
-| ESP32-WROVER dev board | `pardalote-pins-esp32-wrover-dev.js` |
-| Arduino UNO R4 WiFi | `pardalote-pins-uno-r4-wifi.js` |
-| FireBeetle 2 ESP32-C5 | `pardalote-pins-firebeetle2-esp32-c5.js` |
-
-(No file for your board? Skip the script and use raw GPIO numbers instead —
-e.g. `const POTPIN = 36;` — they always work.)
+Named pins like `A0` and `D13` work by name in any sketch, with nothing extra
+to include — each resolves to the right physical pin for the board you connect
+to (see the [Pins reference](../../docs-src/reference/pins.md)). This example
+just uses a raw GPIO number (`const POTPIN = 14;`), which always works too.
 
 ### 3. Open the example
 

@@ -18,16 +18,28 @@ Pardalote versions **two things independently**:
 
 ## [Unreleased]
 
+- **Named pins are now built in.** `D13`, `A0`, `SDA`, `LED_BUILTIN` and friends
+  work by name in any sketch with nothing extra to include — each is a global
+  string equal to its name (`D13 === 'D13'`), resolved to the right physical pin
+  **per board, per `Arduino()` instance** when the `ready` event fires (so two
+  boards can resolve the same `D13` differently). They install as guarded
+  `globalThis` properties, so they never throw a redeclaration error and step
+  aside for any name you've already defined; `<script src="pardalote.js"
+  data-pins="off">` disables them entirely. Bare `D13` and the string `'A0'` are
+  identical — the globals just save the quotes.
+- **Removed the standalone `pardalote-pins-*.js` board files.** Superseded by the
+  built-in named pins above; the pin data now lives once in `BOARD_ALIASES` in
+  the core and feeds both the string form and the bare globals.
 - **License:** adopted the current SPDX identifier `GPL-3.0-or-later` (was the
   deprecated `GPL-3.0`) across `library.properties`, `package.json`, and every
   source-file notice. The GPLv3 LICENSE text is unchanged.
 - **Repo layout:** the browser JavaScript moved from `pardalote-js/` + `dist/`
-  into a single `lib/` folder — the generated bundle is now `lib/pardalote.js`,
-  the per-board pin maps sit at `lib/`, and the modular sources moved to
-  `lib/src/`. Examples and `build_pardalote.py` updated to match.
+  into a single `lib/` folder — the generated bundle is now `lib/pardalote.js`
+  and the modular sources moved to `lib/src/`. Examples and `build_pardalote.py`
+  updated to match.
 - **JS release package:** `pardalote-js-<ver>.zip` now ships the runnable
-  `examples/` and a `LICENSE` alongside the bundle + pin maps, laid out so the
-  examples run straight from the download.
+  `examples/` and a `LICENSE` alongside the bundle, laid out so the examples run
+  straight from the download.
 
 ## [1.0.0] — 2026-08-14
 

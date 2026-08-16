@@ -183,26 +183,25 @@ let mapped = map(arduino.analogRead(A0), 0, arduino.analogMax, 0, width);
 
 ## Pin aliases
 
-Rather than raw numbers, include the pin file for your board and use named constants. This prevents mistakes and makes sketches portable.
-
-```html
-<!-- in index.html, after pardalote.js -->
-<script src="pardalote-pins-esp32-wrover-dev.js"></script>
-```
+Rather than raw numbers, use named pins — `D13`, `A0`, `SDA`, `LED_BUILTIN` — exactly as you would in Arduino code. They work out of the box; nothing extra to include.
 
 ```javascript
-arduino.pinMode(A0, ANALOG_INPUT_MODE, 50);
-arduino.digitalWrite(LED_BUILTIN, HIGH);
-arduino.imu.attach(SDA);
+arduino.on('ready', () => {
+    arduino.pinMode(A0, ANALOG_INPUT_MODE, 50);
+    arduino.digitalWrite(LED_BUILTIN, HIGH);
+    arduino.imu.attach(SDA);
+});
 ```
 
-| File | Board |
-|---|---|
-| `pardalote-pins-uno-r4-wifi.js` | Arduino UNO R4 WiFi |
-| `pardalote-pins-esp32-wrover-dev.js` | ESP32-WROVER-DEV |
-| `pardalote-pins-firebeetle2-esp32-c5.js` | FireBeetle 2 ESP32-C5 |
+Each name resolves to the correct physical pin **for the board this `arduino` is actually connected to**, looked up when the `ready` event fires. The *same* `D13` therefore maps to the right pin on each board — and two `Arduino()` instances driving different boards each resolve it correctly, which a fixed global number never could. Because resolution happens at `ready`, reference pins from inside an `arduino.on('ready', …)` handler (or later), not at the top level before the board is known.
 
-String aliases also work anywhere a pin is accepted:
+If a name collides with your own code or another library, Pardalote quietly steps aside (it never overwrites a name you've already defined). To switch the named pins off entirely, add `data-pins="off"` to the script tag:
+
+```html
+<script src="pardalote.js" data-pins="off"></script>
+```
+
+The **string form** works anywhere a pin is accepted and needs no global at all — handy with `data-pins="off"`, or for a name your board doesn't predefine:
 
 ```javascript
 arduino.analogRead('A0');      // resolved from the board's alias table

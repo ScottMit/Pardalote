@@ -19,7 +19,7 @@ The legend for every table: **✓** works, **—** not available. "Analog in" me
 
 ## ESP32-WROVER-DEV
 
-Include `pardalote-pins-esp32-wrover-dev.js`. `arduino.analogMax` = **4095**. Confirmed on hardware.
+The **Alias** names below work by name in your sketch (`arduino.analogRead(A0)`) — no include needed. `arduino.analogMax` = **4095**. Confirmed on hardware.
 
 | GPIO | Alias | Analog in | Digital in | Digital out | PWM | Notes |
 |---|---|:---:|:---:|:---:|:---:|---|
@@ -50,7 +50,7 @@ The one thing worth memorising: **the only pins that read analog under WiFi are 
 
 ## Arduino UNO R4 WiFi
 
-Include `pardalote-pins-uno-r4-wifi.js`. `arduino.analogMax` = **1023** (10-bit default; the RA4M1 ADC can do 12/14-bit). Confirmed on hardware. No input-only pins, and no ADC/WiFi conflict.
+The **Alias** names below work by name in your sketch (`arduino.digitalWrite(D13, HIGH)`) — no include needed. `arduino.analogMax` = **1023** (10-bit default; the RA4M1 ADC can do 12/14-bit). Confirmed on hardware. No input-only pins, and no ADC/WiFi conflict.
 
 | Pin | Alias | Analog in | Digital in | Digital out | PWM | Notes |
 |---|---|:---:|:---:|:---:|:---:|---|
@@ -77,7 +77,7 @@ Include `pardalote-pins-uno-r4-wifi.js`. `arduino.analogMax` = **1023** (10-bit 
 
 ## FireBeetle 2 ESP32-C5
 
-Include `pardalote-pins-firebeetle2-esp32-c5.js`. `arduino.analogMax` = **4095**. Datasheet-derived — not yet bench-verified. A single 12-bit SAR ADC (no ADC2/WiFi split), and a 6-channel LED PWM controller (at most six PWM outputs at once).
+The **Alias** names below work by name in your sketch (`arduino.analogRead(A1)`) — no include needed. `arduino.analogMax` = **4095**. Datasheet-derived — not yet bench-verified. A single 12-bit SAR ADC (no ADC2/WiFi split), and a 6-channel LED PWM controller (at most six PWM outputs at once).
 
 | GPIO | Alias | Analog in | Digital in | Digital out | PWM | Notes |
 |---|---|:---:|:---:|:---:|:---:|---|

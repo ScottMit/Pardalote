@@ -1,5 +1,7 @@
 // ==============================================================
 // Pardalote — Shared Servo
+// https://github.com/ScottMit/Pardalote
+// Copyright (C) 2026 Scott Mitchell — GPL-3.0-or-later. See LICENSE.
 //
 // The SKETCH creates the servo:
 //

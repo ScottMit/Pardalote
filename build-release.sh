@@ -42,10 +42,10 @@ say "1/5  Rebuild JS bundle + docs"
 "$VENV/python" "$MONO/docs-src/build_llms.py"      >/dev/null
 echo "  bundle + docs regenerated"
 
-say "2/5  node --check (bundle + pin maps + modular sources)"
+say "2/5  node --check (bundle + modular sources)"
 command -v node >/dev/null || die "node not found"
 node --check "$MONO/lib/pardalote.js"
-for f in "$MONO"/lib/pardalote-pins-*.js "$MONO"/lib/src/*.js; do node --check "$f"; done
+for f in "$MONO"/lib/src/*.js; do node --check "$f"; done
 echo "  all JS parses clean"
 
 say "3/5  Build release artifacts -> release-artifacts/"
@@ -53,11 +53,11 @@ OUT="$MONO/release-artifacts"
 rm -rf "$OUT"; mkdir -p "$OUT"
 # Arduino library: unpacks to Pardalote/ with library.properties at its root
 ( cd "$MONO/pardalote-arduino/library" && zip -rq "$OUT/Pardalote-$VERSION.zip" Pardalote -x '*.DS_Store' )
-# JS package: bundle + pin maps (lib/, minus src/) + examples + README + LICENSE.
+# JS package: bundle (lib/, minus src/) + examples + README + LICENSE.
 # Layout mirrors the repo so each example's ../../lib/pardalote.js resolves.
 STAGE="$OUT/pardalote-js-$VERSION"
 mkdir -p "$STAGE/lib"
-cp "$MONO/lib/pardalote.js" "$MONO"/lib/pardalote-pins-*.js "$STAGE/lib/"
+cp "$MONO/lib/pardalote.js" "$STAGE/lib/"
 rsync -a --exclude='.DS_Store' "$MONO/examples/" "$STAGE/examples/"
 cp "$MONO/LICENSE" "$STAGE/LICENSE"
 cat > "$STAGE/README.md" <<PKG
@@ -67,9 +67,8 @@ The browser / p5.js side of Pardalote. Include the one bundle:
 
     <script src="lib/pardalote.js"></script>
 
-Optionally add your board's pin aliases from \`lib/\`, e.g.
-
-    <script src="lib/pardalote-pins-uno-r4-wifi.js"></script>
+Named pins (\`D13\`, \`A0\`, \`SDA\` …) work by name automatically, resolved for
+the connected board. Add \`data-pins="off"\` to the script tag to disable them.
 
 Runnable examples are in \`examples/\` — open any \`index.html\` in Chrome or Edge.
 

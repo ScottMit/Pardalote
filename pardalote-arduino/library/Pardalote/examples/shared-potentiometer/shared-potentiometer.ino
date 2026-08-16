@@ -1,5 +1,7 @@
 // ==============================================================
 // Pardalote — Shared Input: Potentiometer
+// https://github.com/ScottMit/Pardalote
+// Copyright (C) 2026 Scott Mitchell — GPL-3.0-or-later. See LICENSE.
 //
 // A potentiometer wired to A0. The Arduino tells the browser to start
 // polling it — the browser doesn't have to declare the pin itself.

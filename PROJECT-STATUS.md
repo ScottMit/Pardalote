@@ -39,399 +39,93 @@ regeneration, then the manual push/release/tag steps for both repos).
 
 ---
 
-## ⚠️ Standing caveat: the Arduino code is bench-tested only in parts
+## Bench tests & resolved bugs → BENCH-TESTS.md
 
-The dev environment still has **no Arduino toolchain and no physical actuators**,
-so newly written code is **structurally verified only** (brace/wire-format checks,
-careful review; JS verified in-browser against the real wire frames). **But a first
-hardware bench test happened 2026-07 on an ESP32-WROVER** (Scott's rig), and a large
-slice of the core + actuator path is now confirmed on real hardware.
-
-### ✅ Confirmed on hardware (2026-07, ESP32-WROVER)
-- **Core transport** — WiFi connect, HELLO handshake (ADC range), `ready`, silent
-  auto-reconnect, multi-client sync.
-- **Pins** — `digitalWrite`, shared buttons (`share`/`send`), analog input
-  (`share(A0, ANALOG_INPUT_MODE)` auto-poll). *(ESP32 gotcha found: analog input must
-  be on an ADC1 pin — ADC2 is disabled while WiFi is up, reads 0.)*
-- **Messaging channel** — `watch`/`onMessage` both ways, typed values, `retain` replay
-  to a late browser, `broadcast` to a second browser (+ sketch), frame monitor.
-- **PWM servo** — attach, `write`, `writeTimed`+`whenDone`, soft-limit clamp, setHome/home.
-- **Sketch-created servo** — all four materialisation cases (late browser, mid-loop
-  attach, reconnect-after-reset, idempotent re-attach).
-- **Stepper** — attach (STEP/DIR + FULL4WIRE), moveTo/move/moveToTimed, runSpeed,
-  read/position, enable/disable, soft limits, `setPosition`.
-- **Stepper limit switches** — board-side trip, direction-aware guard, release debounce,
-  `'limit'` event.
-- **Stepper homing** — full SEEK→BACKOFF→TRAVEL, re-zero at trip, `home({speed,timeout})`,
-  `homeFail` on timeout, and the instant-kill across POSITION/VELOCITY/TIMED (Phase 7.6).
-
-### 🧪 Full bench-test log — ESP32-WROVER (2026-07, Phases 0–11)
-
-The per-test run behind the summary above. ✅ = passed on hardware, ⬜ = not
-yet done / untested. This is the **authoritative granular record** and
-supersedes the earlier "zero bench time" labels still scattered below for the
-features it covers (messaging, sketch-created servo, limit switches, homing,
-NeoPixel, ultrasonic, IMU). Two earlier summary lines were optimistic — see the
-⚠️ corrections at 4.4 and 6.2/6.3.
-
-**Phase 0 — Transport & handshake** *(basic-LED sketch + `basic-LED-example/`)*
-- ✅ 0.1 Board joins WiFi; IP prints on Serial @115200.
-- ✅ 0.2 Browser fires `connect` then `ready`; `arduino.board` sensible, `arduino.analogMax === 4095` (HELLO carries ESP32 ADC range).
-- ✅ 0.3 Power-pull → browser logs reconnect attempts and auto-reconnects on return (exponential backoff, no reload).
-- ✅ 0.4 Second tab also reaches `ready` and sees live state (multi-client sync).
-
-**Phase 1 — Pins (digital out/in, analog in)** *(basic-LED + `shared-control-example/` + `shared-input-example/`)*
-- ✅ 1.1 `digitalWrite(2, HIGH/LOW)` toggles the LED.
-- ✅ 1.2 Physical button → LED + browser mirror stays synced (`Pardalote.send` echo); browser button flips it back. Last-writer-wins, both voices.
-- ✅ 1.3 Sketch `share(A0, ANALOG_INPUT_MODE)` (pot on GPIO 36) → browser gets values via `onChange('A0', …)` with no JS setup; auto-poll starts, values span ~0–4095.
-
-**Phase 2 — Messaging channel** *(messaging example + `messaging-example/` inspector — previously zero bench time)*
-- ✅ 2.1 Browser `send('led', bool)` → sketch `watch("led")` drives the LED (browser→sketch, bool).
-- ✅ 2.2 Sketch retained `"uptime"` once/sec → browser `messages['uptime']` updates (sketch→browser, int).
-- ✅ 2.3 (retain) Reload mid-stream → late client immediately gets the current value in the pre-`ready` sync (not zero, no wait).
-- ✅ 2.4 (broadcast) Two browsers: tab A `send('cursor', 120, {broadcast:true})` → tab B sees it, tab A gets no self-echo, sketch still sees it.
-- ✅ 2.5 (frame monitor) `monitor(fn)` / inspector shows name-decoded traffic (MESSAGE, DIGITAL_WRITE, …) with no visible perf hit while a servo/pot also streams.
-
-**Phase 3 — Servo (PWM, browser-driven)** *(servo example + `servo-example/`, signal on GPIO 18)*
-- ✅ 3.1 `attach(18)`, `write(0/90/180)` — centre/min/max land correctly.
-- ✅ 3.2 `writeTimed(120, 1500)` interpolates smoothly on-board; `whenDone()` resolves on arrival. 20 ms tick feel fine under WiFi load.
-- ✅ 3.3 Immediate `write()` cancels an in-progress timed move (and `sweep()`).
-- ✅ 3.4 (soft limits) `setLimits(20,160)` → commands 0/180 clamp to 20/160; browser cached angle matches the clamp.
-- ✅ 3.5 (home) `setHome(45)` then `home(1000)` eases to 45°; bare `home()` snaps there.
-
-**Phase 4 — Sketch-created servo** *(shared servo sketch + `shared-servo-example/` — previously zero bench time)*
-- ✅ 4.1 (late browser) Board attaches first → connect browser → `arduino.pan` exists at `ready` with correct pin/angle; `'share'` fires before `'ready'`.
-- ✅ 4.2 (mid-loop attach) Browser already connected, sketch attaches → `arduino.pan` appears live.
-- ✅ 4.3 (reconnect after reset) Reset board → servo re-materialises in the open browser after auto-reconnect.
-- ⬜ 4.4 (idempotent) `attach("pan", 18)` twice → one servo, not two. **⚠️ Not yet exercised** — the "all four materialisation cases" claim in the summary above was optimistic; treat idempotent as still-to-confirm.
-- ⬜ 4.5 Confirm the UNO R4 caveat is moot on the ESP32 path (compiled & ran on ESP32; UNO R4 path not run here).
-
-**Phase 5 — Stepper: basic motion** *(stepper example + `stepper-example/`, STEP/DIR/EN → 25/26/27)*
-- ✅ 5.1 `attach(25,26,27)`, `setMaxSpeed`/`setAcceleration`, `moveTo(2000)` clean accel-limited move; `whenDone()` resolves at target.
-- ✅ 5.2 `moveToTimed(3200, 2000)` arrives in ~2 s, constant speed, no stall.
-- ✅ 5.3 `runSpeed(±600)` spins continuously; `stop()` decelerates.
-- ✅ 5.4 `read(100)` polls; position advances, `target`/`distanceToGo`/`isRunning` sane; `setPosition(0)` re-zeros.
-- ✅ 5.5 `enable()`/`disable()` hold vs free-by-hand.
-
-**Phase 6 — Stepper limit switches** *(switch → GPIO 32 → GND, MIN, active-LOW — previously zero bench time)*
-- ✅ 6.1 `setLimitSwitch(LIMIT_MIN, 32)`; drive toward it → instant board-side stop (no WiFi round-trip, no decel ramp); browser gets `'limit'` + `limitHit === 'min'`.
-- ⬜ 6.2 (direction-aware guard) Move away from a pressed switch is allowed, no false trip. **⚠️ Not done — "not sure what this is."** Also unconfirmed in the summary above; still open. *(How to test: hold the switch pressed, command a move in the release direction; it should run instead of re-tripping — this exercises the `speed()`-sign / `distanceToGo` fallback.)*
-- ⬜ 6.3 (release debounce) 20 ms release debounce → no LIMIT-frame spam, and the normal `done` follows so `whenDone()` settles. **Not done — "not sure how to test this."** *(How to test: trip then slowly release; watch the frame monitor for a single clean LIMIT then DONE, not a burst.)*
-- ⬜ 6.4 (trip latency under load) Trip while `read()` polling + something else streams.
-- ✅ 6.5 Added a MAX switch on GPIO 33 → two-switch operation works.
-
-**Phase 7 — Stepper homing** *(SEEK→BACKOFF→TRAVEL, MIN switch on GPIO 32 — previously zero bench time)*
-- Observations worth flagging: stepper visual **moves after board disconnect**; and a **4-wire stepper can't run backwards** (possibly the specific motor — needs a second unit to confirm).
-- ✅ 7.1 `setLimitSwitch(LIMIT_MIN, 32)`, `setHome(800)`, `home()` → seeks switch, counter → 0 at trip, backs off until released, accel-travels to 800, fires `done`; `whenDone({timeout:30000})` resolves `true`.
-- ✅ 7.2 (back-off release point) Back-off clears the switch before TRAVEL (the drift case PROJECT-STATUS flagged didn't bite).
-- ✅ 7.3 (home from already-pressed) Starting with the switch pressed → backs off first, then seeks/travels correctly.
-- ⬜ 7.4 (setSpeed survives) `home({speed:400})` seek speed honoured and maxSpeed cap restored for the TRAVEL leg.
-- ✅ 7.5 (timeout / homeFail) Unplugged switch → after the ~30 s cap the board hard-stops, fires `'homeFail'`, then `done`. Nothing spins forever.
-- ✅ 7.6 (instant-kill re-zero) After a trip, `setPosition(currentPosition())` acts as an instant kill in POSITION/VELOCITY/TIMED.
-
-**Phase 8 — Sketch-created stepper** — ⬜ not done (whole phase; `PardaloteStepper.attach("base", 25,26,27)` + four materialisation cases, `attach4wire`).
-
-**Phase 9 — NeoPixel** *(neopixel example + `neopixel-example/`, data on GPIO 4)*
-- ✅ 9.1 `init(4, N)`, `setPixelColor`/`fill`/`show`, `setBrightness`, `clear` — colours correct.
-- ✅ 9.2 `show()` debounce: fast animation coalesces without lag.
-- ⬜ 9.3 (sketch-created, zero bench) `PardaloteNeoPixel.attach(...)` + `fill`/`show` in the sketch → four materialisation cases; late browser sees current colours via announce.
-
-**Phase 10 — Ultrasonic** *(ultrasonic example + `ultrasonic-sensor-example/`, Trig 13 / Echo 14 divided to 3.3V)*
-- ✅ 10.1 `attach(13,14)`, `read(200, CM)` returns plausible cm, tracks a moving target, out-of-range returns -1.
-- ⬜ 10.2 (sketch-created, zero bench) `PardaloteUltrasonic.attach(...)` + sketch `read()` alongside the browser poll; four materialisation cases.
-
-**Phase 11 — IMU** *(imu example + `imu-example/`, I2C SDA 21 / SCL 22)*
-- ✅ 11.1 `attach(0x68)` identifies (WHO_AM_I); `read(20)` streams sane accel (~1g down axis) and gyro (~0 at rest).
-- ✅ 11.2 `calibrate(200)` flat, Z up → accel.z ≈ +1g, gyro ≈ 0; offsets survive a browser reload (re-sent on reconnect).
-- ⬜ 11.3 `setAccelRange` / `setGyroRange` change scaling as expected.
-- ⬜ 11.4 (sketch-created, zero bench) `PardaloteIMU.attach("imu","6050")` identifies, sketch `read()` sane, model-payload attach round-trips to the browser; four materialisation cases.
-
-**Still open on ESP32 after this run:** 4.4–4.5, 6.2–6.4, 7.4, Phase 8 (all),
-9.3, 10.2, 11.3–11.4 — plus the two Phase 7 observations (move-after-disconnect,
-4-wire reverse).
-
-### ✅ Confirmed on hardware (2026-07, UNO R4 WiFi — first UNO R4 bench time)
-- **Core transport on UNO R4** — WiFi connect, HELLO handshake, WebSocket server
-  (WiFiS3 + arduinoWebSockets), sustained multi-message throughput, and
-  auto-reconnect all work.
-- **PWM (`analogWrite`)** — slider-driven writes run smoothly at the default 20 ms
-  write throttle *once the loop is kept responsive* (see the UNO R4 WebSocket fix
-  below — the LED matrix was starving it).
-- **LED matrix** — boot "Pardalote" + IP scroll, plus the new stop-on-connect
-  behaviour.
-- Still unverified on UNO R4: the extension/actuator paths (servo, stepper,
-  bus servo, NeoPixel, ultrasonic, IMU, camera) and sketch-created devices.
-  (Core pins — digital in/out + analog in — and the whole messaging channel are
-  now confirmed too; see the UNO R4 bench log just below.)
-
-### 🧪 UNO R4 bench-test log (2026-07, Phases 0–2)
-
-Same phase plan as the ESP32 run, on the UNO R4 WiFi. ✅ = passed. (The plan text
-was copied from the ESP32 sheet; board-specific values below are the corrected
-UNO R4 ones, confirmed with Scott.)
-
-**Phase 0 — Transport & handshake** *(basic-LED sketch + `basic-LED-example/`)*
-- ✅ 0.1 Board joins WiFi; IP prints on Serial @115200.
-- ✅ 0.2 Browser fires `connect` then `ready`; `arduino.board` sensible; HELLO carries the ADC range — `arduino.analogMax === 1023` (10-bit) on the R4, matching the pin-capabilities doc.
-- ✅ 0.3 Power-pull → browser logs reconnect attempts and auto-reconnects on return (exponential backoff, no reload).
-- ✅ 0.4 Second tab also reaches `ready` and sees live state (multi-client sync).
-
-**Phase 1 — Pins (digital out/in, analog in)** *(basic-LED + `shared-control-example/` + `shared-input-example/`)*
-- ✅ 1.1 `digitalWrite(2, HIGH/LOW)` toggles the LED.
-- ✅ 1.2 Physical button → LED + browser mirror stays synced (`Pardalote.send` echo); browser button flips it back. Last-writer-wins, both voices.
-- ✅ 1.3 Sketch `share(A0, ANALOG_INPUT_MODE)` (pot on **A0** = pin 14 on the R4) → browser gets values via `onChange('A0', …)` with no JS setup; auto-poll starts, values span ~0–1023.
-
-**Phase 2 — Messaging channel** *(messaging example + `messaging-example/` inspector)*
-- ✅ 2.1 Browser `send('led', bool)` → sketch `watch("led")` drives the LED (browser→sketch, bool).
-- ✅ 2.2 Sketch retained `"uptime"` once/sec → browser `messages['uptime']` updates (sketch→browser, int).
-- ✅ 2.3 (retain) Reload mid-stream → late client immediately gets the current value in the pre-`ready` sync.
-- ✅ 2.4 (broadcast) Two browsers: tab A `send('cursor', 120, {broadcast:true})` → tab B sees it, tab A gets no self-echo, sketch still sees it.
-- ✅ 2.5 (frame monitor) `monitor(fn)` / inspector shows name-decoded traffic with no visible perf hit while a pot/servo also streams.
-
-**Still to run on UNO R4:** Phases 3–11 (servo, stepper, limit switches, homing,
-sketch-created devices, NeoPixel, ultrasonic, IMU) — the whole extension/actuator
-surface, matching the ESP32 coverage.
-
-### 🔧 Fixed + bench-verified this session (UNO R4 WebSocket / PWM lag)
-Scott's first UNO R4 bench test surfaced a PWM problem: dragging an `analogWrite()`
-slider built a growing send queue, latency climbed with movement, and a long
-enough queue dropped the WebSocket (reconnect churn). ESP32 hid it entirely.
-Root-caused in order:
-
-- **Root cause was loop starvation — NOT throughput, and NOT Nagle.** The UNO R4's
-  WiFiS3 WebSocket stack destabilises when `loop()` is blocked: `webSocket.loop()`
-  must be serviced promptly or the connection stalls and drops. Confirmed by Scott —
-  a bare `delay(100)` in `loop()` reproduces it (cf. [arduinoWebSockets #909](https://github.com/Links2004/arduinoWebSockets/issues/909)).
-  An early delayed-ACK/Nagle hypothesis (from a ~200 ms symptom) was **wrong**: the
-  200 ms was the LED-matrix rebuild cadence stealing loop time, not a TCP timer.
-- **The blocker was the LED matrix.** `ledMatrixLoop()` re-armed and replayed the IP
-  scroll *forever*, doing that rebuild work every cycle. **Fix:** signature is now
-  `ledMatrixLoop(bool anyConnected)` — it stops re-arming once a browser connects (the
-  in-flight `SCROLL_LEFT` runs off-screen and leaves the matrix blank, so nothing to
-  clear); scrolling resumes if every client disconnects, so the IP stays readable for
-  the next connection. With the scroll gone, `analogWrite` runs fine at 20 ms.
-  (`internal/led_matrix.{h,cpp}`, `Pardalote.cpp::_platformLoop`.)
-- **Defensive PWM throttle added (JS).** Core `analogWrite()` is now rate-limited per
-  pin — leading write immediate, rapid follow-ups coalesced into one trailing send
-  carrying the final value (mirrors the servo/neopixel throttle; preserves the
-  documented "individual writes flush immediately" feel). New `arduino.setWriteThrottle(ms)`
-  / `setWriteThreshold(v)`, default 20 ms / 0, `0` = off. Caps a slider's per-loop parse
-  load; imperceptible on ESP32. (`pardalote-js/pardalote.js`.) Verified with a
-  fake-timer Node harness: a 25-write burst → leading + final value always delivered,
-  coalesced in between; throttle=0 sends all; threshold suppression and per-pin
-  independence check out. Pending PWM sends are cancelled on (re)connect so a value
-  queued for the old board never lands on a new one.
-- **Dropped: killing Nagle (`setNoDelay`).** Wrong layer — it governs outbound TCP
-  segmentation, not loop-servicing cadence, so it can't fix delay-induced instability.
-  Left un-pursued since the 20 ms default now works.
-- **Docs.** Troubleshooting rewritten to "WebSocket is unstable on the UNO R4 — keep
-  `loop()` tight" (cites #909, notes PWM lag as an *indirect* symptom); the
-  `analogWrite()` reference documents the throttle + the two new setters. HTML
-  regenerated via `build_reference.py`.
-- **Noted for later (not done):** [NuSock](https://github.com/mobizt/NuSock) (mobizt) is
-  a more R4-hardened WebSocket library (zero-interrupt UART locking, duplicate-handle
-  cleanup, WSS, fragmentation), but on the R4 it still runs cooperatively polled in
-  "Generic mode" — it would harden connection churn, not remove the keep-`loop()`-tight
-  rule (that's inherent to the RA4M1 + WiFiS3 modem architecture; async/lwIP libs like
-  ESPAsyncWebServer don't work on R4). Not a drop-in (different event model from
-  `WStype_*`). Open option: prototype it behind Pardalote's `_ws` abstraction to
-  bench-compare. Also open: a short "don't block the loop" note in the Arduino README.
-
-Both firmware TUs stub-compiled clean on `-DARDUINO_UNOR4_WIFI` and `-DESP32`. (The
-leftover `/tmp` matrix stub was too thin for the animation API and needed fleshing out,
-plus two stub-fidelity fixes — `constrain` should be a macro, `IPAddress` needs
-`operator[]` — neither a change to firmware.)
-
-### 🔧 Fixed + bench-verified this session (stepper firmware)
-- **`hardStop()` — new distinct verb** (`CMD_STEPPER_HARD_STOP 0x57`): instant halt, no
-  decel ramp, keeps the coordinate, DONE follows. JS `Stepper.hardStop()` + sketch
-  `PardaloteStepper.hardStop(id)`. Chosen over a `stop({hard})` flag.
-- **Velocity-`stop()` no longer runs away.** Stopping a `runSpeed`/timed spin used to
-  *re-accelerate* — `AccelStepper::stop()`+`run()` planned a fresh move from rest because
-  the accel-ramp state (`_n`) is stale after `setSpeed()`. New **`MODE_STOPPING`** ramps
-  `setSpeed()` down at the configured accel to a clean halt; POSITION-mode stops still use
-  `AccelStepper::stop()` (correct there).
-- **Velocity soft-limit overshoot fixed** — hitting a soft limit under `runSpeed` no longer
-  steps one past then snaps back (skip the step on the clamp tick).
-
-**Still unverified on hardware** — SC-series, sketch-created
-stepper/busservo/NeoPixel/Ultrasonic/IMU, and the UNO R4 extension/actuator paths for
-everything EXCEPT bus servos (UNO R4 core transport, PWM, and now **bus servos**
-are confirmed — servo/stepper/NeoPixel/ultrasonic/IMU on the R4 remain open).
-(Browser-driven servo, stepper, NeoPixel, ultrasonic, IMU and the
-whole messaging channel are now **confirmed on ESP32** — see the Phase 0–11 bench
-log above. **Bus servos are now confirmed on UNO R4, ESP32-WROVER and ESP32-C5,
-over WiFi and USB**, and **the camera is now confirmed on the XIAO ESP32S3** —
-see the two entries just below.)
-Details:
-
-### ✅ Bus servos confirmed on hardware (2026-08 — UNO R4 WiFi, ESP32-WROVER, FireBeetle 2 ESP32-C5)
-First bus-servo bench time on any board — the ST/STS path is now real hardware-
-confirmed, not just structural, across **three boards and both transports**:
-
-| Board | WiFi | USB (serial) | Bus UART |
-|---|---|---|---|
-| UNO R4 WiFi | ✅ | ✅ | fixed Serial1 = D0/D1 |
-| ESP32-WROVER-DEV | ✅ | ✅ | `configureBus` custom pins |
-| FireBeetle 2 ESP32-C5 | ✅ | — | `configureBus` custom pins (RX=12, TX=11) |
-
-Exercised via the **bus-servos** and **leader-follower** examples
-(`PardaloteBusServo`, ST/STS series, 1 Mbps): attach → servos `[found]`, live
-`read()` position streaming, browser-driven writes, group SyncWrite, and the
-`CMD_BUSSERVO_ATTACH`/`READ`/`WRITE`/`READ_LIMITS`/`PRESENT` frames. Confirms
-`PLATFORM_ESP32` + custom-pin `Serial1.begin(baud, SERIAL_8N1, rx, tx)` on both
-the WROVER and the new C5 core. **Also the first confirmation of bus servos over
-the USB serial transport** (previously zero bench time) — including the UNO R4's
-native-USB CDC path. The `IOTimeOut`/range-clamp **robustness fixes (loose end
-0)** are now **landed** (2026-08) — the WiFi/JS hang when a servo *stops*
-answering (unplugged, faulted, or driver-board power loss) is fixed in firmware;
-**needs a re-upload to confirm on the bench.** Still open on bus servos:
-**SC-series**, `done`-poll timing edges, and sketch-created bus servos.
-
-### ✅ Camera confirmed on hardware (2026-08 — Seeed XIAO ESP32S3 Sense)
-**First camera bench time on any board** — the MJPEG-stream + snapshot path
-(`PardaloteCamera.h` + `camera.js`, `DEVICE_CAMERA 204`, `CMD_CAMERA_INIT/
-SET_RES/SET_QUALITY 0x30–0x32`) is now real-hardware-confirmed on the XIAO
-ESP32S3 over WiFi (camera is WiFi-only — the HTTP server is separate from the
-WebSocket). Confirmed working: `attach(82)` → HTTP server + live MJPEG stream in
-the browser, `setResolution()` **both before and after `attach()`** (see the fix
-below), quality changes, and resolution surviving a reconnect.
-
-**The gotcha that ate the first session — enable OPI PSRAM.** The XIAO ESP32S3
-(an ESP32-**S3R8**) has 8 MB of *octal* PSRAM, but the Arduino IDE defaults can
-leave `psramFound()` returning false. Symptom chain: Serial prints
-`[Camera] No PSRAM — using DRAM, forced to QQVGA`, the camera is pinned to QQVGA
-in DRAM, and any resolution change spams `cam_hal: FB-OVF` (the larger frame
-can't fit the single DRAM buffer) with a broken stream. **Fix: Tools → PSRAM →
-`OPI PSRAM`** (not "QSPI PSRAM", not Disabled). With PSRAM up, the init takes the
-`fb_count = 2` / `CAMERA_FB_IN_PSRAM` branch and resolution changes work. Now
-documented in `troubleshooting.md` + `camera.md`.
-
-**Three fixes landed + bench-verified this session:**
-- **`setResolution()`/`setQuality()` before `attach()` now works.** The board
-  reliably changes frame size only via the post-init `set_framesize()` path, so
-  `camera.js` `_sendInit()` now **replays** the desired framesize + quality right
-  after `CMD_CAMERA_INIT`. This makes the documented "call before or after
-  attach()" true, and — bonus — keeps resolution/quality in sync **across a
-  reconnect** (a reconnect re-inits the board at its defaults; the replay
-  re-applies the JS-side state). Verified on the bench.
-- **No-PSRAM set-res guard.** When the camera comes up in the DRAM/QQVGA
-  fallback (`_dramFallback`), `CMD_CAMERA_SET_RES` is refused with a clear
-  Serial line instead of guaranteeing FB-OVF. (Belt-and-braces — a working XIAO
-  never enters this path once OPI PSRAM is on.)
-- **Stream survives a dropped frame.** `_streamHandler` now skips up to 4
-  consecutive failed captures and only closes on the 5th, so a *transient*
-  FB-OVF (e.g. requesting `FRAMESIZE_HD`, which pushes the OV2640 too hard) no
-  longer tears down the HTTP connection with `ERR_INCOMPLETE_CHUNKED_ENCODING`.
-  **HD deliberately left available, not clamped** (Scott's call) — it works on
-  some sensors; the example README + `camera.md` note that it may FB-OVF on the
-  XIAO and to step down to **`FRAMESIZE_SVGA` (800×600)**, the reliable ceiling
-  here. A size that overflows *every* frame is the sensor's limit, not a bug.
-
-Still open on the camera: **sketch-created camera is deliberately not built**
-(singleton, ESP32-only — see the sketch-attach note below); other camera boards
-(WROVER-KIT, AI-Thinker, etc.) remain structural-only.
-
-**Still to confirm on real hardware** (items above are done; these remain — see the
-Phase 0–11 bench log for what the 2026-07 ESP32 run already cleared):
-- **Serial transport** (newest, zero bench time): `begin(PARDALOTE_SERIAL)` on
-  ESP32 + R4 WiFi and on an **R4 Minima** (needs a Minima — none benched yet;
-  also confirm a plain `begin()` on the Minima prints the no-WiFi error); `connectSerial()` from Chrome → picker → ready; probe survives
-  the DTR reset on port open (ESP32 resets, watch how long boot takes vs the
-  500 ms probe); `Serial.print` from the sketch → `'log'` event, no frame
-  corruption while a servo streams; reload the page inside the 8 s rx-timeout
-  (HELLO-request path); unplug/replug USB → auto-reconnect re-acquires the
-  port; pull the cable mid-`writeTimed` → board hard state after rx-timeout;
-  NeoPixel `show()` under serial load (interrupts-off byte loss → CRC drops,
-  should self-heal). Bench order suggestion: ESP32 first (it's the known rig),
-  then R4 WiFi (native USB CDC — the blocking-write risk lives here).
-- **Connection key** (zero bench time): `begin("key")` + right key → ready;
-  wrong key → single `'authFail'`, no reconnect churn in the console; no key →
-  reason-1 reject after ~3 s; second browser with the right key joins while a
-  wrong-key browser is refused; multi-client announce/broadcast still correct
-  with a mix of authed + pre-auth clients.
-- **Boot id + reconnect provenance** (newest, zero bench time): re-run the
-  bench scenario that found the bug — share `A0` from firmware A, upload
-  firmware B without the share, reconnect → polling must STOP and the
-  pin-mode must not be replayed. Also: WiFi blip with the board running
-  (poll must resume — the re-registered interval reaches the board),
-  reset button with the SAME firmware (share must come back via announce),
-  `'reboot'` event fires on firmware swap, and boot ids actually differ
-  across consecutive boots on both ESP32 (`esp_random`) and UNO R4 (the
-  `micros()`-seeded fallback — the one to watch).
-- **Stepper homing** — **mostly confirmed on ESP32 (2026-07):** SEEK→BACKOFF→TRAVEL
-  end-to-end, clean trip + switch-coordinate adopt, back-off releases before TRAVEL,
-  homing from an already-pressed switch, `homeFail` on timeout, and the instant-kill
-  re-zero (Phases 7.1–7.3, 7.5–7.6). **Still open:** 7.4 — confirm `home({speed})`
-  seek speed is honoured and the maxSpeed cap is restored for the TRAVEL leg
-  (`setSpeed()` surviving the between-legs restore). Also flagged during the run:
-  stepper visual moves after board disconnect, and a 4-wire stepper wouldn't run in
-  reverse (possibly the motor — needs a second unit).
-- **Stepper limit switches** — **partly confirmed on ESP32 (2026-07):** board-side
-  instant trip + `'limit'`/`limitHit` event (6.1) and two-switch MIN+MAX operation
-  (6.5). **Still open:** the direction-aware guard (6.2 — no trip when backing off a
-  pressed switch, the `speed()`-sign / `distanceToGo` fallback), the 20 ms release
-  debounce on a real switch (6.3), and trip latency under WiFi + poll load (6.4). The
-  instant-kill `setCurrentPosition(currentPosition())` across POSITION/VELOCITY/TIMED
-  is confirmed (7.6).
-- **SCServo library method names**, especially `ReadMove` on the **`SCSCL` (SC)
-  class** — least certain. Also `WritePosEx`, `SyncWritePosEx`, `CalibrationOfs`,
-  `unLockEprom`/`writeByte`, and the ID register constants (`SMS_STS_ID` /
-  `SCSCL_ID`). The **ST/STS3215 path is the primary one**; SC is coded but least sure.
-- **AccelStepper**: `runSpeedToPosition()` for timed moves is **confirmed** (`moveToTimed`
-  arrived on time, Phase 5.2); the remaining piece is that `setSpeed()` is clamped to
-  `maxSpeed()` across the timed-move cap raise/restore — same open item as homing 7.4.
-- **Servo interpolator**: the 20 ms tick feel under WiFi load — **confirmed on ESP32**
-  (smooth, no jitter, Phase 3.2).
-- **Bus-servo `done`**: the board polls the `Moving` flag (~30 Hz); confirm no
-  false `done` at t=0 (there's a 40 ms startup guard) and that long moves aren't
-  cut short (no-response watchdog, not a fixed timeout).
-- **Sketch-created servos** — **mostly confirmed on ESP32 (2026-07):** late-browser
-  announce (`arduino.pan` at `'ready'`, `'share'` before `'ready'`), mid-loop attach
-  live, and reconnect-after-reset re-materialisation all pass (Phases 4.1–4.3).
-  **Still open:** 4.4 idempotent re-attach by name (attach twice → one servo — was
-  claimed in the summary but not actually exercised), and 4.5 the UNO R4 path (only
-  the ESP32 path was run; host stub-compile covered ESP32 defines only).
-- **Sketch-created steppers & bus servos** (still zero bench time — Phase 8 not run):
-  same materialisation path as sketch-created servos, extended to the
-  other two actuators (`PardaloteStepper.attach("base", 2, 3, 4)` /
-  `attach4wire`, `PardaloteBusServo.attach("wrist", 5)`). Confirm the
-  same four cases (mid-loop attach live, late-browser announce replay,
-  reconnect after reset, idempotent re-attach by name), plus that the
-  bus-servo attach brings the shared UART up correctly and its return
-  value (the logical id) feeds `write`/`read` as expected.
-  Stub-compile covered the ESP32 path only — confirm UNO R4 compiles.
-- **NeoPixel / Ultrasonic / IMU** — the **browser-driven** paths are now **confirmed
-  on ESP32 (2026-07):** NeoPixel init/`fill`/`show`/brightness + show-debounce
-  (9.1–9.2), Ultrasonic `attach`/`read(CM)` tracking + out-of-range −1 (10.1), IMU
-  `attach(0x68)` WHO_AM_I identify, `read()` sane accel/gyro, and `calibrate()` with
-  offsets surviving reload (11.1–11.2). **Still open:** IMU `setAccelRange`/
-  `setGyroRange` scaling (11.3); and the **sketch-created** variant of all three —
-  `PardaloteNeoPixel/Ultrasonic/IMU.attach(...)` + the four materialisation cases,
-  late-browser announce, and the IMU model-payload round-trip (9.3, 10.2, 11.4 — zero
-  bench, ESP32 stub-compile only).
-- **Message channel** — **confirmed on ESP32 and UNO R4 (2026-07, Phase 2):** browser→sketch
-  `watch` fires with the right type (bool), sketch→browser retained `send` updates
-  `messages[...]` (int), `retain` replays to a late-reloading browser in the
-  pre-`ready` sync, `broadcast` reaches a second browser (no self-echo) and the
-  sketch, and the frame monitor shows name-decoded traffic with no perf hit while a
-  pot/servo streams. **Remaining edge cases (not specifically exercised):** text/blob
-  at the retain 48 B cap (warn+skip beyond) and a text/blob near the ~240 B Arduino→JS
-  cap.
+The full hardware bench log (what's confirmed on which board, the Phase 0–11 runs)
+and the write-ups of **bugs found & fixed on the bench** now live in
+[BENCH-TESTS.md](BENCH-TESTS.md) — this file stays focused on current and
+forward-looking work. The standing caveat still holds: newly written Arduino code is
+structurally verified unless a bench entry says otherwise.
 
 ---
 
 ## What's built this session
 
-> **Note:** this file spans several sessions. The **tool-example connection
-> standard entry immediately below** is the most recent work, then the
-> leader-follower example, the bus-servo firmware-limits entry, the serial
-> transport + connection key entry, then the
+> **Note:** this file spans several sessions. The **bare-pins entry immediately
+> below** is the most recent work, then the tool-example connection
+> standard, the leader-follower example, the bus-servo firmware-limits entry,
+> the serial transport + connection key entry, then the
 > example rationalisation, the boot-id/provenance reconnect fix, the docs/site
 > overhaul, and the `ANALOG_INPUT_MODE` rename; everything after
 > them (starting with the stepper homing rework) is from earlier sessions,
 > regardless of the "(this session)" labels still on those older bullets.
 > (The heading predates the multi-session history.)
+
+- **Bare per-instance pin names — `D13`, `A0`, … work like Arduino (current
+  session, Scott's direction).** Replaces the earlier plan of `arduino.pins.D13`
+  (rejected) and the standalone `pardalote-pins-<board>.js` files (deleted).
+  **How it works:** each
+  board-alias name (the union of every table in `BOARD_ALIASES`) is installed as a
+  global **string equal to its own name** (`D13 === 'D13'`). The value carries no
+  pin number — it's the alias name, and `_resolvePin()` looks it up in *this*
+  instance's `_aliases` at call time, so the same global `D13` maps to the right
+  physical pin per board and **per `Arduino()` instance** (leader vs follower resolve
+  it differently). This threads the needle Scott spotted: a bare global that is still
+  instance-specific, because the token is an *indirection*, not the value. Bare `D13`
+  and the string `'D13'` are literally the same value — the global just saves the
+  quotes, and `_resolvePin` needed no change (it already resolved strings).
+  - **Why a string, not a number and not a Symbol** (analysed twice): a magic
+    *number* sentinel could be silently truncated to a byte on the wire → wrong real
+    pin, so that was out. First landed on a **Symbol** for loud-on-misuse, then Scott
+    asked why not just `D13 = 'D13'` — and the string is better for this audience: it
+    resolves loudly on an unknown pin exactly like the Symbol (existing `_resolvePin`
+    throw), but **interpolates and logs cleanly** (`` `pin ${D13}` `` → `"pin D13"`),
+    whereas a Symbol throws on the string-building beginners do constantly. Symbol's
+    only edge was catching a pin misused as a string key (e.g. `send(D13, …)`) — far
+    narrower than the interpolation footgun it introduced. Switching back also dropped
+    the `_resolvePin` Symbol branch and three defensive `String()` wraps the Symbol
+    had forced. Cost of the string: a pin shoved into a non-pin string API can act as
+    data silently — accepted as the lesser evil.
+  - **Collision handling + off-switch.** Installed as **guarded `globalThis`
+    properties, NOT top-level `const`** — property assignment never throws the
+    redeclaration `SyntaxError` the old files did, and the `name in globalThis` guard
+    means we **defer to any name already defined** (reports skips on `console.info`).
+    The sole off-switch is **`<script src="pardalote.js" data-pins="off">`** (read via
+    `document.currentScript.dataset.pins`); a runtime toggle and `arduino.pins.D13`
+    were both considered and dropped as unneeded surface. Install is browser-only
+    (`typeof document` guard) so the Node test harness is unaffected. String form
+    `'D13'` still resolves everywhere (needed with `data-pins="off"`).
+  - **Verified: 20/20** vm-harness assertions against the real built bundle —
+    string globals install (incl. ESP32-only `T0`/`DAC1` via the union), interpolate
+    cleanly, `data-pins` off installs nothing, same global resolves 13 (UNO-style) vs
+    15 (FireBeetle-style) on two instances, number/string paths intact, unknown pin
+    throws with the board name, collision guard leaves a pre-existing `SS` untouched.
+    Also confirmed a legacy `const A0 = 36` cleanly shadows the property (no crash).
+    Re-confirmed live in a real browser via the actual `<script>` tag.
+    **JS-only, zero hardware bench** — a two-board leader-follower page is the natural
+    in-browser confirmation.
+  - **Cleanup done:** deleted the three `lib/pardalote-pins-*.js`; swept ~21 refs
+    across `docs-src/reference/{pins,installation,extensions,pin-capabilities}.md`,
+    both `potentiometer` examples (dead `<script>` tags — they used `'A0'`/`14`
+    already), README, `build_pardalote.py` banner, `build-release.sh` (packaging +
+    node-check), CHANGELOG (Unreleased); regenerated `docs/*.html` + `llms*.txt` +
+    example pages. `BOARD_ALIASES` in `pardalote-core.js` is now the single source of
+    truth for both the string form and the bare globals.
+
+- **Listen-and-switch transport + `requireKey()` (done, 2026-08 — plan executed).**
+  `begin()` now runs WiFi **and** listens on USB by default; a deliberate
+  `connectSerial()` gesture makes the board drop WiFi and switch to the cable
+  (one-way; reset to return). `begin(PARDALOTE_WIFI)` opts out of the USB listen,
+  `begin(PARDALOTE_SERIAL)` is USB-only. A silently-reused port can't pull a board off
+  WiFi — it fires `'usbBusy'` instead (so a background tab / power-only cable can't
+  grab a shared board), and a `CMD_REBOOT` marker lets a browser still holding the
+  port re-acquire USB after a board reset with no click. Connection keys moved to
+  `Pardalote.requireKey("key")` before `begin()` (replaces the old `begin("key")`),
+  over both transports. Wire: `CMD_SERIAL_BUSY 0x0D`, `CMD_REBOOT 0x0E` (+ takeover
+  flag on the HELLO probe), folded into protocol v1.0. Code-complete and JS-verified;
+  firmware compiles + runs on ESP32 and UNO R4. The full design rationale lived in
+  `PLAN-listen-and-switch.md`, now **deleted** (plan executed); shipped behaviour is
+  documented in the CHANGELOG 1.0.0 entry.
 
 - **Tool-example CONNECTION STANDARD — canonical, DUPLICATED per example
   (current session, Scott's direction).** All "tool" examples (control-panel,
@@ -496,7 +190,7 @@ Phase 0–11 bench log for what the 2026-07 ESP32 run already cleared):
     arduino.on('usbBusy', () => { usbBusy = true; });
     ```
     Rolled into all seven tools (leader-follower uses per-board `leaderUsbBusy`/
-    `followerUsbBusy`). See [[listen-and-switch-transport]] / `PLAN-listen-and-switch.md`.
+    `followerUsbBusy`). See the listen-and-switch transport entry above.
   - **Rejected**: a shared `examples/_lib/connect.js` — DRYer but adds a
     dependency that breaks copy-paste; duplication + this canonical note is the
     deliberate trade. Supersedes the [[deferred-modernise-shared-example-uis]]
@@ -1208,6 +902,8 @@ it. See `src/internal/defs.h`.
 
 ## Loose ends (deferred, in rough priority)
 
+_Resolved items (bugs fixed on the bench) have moved to [BENCH-TESTS.md](BENCH-TESTS.md); the numbering keeps its gaps (0b, the old `0.`) so existing references still line up. Only open/deferred work remains below._
+
 0a. **Surface "Unknown extension deviceId" to the browser (2026-08, DX).** When
    the board gets a frame for a device with no registered extension,
    `dispatchExtension()` (`internal/extensions.cpp`) only prints
@@ -1225,26 +921,6 @@ it. See `src/internal/defs.h`.
    the sketch and re-upload."* **Dedup per deviceId** (or throttle) so a stream
    of dropped frames doesn't spam. Cheap, and it turns a green-tick-but-dead
    mystery into a one-line diagnosis.
-
-0b. **✅ DONE + bench-confirmed (2026-08) — Bus-servo LOST-servo poll back-off.**
-   Follows the loose-end-0 IOTimeOut work. A power brownout under load (Scott's was
-   a loose servo-power connector) makes all bus servos stop answering at once; each
-   periodic read then blocks up to `IOTimeOut` (5 ms) in `FeedBack()`, and the poll
-   loop reads every due servo per `loop()` pass — so ~6 dead servos ≈ 30 ms of
-   blocking per pass, sustained through the outage. On the **UNO R4** that starved
-   the WiFiS3 / native-USB transport and dropped the connection (WiFi *and* USB);
-   **ESP32 rode it out** (headroom + FreeRTOS yield) — so this was R4-specific
-   transport fragility, servo loss itself being a hardware/power issue.
-   **Fix (`PardaloteBusServo.h`):** per-servo back-off — a read returning −1 sets
-   `_lostRetryAt[id] = now + BUSSERVO_LOST_RETRY_MS` (500 ms) and further reads of
-   that servo are skipped until then, so a dead servo is polled ~2 Hz instead of
-   every pass. Responding servos (`_found == 1`) are never throttled → zero effect
-   on normal poll rate / relay latency; only cost is LOST→found recovery noticed up
-   to 500 ms later (tunable). **Bench-confirmed on BOTH UNO R4 and ESP32 (2026-08,
-   Scott): no loss of WiFi or USB through a servo power dropout, and servos
-   reconnect when power is restored.** Deliberately back-off ONLY (not the per-loop
-   read cap — would add relay-latency read-spread on the R4; see 0c). See
-   [[busservo-lost-backoff]].
 
 0c. **Leader–follower relay latency (2026-08, open — Scott to pick up).** On the
    bench (two 6-servo arms, `examples/leader-follower/`) the follower's response
@@ -1300,90 +976,11 @@ it. See `src/internal/defs.h`.
      *remove* a scheduling stage). Track this note as code-quality; keep 0c as the
      latency work. [[deferred-modernise-shared-example-uis]] is a separate batch.
 
-0e. **✅ DONE (2026-08) — JS distribution bundle + file-naming convention.**
-   Root cause of a recurring bench mystery, finally pinned: the **p5.js Web
-   Editor** preprocesses each *separate* local `.js` file through
-   esprima/escodegen and throws `this[o] is not a function` on the extension
-   files as standalone programs (`escodegen.js` / `jsPreprocess.js`). It is NOT
-   a syntax bug in our code — proven because concatenating an extension into the
-   core file, with zero code changes, fixes it (Scott's test). The big core file
-   escapes the editor's preprocessing; the small standalone extension files don't.
-   **Fix shipped:** a single all-in-one bundle **`dist/pardalote.js`** (core +
-   all eight device extensions), generated by **`build_pardalote.py`** from the
-   modular sources in `pardalote-js/`. It's the only file a sketch includes, and
-   collapses the old "core + extensions + sketch, in order" load dance to one
-   `<script>`. Verified: `node --check` clean, and the neopixel example renders
-   and runs from the bundle in a browser (WS errors only — no board). **Naming
-   convention (locked, follows JS-ecosystem tradition = lowercase/kebab
-   filenames):** bundle `pardalote.js`; core `pardalote-core.js`; extensions
-   `pardalote-<device>.js` (e.g. `pardalote-bus-servo.js`, `pardalote-neopixel.js`);
-   per-board pin maps stay `pardalote-pins-<board>.js` and are **never bundled**
-   (mutually exclusive). All ~20 example `index.html`, the example READMEs, the
-   `docs-src` reference sources, README, CHANGELOG, and the regenerated
-   `docs/`+`llms` were swept to the bundle. **Deliberately asymmetric:** the
-   **Arduino side stays modular** (opt-in `#include`s) — each extension pulls its
-   own third-party lib and some are platform-gated (Camera ESP32-only), so
-   bundling there would force every lib installed + bloat the R4 + break UNO R4
-   compilation. Browser has none of those costs. The one seam this creates
-   (browser has a device the board didn't compile in) is exactly loose-end 0a.
-   **Note:** the core source is now `pardalote-core.js`; older `pardalote-js/
-   pardalote.js:NNN` code links in this file and in `PLAN-listen-and-switch.md`
-   predate the rename (content identical, line numbers hold — just the path
-   changed). Docs regen needs a venv with `markdown-it-py mdit-py-plugins
-   pygments` (see [[docs-build-pipeline]]).
-
-0. **✅ DONE (2026-08) — Bus-servo robustness, two fixes.** Root cause found on
-   a UNO R4 bench session, then confirmed to bite **any WebSocket board, not
-   just the R4**. When a bus servo stops answering — wires jostled loose by a
-   violent move, a servo stalled/faulted at a firmware limit, physically
-   unplugged, or the driver board losing power (Scott's report: servo-board
-   power drop takes the WiFi/JS link down on both FireBeetle C5 and
-   ESP32-WROVER) — the SCServo library's blocking read (`SCSerial::readSCS`,
-   `IOTimeOut = 100` ms) stalls `loop()` for ~100 ms per failed transaction (up
-   to ~300–400 ms with line noise), ×N polled servos (~600 ms for six). That
-   starves `_ws.loop()`: on **ESP32** the WebSocket drops (WS is serviced in
-   `run()` → `_ws.loop()` before `loopAll()`); on the **UNO R4** it's *exactly*
-   the documented `delay(100)` WiFiS3 killer (see the "UNO R4 WebSocket / PWM
-   lag" entry + arduinoWebSockets #909). Either way the board looks hung — no
-   reboot banner, no serial msg, browser can't reconnect. **Confirmed on the
-   bench** by pulling TX/RX/GND live and by servo-board power loss. This unifies
-   the earlier "board resets near a firmware limit" and "resets on a wild swing"
-   reports — it's not power to the *host* and not a crash; it's a starved loop.
-   Two fixes, both now landed:
-   - **(a) ✅ Shrunk `IOTimeOut` to 5 ms.** `IOTimeOut` is a public member of
-     `SCSerial`, inherited by `_st`/`_sc`; set `_st.IOTimeOut = _sc.IOTimeOut =
-     5` in `ensureBus()` (`PardaloteBusServo.h`) — no library edit. A servo at
-     1 Mbps answers in well under 1 ms, so 5 ms is a big margin; the shorter
-     timeout only affects the *failure* path (good reads return as soon as the
-     bytes arrive), capping a fully-silent six-servo poll at ~30 ms instead of
-     ~600 ms and keeping `loop()` tight. Bus-servo analogue of the
-     `Wire.setTimeOut(50)` I2C fix already in the code. **Needs a re-upload to
-     each board.**
-   - **(b) ✅ Range-clamp commanded position, firmware + JS.** An out-of-range
-     count wraps mod-resolution and swings the servo the wrong way. Firmware:
-     `writePos()` now `constrain(pos, 0, isSC?1023:4095)` (the choke-point for
-     browser write, sketch write, and gesture), the SyncWrite handler clamps
-     its own `positions[]` (it bypasses `writePos`), and `echoTarget()` mirrors
-     the clamp so the browser caches the value the board actually applied. JS:
-     `busServo.js` `_clampPos()` now always clamps to `[0, resolution-1]` before
-     soft limits — the single choke-point for `write`/`writeTimed`/`_member*`/
-     gesture, so the amber needle, `whenDone` timing, and group speed-matching
-     stay honest. Firmware clamp is the hardware safety net (covers non-browser
-     sources); JS clamp keeps the browser's model truthful. **Firmware side
-     needs a re-upload.**
-   - **Done earlier (2026-08):** the *example* overflow that provoked this
-     (bus-servos dial `atan2()+HALF_PI` fed to an unclamped `map(…,-PI,PI,…)`,
-     overshooting to ~5120) was already fixed — the mouse→counts result is
-     wrapped into `[0, resolution)`. (a)/(b) are the defence-in-depth on top.
-   - **Strategic framing (Scott's call, 2026-08):** don't chase R4-WiFi
-     bulletproofing forever — the RA4M1 + WiFiS3 "keep `loop()` tight" rule is
-     architectural. The blocking surface is finite (I2C ✅, bus-servo UART ← (a),
-     ultrasonic `pulseIn` — audit, stray `delay()` ✅); close those, then steer
-     heavy/wireless actuator work to **ESP32** (proven on the bench) or run the
-     **R4 over USB serial** (already built — no WiFiS3, so a blocked loop only
-     slows, never drops). Position the R4 as "light wireless, or rock-solid over
-     USB." Consider a short "don't block the loop / new blocking peripherals
-     need a bounded timeout" note in the Arduino README.
+0e. **✅ DONE (2026-08) — JS distribution bundle.** Single all-in-one
+   `lib/pardalote.js` bundle (built from `lib/src/` by `build_pardalote.py`), the only
+   file a sketch includes — it sidesteps the p5.js Web Editor's per-file
+   preprocessing (which chokes on the extension files standalone). Full write-up in
+   the CHANGELOG and the `lib/` restructure notes.
 
 1. **LLM control layer** — the original studio goal, deliberately deferred. The
    groundwork *is* the substrate for it: `group.read()` → policy → `group.writeTimed()`

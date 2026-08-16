@@ -46,11 +46,12 @@ No install step: copy `pardalote.js` next to your web page and include it with a
 
 ```html index.html — script loading order
 <script src="pardalote.js"></script>
-<script src="pardalote-pins-esp32-wrover-dev.js"></script>  <!-- optional pin aliases for your board -->
 <script src="sketch.js"></script>
 ```
 
-Advanced: the modular sources live in `lib/src/` (`pardalote-core.js` plus one `pardalote-<device>.js` per extension) if you would rather include only specific files. The bundle is simply those concatenated, rebuilt with `build_pardalote.py`. Board pin maps (`pardalote-pins-*.js`) are per-board and are never bundled — include the one for your board.
+Named pins (`D13`, `A0`, `SDA`, …) work out of the box — see [Pins](pins.html). Add `data-pins="off"` to the `pardalote.js` script tag if those names collide with your own code.
+
+Advanced: the modular sources live in `lib/src/` (`pardalote-core.js` plus one `pardalote-<device>.js` per extension) if you would rather include only specific files. The bundle is simply those concatenated, rebuilt with `build_pardalote.py`.
 
 ## A minimal sketch
 

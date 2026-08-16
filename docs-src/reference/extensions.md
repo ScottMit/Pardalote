@@ -29,7 +29,6 @@ Each extension automatically gets a logical ID based on its type. Multiple insta
 
 ```html index.html — script loading order
 <script src="pardalote.js"></script>
-<script src="pardalote-pins-esp32-wrover-dev.js"></script>  <!-- optional pin aliases -->
 <script src="sketch.js"></script>
 ```
 

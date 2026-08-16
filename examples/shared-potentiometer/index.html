@@ -27,12 +27,9 @@
         </p>
     </main>
 
-    <!-- Load ONE pin-alias file for your board. They declare the same
-         global consts (SDA, A0, …), so loading two throws a redeclaration
-         SyntaxError. (String pin names like 'A0' also resolve from the
-         board's HELLO handshake, so a pin file isn't strictly required.) -->
+    <!-- Named pins (A0, D13, SDA, …) resolve automatically for the connected
+         board; this sketch uses the string form 'A0'. See the Pins reference. -->
     <script src="../../lib/pardalote.js"></script>
-    <script src="../../lib/pardalote-pins-esp32-wrover-dev.js"></script>
     <script src="sketch.js"></script>
 </body>
 </html>

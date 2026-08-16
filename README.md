@@ -564,29 +564,25 @@ arduino.getStatus() // { connected, isReconnecting, reconnectAttempts,
 
 ## Pin aliases
 
-Rather than using raw numbers, include the pin file for your board and use named constants. This prevents mistakes and makes sketches portable.
-
-```html
-<!-- in index.html, after pardalote.js -->
-<script src="pardalote-pins-esp32-wrover-dev.js"></script>
-```
+Use named pins — `D13`, `A0`, `SDA`, `LED_BUILTIN` — exactly as you would in Arduino code. They work out of the box; nothing extra to include.
 
 ```javascript
-// Then in sketch.js
-arduino.pinMode(A0, ANALOG_INPUT_MODE, 50);
-arduino.digitalWrite(LED_BUILTIN, HIGH);
-arduino.imu.attach(SDA);
+arduino.on('ready', () => {
+    arduino.pinMode(A0, ANALOG_INPUT_MODE, 50);
+    arduino.digitalWrite(LED_BUILTIN, HIGH);
+    arduino.imu.attach(SDA);
+});
 ```
 
-Available pin files (in `lib/`):
+Each name resolves to the correct physical pin **for the board this `arduino` is connected to**, looked up when `ready` fires — so the same `D13` maps to the right pin on each board, and two `Arduino()` instances driving different boards each resolve it correctly. Reference the names from inside an `arduino.on('ready', …)` handler (or later), since resolution needs the connected board.
 
-| File | Board |
-|---|---|
-| `pardalote-pins-uno-r4-wifi.js` | Arduino UNO R4 WiFi |
-| `pardalote-pins-esp32-wrover-dev.js` | ESP32-WROVER-DEV |
-| `pardalote-pins-firebeetle2-esp32-c5.js` | FireBeetle 2 ESP32-C5 |
+If a name collides with your own code or another library, Pardalote steps aside rather than overwriting it. To disable the named pins entirely, add `data-pins="off"` to the script tag:
 
-String aliases also work anywhere a pin is accepted:
+```html
+<script src="pardalote.js" data-pins="off"></script>
+```
+
+The string form works anywhere a pin is accepted and needs no global at all:
 
 ```javascript
 arduino.analogRead('A0');      // resolved from the board's alias table
@@ -623,7 +619,6 @@ Each extension automatically gets a logical ID based on its type. Multiple insta
 
 ```html
 <script src="pardalote.js"></script>
-<script src="pardalote-pins-esp32-wrover-dev.js"></script>  <!-- optional pin aliases -->
 <script src="sketch.js"></script>
 ```
 
@@ -1676,9 +1671,6 @@ Pardalote/
 │
 ├── lib/                                    # Browser JavaScript library
 │   ├── pardalote.js                        # Distribution bundle (generated) — include this
-│   ├── pardalote-pins-uno-r4-wifi.js       # Pin aliases for UNO R4 WiFi
-│   ├── pardalote-pins-esp32-wrover-dev.js  # Pin aliases for ESP32-WROVER-DEV
-│   ├── pardalote-pins-firebeetle2-esp32-c5.js
 │   └── src/                                # Modular sources (source of truth)
 │       ├── pardalote-core.js               # Core library
 │       ├── pardalote-servo.js              # Servo extension

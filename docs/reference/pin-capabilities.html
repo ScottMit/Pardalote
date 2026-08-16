@@ -93,7 +93,7 @@
 <p><strong>PWM is a shared resource, not a pin property.</strong> On the ESP32 the LEDC peripheral can route PWM to almost any output-capable pin, so &quot;PWM&quot; tracks &quot;can this pin output at all.&quot; On the ESP32-C5 there are only <strong>6 LEDC channels</strong>, so at most six pins can PWM at once. On the UNO R4 WiFi, PWM is fixed to the six timer-backed header pins marked <code>~</code> (3, 5, 6, 9, 10, 11).</p>
 <p><strong>Strapping and reserved pins.</strong> A few pins are read by the chip at boot to decide boot mode (strapping pins: WROVER 0, 2, 5, 12, 15) and can misbehave if you hold them at the wrong level during reset. Others are physically unavailable because they're wired to flash or PSRAM (WROVER GPIO 6–11 for flash, 16–17 for PSRAM) — those aren't broken out for general use and aren't listed below.</p>
 <h2 id="esp32-wrover-dev">ESP32-WROVER-DEV</h2>
-<p>Include <code>pardalote-pins-esp32-wrover-dev.js</code>. <code>arduino.analogMax</code> = <strong>4095</strong>. Confirmed on hardware.</p>
+<p>The <strong>Alias</strong> names below work by name in your sketch (<code>arduino.analogRead(A0)</code>) — no include needed. <code>arduino.analogMax</code> = <strong>4095</strong>. Confirmed on hardware.</p>
 <table>
 <thead>
 <tr>
@@ -309,7 +309,7 @@
 </table>
 <p>The one thing worth memorising: <strong>the only pins that read analog under WiFi are 32, 33, 34, 35, 36, 39</strong> (the ADC1 set). Everything labelled &quot;ADC2&quot; reads <code>0</code> while connected. GPIO 1/3 (UART to USB), 6–11 (flash) and 16–17 (PSRAM) are not broken out.</p>
 <h2 id="arduino-uno-r4-wifi">Arduino UNO R4 WiFi</h2>
-<p>Include <code>pardalote-pins-uno-r4-wifi.js</code>. <code>arduino.analogMax</code> = <strong>1023</strong> (10-bit default; the RA4M1 ADC can do 12/14-bit). Confirmed on hardware. No input-only pins, and no ADC/WiFi conflict.</p>
+<p>The <strong>Alias</strong> names below work by name in your sketch (<code>arduino.digitalWrite(D13, HIGH)</code>) — no include needed. <code>arduino.analogMax</code> = <strong>1023</strong> (10-bit default; the RA4M1 ADC can do 12/14-bit). Confirmed on hardware. No input-only pins, and no ADC/WiFi conflict.</p>
 <table>
 <thead>
 <tr>
@@ -506,7 +506,7 @@
 </tbody>
 </table>
 <h2 id="firebeetle-2-esp32-c5">FireBeetle 2 ESP32-C5</h2>
-<p>Include <code>pardalote-pins-firebeetle2-esp32-c5.js</code>. <code>arduino.analogMax</code> = <strong>4095</strong>. Datasheet-derived — not yet bench-verified. A single 12-bit SAR ADC (no ADC2/WiFi split), and a 6-channel LED PWM controller (at most six PWM outputs at once).</p>
+<p>The <strong>Alias</strong> names below work by name in your sketch (<code>arduino.analogRead(A1)</code>) — no include needed. <code>arduino.analogMax</code> = <strong>4095</strong>. Datasheet-derived — not yet bench-verified. A single 12-bit SAR ADC (no ADC2/WiFi split), and a 6-channel LED PWM controller (at most six PWM outputs at once).</p>
 <table>
 <thead>
 <tr>

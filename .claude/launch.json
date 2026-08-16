@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "pardalote-static",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "8747", "--directory", "/Users/E21150/Documents/GitHub/Pardalote"],
+      "port": 8747
+    }
+  ]
+}
