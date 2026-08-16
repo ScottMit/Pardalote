@@ -18,6 +18,8 @@ Pardalote versions **two things independently**:
 
 ## [Unreleased]
 
+## [1.1.0] — 2026-08-17
+
 - **Named pins are now built in.** `D13`, `A0`, `SDA`, `LED_BUILTIN` and friends
   work by name in any sketch with nothing extra to include — each is a global
   string equal to its name (`D13 === 'D13'`), resolved to the right physical pin
@@ -40,6 +42,8 @@ Pardalote versions **two things independently**:
 - **JS release package:** `pardalote-js-<ver>.zip` now ships the runnable
   `examples/` and a `LICENSE` alongside the bundle, laid out so the examples run
   straight from the download.
+- **Removed the `expressive-gesture` example** from the website gallery and the
+  JS release package (it remains in git history).
 
 ## [1.0.0] — 2026-08-14
 

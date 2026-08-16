@@ -35,7 +35,7 @@ This rebuilds the JS bundle (`lib/pardalote.js`) and the docs (`docs/`, `llms*.t
 ### 4. Verify
 - Firmware compiles on ESP32 + UNO R4 (your bench/toolchain — no `arduino-cli` in the dev env).
 - `node --check lib/pardalote.js` and the modular sources parse clean (the script does this).
-- `arduino-lint --library-manager submit` passes clean on the mirror (the script runs it if `arduino-lint` is installed).
+- `arduino-lint --library-manager update` passes clean on the mirror (the script runs it if `arduino-lint` is installed).
 
 ### 5. Update the download-page links
 `docs/download.html` has two buttons with **version-pinned** asset URLs. Update both the label (`vX.Y.Z`) and the two hrefs:

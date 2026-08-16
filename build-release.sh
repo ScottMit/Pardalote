@@ -99,7 +99,7 @@ rsync -a --delete --exclude='.git' --exclude='.gitignore' --exclude='.DS_Store' 
 
 say "5/5  Arduino Lint (submit mode)"
 if command -v arduino-lint >/dev/null; then
-  ( cd "$MIRROR" && arduino-lint --library-manager submit --compliance strict ) | tail -3
+  ( cd "$MIRROR" && arduino-lint --library-manager update --compliance strict ) | tail -3
 else
   echo "  arduino-lint not installed — skipping (install: https://github.com/arduino/arduino-lint)"
 fi
