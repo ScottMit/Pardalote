@@ -1,5 +1,5 @@
 // ==============================================================
-// Pardalote — minimal sketch
+// Pardalote — Minimal example
 // https://github.com/ScottMit/Pardalote
 // Copyright (C) 2026 Scott Mitchell — GPL-3.0-or-later. See LICENSE.
 //
@@ -11,7 +11,7 @@
 //   arduino.digitalWrite(13, HIGH);
 //
 // This one sketch powers several browser examples in the project
-// repo, including: examples/control-panel/, examples/basic-light-switch/ 
+// repo, including: examples/control-panel/, examples/basic-light-switch/
 // and examples/potentiometer-p5js/.
 // ==============================================================
 

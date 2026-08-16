@@ -31,7 +31,6 @@
 
 void setup() {
     Pardalote.begin();
-    // Connect on either USB or WiFi. Moving from USB to WiFi requires a board reset.
 }
 
 void loop() {

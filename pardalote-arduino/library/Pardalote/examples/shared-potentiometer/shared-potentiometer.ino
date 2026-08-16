@@ -1,5 +1,5 @@
 // ==============================================================
-// Pardalote — Shared Input: Potentiometer
+// Pardalote — Shared Input: Potentiometer example
 // https://github.com/ScottMit/Pardalote
 // Copyright (C) 2026 Scott Mitchell — GPL-3.0-or-later. See LICENSE.
 //
@@ -14,7 +14,7 @@
 
 #include <Pardalote.h>
 
-const int POT = A0; // ESP IO 36
+const int POT = A0; // e.g. A0 for UNO R4, GPIO 36 (ADC1) for ESP32
 
 void setup() {
     Pardalote.begin();
