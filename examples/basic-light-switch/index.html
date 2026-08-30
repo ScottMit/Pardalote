@@ -11,7 +11,21 @@
     <div id="top">
         <div class="brand"><a href="https://scottmit.github.io/Pardalote/examples/basic-light-switch.html">Pardalote</a></div>
         <div class="heading">Basic light switch</div>
-        <div id="status">Upload the minimal-pardalote file to your Arduino. Set the ArduinoIP in sketch.js, and switch the board's built-in LED</div>
+        <div id="status">Upload the minimal-pardalote file to your Arduino, then connect below (WiFi IP or USB) and switch the board's built-in LED.</div>
+    </div>
+
+    <div class="row">
+        <span class="lbl">Board</span>
+        <select id="transport"><option>WiFi</option><option>USB</option></select>
+        <input id="ip" type="text" style="width:130px">
+        <button id="connect" class="primary">Connect</button>
+        <button id="disconnect">Disconnect</button>
+    </div>
+
+    <div class="row">
+        <span class="lbl">Wiring</span>
+        <span>LED pin</span>
+        <input id="led-pin" type="number" style="width:56px">
     </div>
 
     <div class="buttons">
@@ -21,7 +35,7 @@
 
     <p class="hint">
         The simplest possible Pardalote page: two buttons calling
-        digitalWrite() on pin 13 over WiFi.
+        digitalWrite() on the LED pin over WiFi or USB.
     </p>
 </main>
 

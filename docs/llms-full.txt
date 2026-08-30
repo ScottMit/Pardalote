@@ -1031,6 +1031,50 @@ PardaloteBusServo.torque(id, false);     // release / hold
 
 All three run through the **same command path the browser uses** — so they respect soft limits, cancel timed moves, and auto-echo the commanded value back to the browser so its record stays in sync.
 
+### Board-authored gestures
+
+"Whoever speaks is in control": the browser can compose-and-play a gesture, and so can the sketch. The board authors a gesture as a `PardaloteSeg[]` — `{ curve, dur, value }` in the actuator's native unit — and plays the schedule on its **own clock, no browser needed**. Because Pardalote is 32-bit only, a `static const PardaloteSeg[]` lives in flash and costs no RAM.
+
+`PardaloteServo.gesture(id, segments, count, [flags])`
+
+```cpp
+static const PardaloteSeg NOD[] = {
+    { CURVE_EASE_OUT,    250,  60 },   // to 60°  (absolute by default)
+    { CURVE_EASE_IN_OUT, 400, 120 },
+};
+PardaloteServo.gesture(pan,  NOD,  2);     // servo degrees
+PardaloteStepper.gesture(lift, LIFT, 3);   // stepper steps
+PardaloteBusServo.gesture(grip, GRIP, 2);  // bus-servo counts
+```
+
+Segments are **absolute** by default (`value` is a target); pass `flags = 0` for relative (`value` is a delta off the live position). Curves are the `CURVE_*` ids (`CURVE_LINEAR`, `CURVE_EASE_IN`, `CURVE_EASE_OUT`, `CURVE_EASE_IN_OUT`, `CURVE_BACK`). This is the sketch twin of JavaScript `servo.gesture()` — same segment model, same on-board player, so a board- and a browser-authored gesture play identically.
+
+**Coordinate several actuators** with `Pardalote.gesture()` — the board-side twin of `arduino.gesture()`. Add one lane per actuator by `DEVICE_*` id; shorter lanes are padded so every lane **arrives together**, and all start on one clock:
+
+```cpp
+Pardalote.gesture()                                  // each array a PardaloteSeg[] as above
+    .add(DEVICE_SERVO,   shoulder, SHOULDER, 2)
+    .add(DEVICE_SERVO,   wrist,    WRIST,    1)      // shorter → padded to arrive together
+    .add(DEVICE_STEPPER, lift,     LIFT,     3)
+    .play();
+```
+
+**Coordinated `write` / `writeTimed`** — the twins of `arduino.write()` / `arduino.writeTimed()` — take one target per actuator instead of a schedule:
+
+```cpp
+Pardalote.write().add(DEVICE_SERVO, pan, 90).add(DEVICE_STEPPER, lift, 0).play();            // immediate
+Pardalote.writeTimed(1500).add(DEVICE_SERVO, pan, 45).add(DEVICE_SERVO, tilt, 135).play();   // arrive together
+```
+
+**Chain gestures headlessly** with `onGestureDone(id, cb)` — the board-side `whenDone()`. The callback fires when the last segment lands, so the sketch can run a sequence (or an idle loop) with no browser at all:
+
+```cpp
+void onNodDone(int id) { PardaloteServo.gesture(id, IDLE, 2); }   // loop back to idle
+PardaloteServo.onGestureDone(pan, onNodDone);
+```
+
+Watchers stay in sync: a board-authored gesture broadcasts its **existence** (never its shape) to every browser, which sees the actuator's `isGesturing` flag flip and `gesturestart` / `gestureend` fire — the same signals a browser-authored gesture gives. See the **`board-gestures`** sketch in the Arduino examples for a complete headless creature-head, and the Gesture page for the concept.
+
 ### Status helpers
 
 ```cpp
@@ -1275,10 +1319,12 @@ else showError('pan servo not responding');
 |---|---|---|
 | `'change'` | `{ angle }` | The angle changed by at least the threshold. |
 | `'write'` | `{ angle }` | A write is issued. |
-| `'gesture'` | `{ segments, absolute, duration }` | A gesture starts playing. |
+| `'gesture'` | `{ segments, absolute, duration }` | *This* browser sends a gesture (local echo). |
+| `'gesturestart'` | `{}` | The board starts playing a schedule on this servo — **any** origin (this browser, another, or the sketch). |
+| `'gestureend'` | `{}` | …that schedule ends — completion or a superseding write. |
 | `'done'` | `{ angle }` | A timed move or gesture reaches its target. |
 
-Shorthand: `onChange(fn)`, `onWrite(fn)`, `onDone(fn)`.
+Shorthand: `onChange(fn)`, `onWrite(fn)`, `onDone(fn)`, `onGestureStart(fn)`, `onGestureEnd(fn)`. The board reports whether a schedule is playing (any origin) via the `isGesturing` property; a browser that connects mid-gesture learns it on sync.
 
 ## setWriteThrottle() / setWriteThreshold()
 
@@ -1298,6 +1344,7 @@ The write family paces what you **send** (min ms between writes; skip deltas und
 | Property | Description |
 |---|---|
 | `arduino.pan.angle` | Locally cached snapshot, updated on every `write()`. |
+| `arduino.pan.isGesturing` | `true` while the board is playing a segment schedule on this servo (any origin). |
 
 `arduino.pan.getState()`
 
@@ -1571,8 +1618,9 @@ arduino.x.moveRevolutions(0.5);
 | `'move'` | `{ target }` | THIS page issued a move (including group moves it participates in) — a command echo, like servo `'write'`. Other browsers' moves arrive via the read stream and `'done'`/`'limit'`, not `'move'`. `runSpeed()` emits nothing (continuous rotation has no destination). |
 | `'limit'` | `{ which, position }` | A limit switch tripped and the board hard-stopped the motor. |
 | `'home:fail'` | `{ position }` | Homing gave up (seek/back-off timeout) — the switch never responded. |
+| `'gesturestart'` / `'gestureend'` | `{}` | The board starts / ends playing a schedule on this stepper — **any** origin (this browser, another, or the sketch). End = completion or a superseding move. |
 
-Shorthand: `onChange(fn)`, `onDone(fn)`, `onMove(fn)`, `onLimit(fn)`, `onHomeFail(fn)`.
+Shorthand: `onChange(fn)`, `onDone(fn)`, `onMove(fn)`, `onLimit(fn)`, `onHomeFail(fn)`, `onGestureStart(fn)`, `onGestureEnd(fn)`. The `isGesturing` property tracks whether a schedule is playing (any origin).
 
 ## Properties and state
 
@@ -1583,6 +1631,7 @@ Shorthand: `onChange(fn)`, `onDone(fn)`, `onMove(fn)`, `onLimit(fn)`, `onHomeFai
 | `arduino.x.distanceToGo` | Steps remaining to target. |
 | `arduino.x.speed` | Current speed (steps/sec). |
 | `arduino.x.isRunning` | Boolean. |
+| `arduino.x.isGesturing` | `true` while the board is playing a segment schedule on this stepper (any origin). |
 
 `target` vs `position`: `moveTo(n)` sets `target` to `n` **right away**, so you can show where it's headed without waiting for a poll; `position` is real feedback and only advances toward `target` as read polls (or the `done` event) arrive. `target` also self-corrects from read feedback — so it stays right even when the *Arduino sketch* issued the move.
 
@@ -1844,6 +1893,7 @@ Bus utilities. Servos ship as ID 1 — to renumber, put a **single** servo on th
 | `arduino.shoulder.current` | Raw units (ST only). |
 | `arduino.shoulder.firmwareLimits` | The servo's own EEPROM angle limits: `{ min, max, enabled }` or `null` (not yet read / no answer). Cached from the attach-time read — see `readFirmwareLimits()`. |
 | `arduino.shoulder.present` | Is the servo answering? `true` = found, `false` = no response (check wiring / ID / baud), `null` = not yet attached. Seeded by the attach-time ping (the browser equivalent of the serial monitor's `[found]` / `[NO RESPONSE]` line), then kept **live from `read()` feedback** — a servo powered up or unplugged mid-session updates it. See the `'presence'` event. |
+| `arduino.shoulder.isGesturing` | `true` while the board is playing a segment schedule on this servo (any origin). |
 
 `target` vs `position`: `write(n)` sets `target` immediately (where you told it to go); `position` is real encoder feedback and only tracks toward `target` while you're polling. Unlike the stepper, bus-servo `target` is browser-side only — the servo has no board-replayed goal, so it isn't restored after a board reset.
 
@@ -1858,8 +1908,9 @@ Bus utilities. Servos ship as ID 1 — to renumber, put a **single** servo on th
 | `'done'` | `{ position }` | A move, timed move, or gesture settles (the servo's `Moving` flag cleared). |
 | `'fwlimits'` | `{ min, max, enabled }` or `null` | The servo's firmware angle limits arrived — at attach, on reconnect, or after `readFirmwareLimits()`. |
 | `'presence'` | `{ servoId, present }` | The servo's answering state changed. Fires on the attach-time ping, on reconnect, and whenever `read()` feedback shows the servo appearing or disappearing (`present: false` = no answer — wrong ID, wiring, baud, or unpowered). Needs `read()` polling active to track mid-session changes. |
+| `'gesturestart'` / `'gestureend'` | `{}` | The board starts / ends playing a schedule on this servo — **any** origin (this browser, another, or the sketch). End = the last segment settles or a superseding write. |
 
-Shorthand: `onChange(fn)`, `onWrite(fn)`, `onDone(fn)`, `onPresence(fn)`.
+Shorthand: `onChange(fn)`, `onWrite(fn)`, `onDone(fn)`, `onPresence(fn)`, `onGestureStart(fn)`, `onGestureEnd(fn)`. The `isGesturing` property tracks whether a schedule is playing (any origin).
 
 `arduino.shoulder.getState()`
 
@@ -1918,6 +1969,8 @@ Writes all named members at once — the group counterpart of `servo.write()` / 
 arm.write({ shoulder: 2048, elbow: 3000, base: 1600, wrist: 90 });
 ```
 
+To write several actuators at once **without** holding a named group, use `arduino.write({ name: value, … })` — the same batched write through a transient group (it returns that group, so `whenDone()` chains). Hold a named group instead when you'll write the set repeatedly (a control loop, scrubbing) or need `read()` / `stop()` on it. Same pattern as `arduino.gesture()`.
+
 ## writeTimed()
 
 Moves every member to its target so they all finish after about `duration` ms — the same shape as a single actuator's `writeTimed(value, duration)`. Each actuator type uses its own native mechanism:
@@ -1943,6 +1996,8 @@ arm.writeTimed({ shoulder: 3000, elbow: 1200, base: 0, wrist: 120 }, 1500);
 
 `duration` is approximate — it's the *arrival synchronisation* that's exact. For an accurate first move from an unknown pose, either poll `read()` first or start from a known pose (`center()` / `write()`), since `writeTimed` measures distance from each member's last commanded position.
 
+For a one-shot coordinated move without a named group, use `arduino.writeTimed({ name: value, … }, duration)` — the transient-group counterpart (returns the group for `whenDone()`).
+
 ## gesture()
 
 Coordinated **expressive motion** — each member plays its own segment schedule, all pushed in **one batched message** and played on the board's own clock. Lanes are per-member, so overlapping timings give coordination and follow-through. Uneven lanes are padded with a trailing hold so every member still **arrives together** — the expressive counterpart of `writeTimed()`.
@@ -1955,6 +2010,8 @@ Coordinated **expressive motion** — each member plays its own segment schedule
 | `opts` | object | Optional. `{ absolute }` forces the reference frame for all lanes. |
 
 Each lane is relative (`by`) by default, or absolute (`to`) per lane. Lanes of unequal total duration are padded (a trailing hold) to the longest so they finish together. A lane naming a member that doesn't support `gesture()`, an unknown member, or an empty array is skipped with a warning; the rest still play.
+
+To fire a multi-channel gesture **without** holding a named group, use `arduino.gesture(lanes)` — it does the same batching through a transient group. See the Gesture page for the segment format and all three forms.
 
 ```javascript Example — a coordinated reach with follow-through
 arm.gesture({
@@ -2012,6 +2069,97 @@ await arm.home(1500).whenDone({ timeout: 30000 });
 `stop()` halts every member's motion — the group counterpart of `member.stop()` (to stop polling, use `read(END)`). `getState()` returns `{ name, members: { shoulder: {...}, base: {...}, ... } }`.
 
 See also: Servo · Stepper · Bus servo · Coordinated motion example
+
+---
+
+# Gesture
+> Author a timed motion — a segment schedule the board runs on its own clock. One channel, or many together in a single message.
+
+A **gesture** is a **segment schedule**: a list of timed moves — each a target, a duration, and an easing curve — that the board plays on its **own clock** after one message. You send it once; the board sequences the segments locally and fires a real `done` when the last one finishes. Author it for **one** actuator with its own `gesture()`, or for **many at once** with `arduino.gesture()` — same segment format either way.
+
+## Segments
+
+Every gesture is an array of segments. Each segment is one leg of the motion:
+
+| Field | Type | Description |
+|---|---|---|
+| `to` / `by` | number | Absolute target (`to`) or relative delta (`by`), in the actuator's native unit — servo counts, stepper steps, or degrees. |
+| `dur` | number | Segment duration in ms. This **sizes the move's speed**; if the authored duration is faster than the actuator can go, the segment simply takes longer and the next still fires on true arrival. |
+| `curve` | string | Easing shape: `linear`, `easeIn`, `easeOut`, `easeInOut`, or `back` (a slight overshoot). |
+
+A gesture is **relative** by default — each `by` segment chains from wherever the actuator is when it starts, so the same gesture replays from any pose. Use `to` for absolute targets, or force it for a whole gesture with `{ absolute: true }`. Absolute targets are clamped to the actuator's soft limits.
+
+## One actuator — `gesture()`
+
+Play a schedule on a single actuator. The segment shape and any on-hardware notes are per actuator — see servo, bus servo, and stepper.
+
+`servo.gesture(segments, [opts])`
+
+```javascript Example — one actuator
+grip.gesture([
+    { by:  600, dur: 400, curve: 'easeOut'   },
+    { by: -600, dur: 600, curve: 'easeInOut' },
+]);
+await grip.gesture([ /* … */ ]).whenDone();
+```
+
+## Many at once — `arduino.gesture()`
+
+Play a **multi-channel** gesture in **one batched message** — every channel starts together, and shorter lanes are padded with a trailing hold so they all **arrive together**. Lanes are per-channel, so overlapping timings give coordination and follow-through. This is the expressive counterpart of `writeTimed()`, and the multi-actuator counterpart of a single `gesture()`.
+
+`arduino.gesture(lanes, [opts])`
+
+| Parameter | Type | Description |
+|---|---|---|
+| `lanes` | object | Actuator names (the names you passed to `add()`) mapped to segment arrays — each the same shape a single actuator's `gesture()` takes. |
+| `opts` | object | Optional. `{ absolute }` forces the reference frame for **all** lanes. |
+
+It runs through a **transient, anonymous group** — nothing is stored on the `arduino` — and **returns that group**, so `whenDone()` and `stop()` chain. A lane naming an actuator that doesn't support `gesture()`, an unknown name, or an empty array is skipped with a warning; the rest still play. **Mixed types work**: servos, steppers, and bus servos in one call each play via their own on-board mechanism, all coordinated on the board clock.
+
+```javascript Example — a coordinated reach with follow-through
+arduino.add('shoulder', new BusServo());
+arduino.add('wrist',    new Servo());
+const { shoulder, wrist } = arduino;
+
+arduino.on('ready', () => {
+    shoulder.attach(1, 'ST');
+    wrist.attach(9);
+
+    arduino.gesture({
+        shoulder: [{ by: 300, dur: 400, curve: 'easeOut'   },
+                   { by:-300, dur: 600, curve: 'easeInOut' }],   // 1000 ms
+        wrist:    [{ to: 120, dur: 250, curve: 'back'       }],   // 250 ms → padded to 1000
+    });
+});
+await arduino.gesture({ /* … */ }).whenDone();
+```
+
+For a **single** actuator, prefer its own `gesture([ … ])` — there's nothing to coordinate.
+
+## On a held group — `group.gesture()`
+
+If you're already holding a group to drive a set of actuators live — `write()`, `writeTimed()`, `read()`, `stop()` — then `group.gesture(lanes)` does exactly the same thing on its members. Reach for `arduino.gesture()` when you just want to fire a gesture once; reach for a named group when you also need the live-control methods on the same set.
+
+## Awaiting completion — `whenDone()`
+
+Every form returns something you can await. `whenDone()` resolves `true` when **every** channel reports it actually **arrived** (each actuator's feedback-confirmed `done`, not a timer), or `false` on a safety timeout if a channel never reports (dead servo, lost link).
+
+`await arduino.gesture({ … }).whenDone([{ timeout }])`
+
+```javascript Example — play, then continue
+await arduino.gesture({ shoulder: reachSegs, wrist: flickSegs }).whenDone();
+console.log('pose reached');
+```
+
+## From the sketch — the board authors gestures too
+
+Gestures aren't only a browser thing. Because a gesture plays entirely **on the board**, the **sketch** can compose and fire one with no browser present — the same segment model, the same on-board player. `PardaloteServo.gesture(id, segs, count)` plays one actuator; `Pardalote.gesture().add(…).play()` coordinates several; `onGestureDone(id, cb)` chains one into the next for a headless sequence. A board-authored gesture broadcasts its **existence** to connected browsers — each sees the actuator's `isGesturing` flag and a `gesturestart` / `gestureend` event — so a browser can show "busy" without ever receiving the schedule. See Board-authored gestures.
+
+## Under the hood
+
+On the wire a gesture is already **multi-channel**: one `CMD_*_GESTURE` frame carries a block per channel, and the board runs each block on its own clock. `arduino.gesture()` and `group.gesture()` produce byte-identical frames — "group" is purely a JavaScript convenience for coordinating and naming a set. A running gesture also broadcasts a lightweight `CMD_*_GESTURE_STATE [id, active]` (existence, never the schedule), which drives the `isGesturing` flag and is replayed on reconnect. See the Protocol page for the frame layout.
+
+See also: Servo · Bus servo · Stepper · Groups · Coordinated motion example
 
 ---
 
@@ -2661,7 +2809,9 @@ Per channel:  [ logicalId u8 ][ flags u8 ][ count u8 ]  then count × segment
 Per segment:  [ curve u8 ][ dur u16, ms ][ value i32 ]        (big-endian)
 ```
 
-`flags` bit 0 selects the reference frame (relative delta vs absolute target); `value` is a signed displacement or target in the actuator's native unit (degrees, steps, counts); `curve` indexes the shared easing table (`linear`, `easeIn`, `easeOut`, `easeInOut`, `back`). A group gesture batches every type's frame into one message. This same record layout is what an on-device sequencer replays — one gesture vocabulary shared across the browser and the board.
+`flags` bit 0 selects the reference frame (relative delta vs absolute target); `value` is a signed displacement or target in the actuator's native unit (degrees, steps, counts); `curve` indexes the shared easing table (`linear`, `easeIn`, `easeOut`, `easeInOut`, `back`). A group gesture batches every type's frame into one message. This same record layout is what an on-device sequencer replays — one gesture vocabulary shared across the browser and the board — so a sketch can author gestures with the identical frames.
+
+While a schedule plays, the board emits a lightweight `CMD_*_GESTURE_STATE` (`0x64`/`0x65`/`0x66`, `[id, active]`) on the start and end of the motion — **existence, never the schedule** — so every browser can reflect an `isGesturing` state (and a reconnecting one learns it in the state sync below). It fires whoever authored the gesture, browser or sketch. Added in protocol **v1.1** (backward-compatible: older clients ignore the unknown code).
 
 ## State sync on connect
 
@@ -2918,3 +3068,2011 @@ The largest frame sizes push the sensor's data rate hard, and the 16:9 HD mode i
 - Increase timeout: `arduino.sonar.setTimeout(50)`
 - Point at a flat, hard surface (fabric and foam absorb ultrasound)
 - Maximum range depends on timeout: 30 ms ≈ 500 cm
+
+---
+
+# Examples
+> Complete, working Pardalote projects — each has an Arduino sketch, a web page, and a wiring note. The sections below are the per-example READMEs (what each does and how it works); full source for every example is on GitHub: https://github.com/ScottMit/Pardalote/tree/main/examples.
+
+---
+
+# Control Panel
+
+A browser-based control panel for interacting with Arduino pins in real time. Each pin is displayed as a row aligned to a photo of the board. Select a mode from the dropdown and the controls appear. Use the control panel to test your Arduino and circuit.
+
+---
+
+## What You Can Do
+
+- Read digital inputs and see HIGH / LOW update live
+- Toggle digital outputs HIGH or LOW from the browser
+- Drive PWM outputs with a slider
+- Watch analog inputs as a live bar graph
+- Open the panel in multiple browser windows simultaneously — all windows stay in sync
+
+---
+
+## Hardware Requirements
+
+- **Arduino UNO R4 WiFi** or **ESP32 development board**
+- Arduino and browser must be on the same WiFi network
+
+No additional components are needed to use the panel — just an Arduino with Pardalote firmware running.
+
+---
+
+## Setup
+
+### 1. Upload the firmware
+
+1. In Arduino IDE: **File → Examples → Pardalote → minimal-pardalote** (or any other Pardalote example that includes the extensions you need)
+2. Select your board and upload
+3. Open the Serial Monitor at 115200 baud — on first boot Pardalote asks for your WiFi credentials:
+   ```
+   === Pardalote ===
+   No WiFi networks stored.
+   === WiFi Configuration ===
+   [a]dd  [d]elete  [c]lear all  [s]how  [x] exit
+   > a
+   SSID: YourWiFiName
+   Password: ********
+   Saved: YourWiFiName
+   > x
+   ```
+   Credentials are saved to EEPROM and survive re-uploads. Press `w` within 5 seconds of any boot to update them.
+
+   **Prefer compile-time credentials?** Uncomment the two lines in `secrets.h`:
+   ```cpp
+   #define SECRET_SSID "YourWiFiName"
+   #define SECRET_PASS "YourWiFiPassword"
+   ```
+
+4. Find your Arduino's IP address:
+   - **UNO R4 WiFi:** scrolls across the LED matrix
+   - **ESP32:** printed in the Serial Monitor
+
+### 2. No code editing needed
+
+The IP is entered on the page, and the browser remembers it (along with the
+last board shown) — a returning visit reconnects automatically.
+
+### 3. Open the panel
+
+Open `index.html` in a browser, then click **Connect**.
+
+---
+
+## Using the Panel
+
+### Connecting
+
+Enter your Arduino's IP address in the **Board IP** field (if it's not already there) and click **Connect**. The status line reads `ready` once the connection is up; **Disconnect** stops it and pauses auto-reconnect.
+
+**No WiFi? Use the cable.** Switch the dropdown from **WiFi** to **USB** and click **Connect** — the browser (Chrome or Edge) shows a port picker the first time and remembers your choice afterwards. The sketch side must start the serial transport: `Pardalote.begin(PARDALOTE_SERIAL)` (one commented line in `minimal-pardalote`). Everything else on the panel works identically.
+
+The board layout switches automatically to match the connected Arduino. If you want to view a different board layout, use the board selector dropdown.
+
+### Board selector
+
+Three boards are included:
+
+| Board | Notes |
+|---|---|
+| UNO R4 WiFi | Analog pins A0–A5, digital D0–D13 |
+| ESP32-WROVER-DEV | Full GPIO header with analog-capable pins |
+| FireBeetle 2 ESP32-C5 | Compact ESP32-C5 board |
+
+Selecting a board from the dropdown manually overrides the auto-detection — the panel will stay on your chosen board even if the Arduino auto-reconnects. Clicking **Connect** again re-enables auto-detection of the board.
+
+### Pin modes
+
+Each interactive pin has a mode dropdown. Select a mode to activate it:
+
+| Mode | What it does |
+|---|---|
+| **off** | Pin is inactive — no mode is set |
+| **input** | Sets the pin as a digital input with pull-up. Shows HIGH (green) or LOW (red) |
+| **output** | Sets the pin as a digital output. HI and LO buttons write to the pin |
+| **pwm out** | Sets the pin as a PWM output. A slider controls the value (0–255) |
+| **analog in** | Reads the analog value and shows it as a live bar graph with a numeric readout |
+
+Pins that only support some modes show only those options in the dropdown.
+
+### Multiple windows
+
+Opening the panel in more than one browser window shows the same live state in all windows. Clicking HI in one window updates the output indicator in every other window.
+
+### Reconnecting
+
+If the Arduino resets or the connection drops, Pardalote reconnects automatically. Any pin modes you had active are re-applied as soon as the connection is restored.
+
+---
+
+## Supported Boards
+
+The panel layout is driven by the `BOARDS` table in `boards.js`. Each entry defines the board image, the display width, and the position and modes of every pin.
+
+To add a new board, add a new entry to `BOARDS` with the same name string that the Arduino firmware reports (the `PARDALOTE_BOARD` value). The control panel auto-detects by matching the name exactly — if no match is found, a warning is printed to the browser console.
+
+---
+
+## Troubleshooting
+
+**"Won't connect"**
+- Check the IP address matches what the Arduino printed
+- Arduino and browser must be on the same WiFi network
+- Try refreshing — the Arduino may still be starting up
+
+**"Board doesn't switch automatically"**
+- Check the browser console for `unrecognised board "..."` — the name the firmware reports must exactly match a key in `BOARDS`
+- If you've already manually selected a board, auto-detection is suppressed until you click Connect again
+
+**"Analog bar doesn't move"**
+- Confirm the pin supports analog input on your board (not all pins do)
+- Check that nothing is driving the pin — a floating pin may read erratically
+
+**"Output state shows — after setting a mode"**
+- The indicator shows `—` until the first write. Click HI or LO to set a known state
+
+**"Pin mode resets after reconnect"**
+- Modes are re-applied automatically on reconnect. If a mode does not come back, check the Serial Monitor for errors
+
+---
+
+## File Structure
+
+```
+control-panel/
+├── index.html        # Page shell
+├── sketch.js         # Connection, board selector, status indicator
+├── control-panel.js  # Panel layout and pin mode logic
+├── boards.js         # Board definitions (pins, positions, modes)
+├── style.css         # Panel styling
+├── boards/
+│   ├── uno-r4-wifi.png
+│   ├── esp32-wrover-dev.png
+│   └── firebeetle2-esp32-c5.png
+└── README.md         # This file
+```
+
+---
+
+# Basic light switch
+
+The simplest possible Pardalote sketch. A web page with two buttons that turn the Arduino's built-in LED on and off over WiFi — no p5.js, no framework.
+
+## What This Example Does
+
+- **Turn LED ON** — sends `digitalWrite(13, HIGH)` to the Arduino
+- **Turn LED OFF** — sends `digitalWrite(13, LOW)` to the Arduino
+
+## Hardware Requirements
+
+- **Arduino UNO R4 WiFi** or **ESP32 development board**
+- Arduino and browser must be on the same WiFi network
+- **UNO R4 WiFi:** the built-in LED on pin 13 is all you need
+- **ESP32:** connect an LED + 220 Ω resistor between pin 13 and GND (long leg to pin 13)
+
+## Quick Start
+
+### 1. Upload the firmware
+
+1. In Arduino IDE: **File → Examples → Pardalote → minimal-pardalote**
+2. Select your board and upload
+3. Open the Serial Monitor at 115200 baud — on first boot Pardalote asks for your WiFi credentials:
+   ```
+   === Pardalote ===
+   No WiFi networks stored.
+   === WiFi Configuration ===
+   [a]dd  [d]elete  [c]lear all  [s]how  [x] exit
+   > a
+   SSID: YourWiFiName
+   Password: ********
+   Saved: YourWiFiName
+   > x
+   ```
+   Credentials are saved to EEPROM and survive re-uploads. Press `w` within 5 seconds of any boot to update them.
+
+   **Prefer compile-time credentials?** Uncomment the two lines in `secrets.h`:
+   ```cpp
+   #define SECRET_SSID "YourWiFiName"
+   #define SECRET_PASS "YourWiFiPassword"
+   ```
+   If both are configured, `secrets.h` is tried first.
+
+4. Find your Arduino's IP address:
+   - **UNO R4 WiFi:** scrolls across the LED matrix
+   - **ESP32:** printed in the Serial Monitor
+
+### 2. Open the example and connect
+
+Open `index.html` in a browser. In the **Board** row, enter the Arduino's IP
+(or switch to **USB**) and press **Connect** — the button turns green when it's
+up. Set the **LED pin** in the **Wiring** row (13 is the built-in LED). Both
+settings are remembered per browser, so a return visit reconnects with one
+click. Click **Turn LED ON** and **Turn LED OFF**.
+
+## How It Works
+
+```javascript
+const arduino = new Arduino();
+arduino.connect(ip);   // ip comes from the Board field on the page
+
+arduino.on('ready', function() {
+    arduino.pinMode(ledPin, OUTPUT);  // set up pin after connection is ready
+});
+
+// Button handlers
+arduino.digitalWrite(ledPin, HIGH);  // ON
+arduino.digitalWrite(ledPin, LOW);   // OFF
+```
+
+`pinMode` is called inside the `ready` handler — this ensures the WebSocket is open before the frame is sent. Calls made before `ready` would be silently dropped.
+
+Reconnection is automatic. If the Arduino resets or the connection drops, Pardalote reconnects and restores the pin configuration.
+
+## Troubleshooting
+
+**"Buttons don't work"**
+- Check the IP in the **Board** field matches the Arduino's IP, and that you pressed **Connect**
+- Arduino and browser must be on the same WiFi network
+- Open the browser console (F12) for connection messages
+
+**"IP shows as 0.0.0.0" (UNO R4)**
+- WiFi connection failed — check credentials via Serial Monitor (press `w` on boot)
+
+**"LED doesn't light up" (ESP32)**
+- Check wiring: long leg of LED to pin 13, short leg through 220 Ω resistor to GND
+
+## File Structure
+
+```
+basic-light-switch/
+├── index.html      # Two-button web interface
+├── sketch.js       # Arduino connection and button handlers
+└── README.md       # This file
+
+dist/
+└── pardalote.js    # Pardalote bundle (core + all extensions)
+```
+
+## Next Steps
+
+- Read a sensor: try the `potentiometer-p5js`
+- Control a servo: try the `servo-control`
+- Control LED strips: try the `neopixel`
+
+---
+
+# Potentiometer
+
+A minimal Pardalote sketch using p5.js. Reads an analog sensor (potentiometer) and uses the value to draw a circle whose size follows the sensor in real time.
+
+## What This Example Does
+
+- Reads a potentiometer connected to an analog pin
+- Draws a circle on a p5.js canvas — larger when the sensor reads high, smaller when it reads low
+- Circle is green when the Arduino is connected, red when disconnected
+
+## Hardware Requirements
+
+- **Arduino UNO R4 WiFi** or **ESP32 development board**
+- **Potentiometer** (10 kΩ recommended)
+- **Breadboard and jumper wires**
+- Arduino and browser must be on the same WiFi network
+
+### Wiring
+
+| Potentiometer pin | Arduino |
+|---|---|
+| Center (wiper) | Pin 33 (ESP32) or A0 (UNO R4) |
+| One outer pin | 3.3 V (ESP32) or 5 V (UNO R4) |
+| Other outer pin | GND |
+
+Set the wiper's pin in the **Wiring** row on the page (default 14 = A0 on the UNO R4).
+
+## Quick Start
+
+### 1. Upload the firmware
+
+1. In Arduino IDE: **File → Examples → Pardalote → minimal-pardalote**
+2. Select your board and upload
+3. Open the Serial Monitor at 115200 baud — on first boot Pardalote asks for your WiFi credentials:
+   ```
+   === Pardalote ===
+   No WiFi networks stored.
+   === WiFi Configuration ===
+   [a]dd  [d]elete  [c]lear all  [s]how  [x] exit
+   > a
+   SSID: YourWiFiName
+   Password: ********
+   Saved: YourWiFiName
+   > x
+   ```
+   Credentials are saved to EEPROM and survive re-uploads. Press `w` within 5 seconds of any boot to update them.
+
+   **Prefer compile-time credentials?** Uncomment the two lines in `secrets.h`:
+   ```cpp
+   #define SECRET_SSID "YourWiFiName"
+   #define SECRET_PASS "YourWiFiPassword"
+   ```
+   If both are configured, `secrets.h` is tried first.
+
+4. Find your Arduino's IP address:
+   - **UNO R4 WiFi:** scrolls across the LED matrix
+   - **ESP32:** printed in the Serial Monitor
+
+### 2. Open the example and connect
+
+Open `index.html` in a browser. In the **Board** row, enter the Arduino's IP
+(or switch to **USB**) and press **Connect**, then set the **pot pin** in the
+**Wiring** row. Both settings are remembered per browser — no code editing
+needed. Turn the potentiometer — the circle should grow and shrink.
+
+Named pins like `A0` and `D13` also work by name in your own sketches, each
+resolving to the right physical pin for the board you connect to (see the
+Pins reference); this page uses a raw GPIO
+number in the pin field.
+
+## How It Works
+
+```javascript
+arduino = new Arduino();
+arduino.connect(ip);   // ip comes from the Board field on the page
+
+// Configure pin with a 50 ms poll interval
+arduino.pinMode(potPin, ANALOG_INPUT_MODE, 50);
+```
+
+In `draw()`, `analogRead()` returns the latest cached value — no extra network traffic:
+
+```javascript
+let dial = arduino.analogRead(POTPIN);
+let circleRadius = map(dial, 0, arduino.analogMax, 2, 100);
+```
+
+`arduino.analogMax` is set automatically from the board type:
+
+| Board | `analogMax` |
+|---|---|
+| UNO R4 WiFi | 1023 |
+| ESP32 | 4095 |
+
+Use `arduino.analogMax` rather than a hard-coded value to make your sketch portable between boards.
+
+## Troubleshooting
+
+**"Circle doesn't change size"**
+- Check the potentiometer wiring (center to analog pin, outers to power and GND)
+- Verify `POTPIN` matches the pin you wired
+- Open the browser console (F12) for connection messages
+
+**"Circle is always red"**
+- Arduino is not connected — check the IP address and WiFi
+
+**"Circle jumps around erratically"**
+- Power issue: make sure the potentiometer outer pins are connected to a stable rail
+
+## File Structure
+
+```
+potentiometer-p5js/
+├── index.html      # Canvas page (loads p5.js and the pardalote.js bundle)
+├── sketch.js       # p5.js setup() and draw()
+├── style.css       # Pardalote example house style
+└── README.md       # This file
+
+dist/
+└── pardalote.js    # Pardalote bundle (core + all extensions)
+```
+
+## Next Steps
+
+- Add digital output: try the `basic-light-switch`
+- Read distance: try the `ultrasonic-sensor`
+- Control a servo from a sensor value: try the `servo-control`
+
+---
+
+# Shared light switch
+
+A light controlled by **both** physical buttons on the Arduino **and** on/off buttons in the browser. Press either side; both stay in sync.
+
+## What this example demonstrates
+
+The library refactor lets your Arduino sketch coexist with the browser as equal peers on the same pins. This example shows the two halves of that contract:
+
+- **Arduino code can change a pin and tell the browser** — `Pardalote.send(pin, value)`
+- **Browser can change a pin** — the regular `arduino.digitalWrite(pin, value)` already works
+- **Both sides see every change** — whoever was last wins, both UIs reflect it
+
+The Arduino sketch also calls `Pardalote.share(LIGHT, OUTPUT)` once during `setup()` so the browser knows pin 13 is an output without having to declare it itself.
+
+## Hardware
+
+- Arduino UNO R4 WiFi or ESP32 development board
+- LED on **pin 13** (built-in on most boards; otherwise add an external LED + 220 Ω resistor)
+- Pushbutton on **pin 7** → GND (the "on" button)
+- Pushbutton on **pin 8** → GND (the "off" button)
+
+Buttons use `INPUT_PULLUP` — no external resistors needed.
+
+## Run it
+
+1. In Arduino IDE: **File → Examples → Pardalote → shared-light-switch**, select your board, upload.
+2. Find the Arduino's IP from the LED matrix (UNO R4) or Serial Monitor (ESP32).
+3. Open `index.html` and press **Connect** — enter the IP (or switch to **USB**). No code editing needed; the setting is remembered per browser.
+5. Press the physical buttons → the on-screen light follows. Click the browser buttons → the LED follows.
+
+## What's happening under the hood
+
+```cpp
+// Arduino side, in loop():
+if (button pressed) {
+    digitalWrite(LIGHT, HIGH);     // Arduino's own pin API — does the hardware
+    Pardalote.send(LIGHT, HIGH);   // tells the browser the new value
+}
+```
+
+```js
+// Browser side:
+document.getElementById('on-btn').onclick = () => arduino.digitalWrite(LIGHT, HIGH);
+arduino.pin(LIGHT).on('change', ({ value }) => updateLightDisplay(value));
+```
+
+`Pardalote.send()` from the Arduino and `arduino.digitalWrite()` from the browser both end up broadcasting the same `CMD_DIGITAL_WRITE` frame. Whoever calls last wins on the actual pin state; every connected browser sees every change.
+
+## Companion example
+
+shared-potentiometer goes the other direction — the Arduino calls `Pardalote.share(A0, ANALOG_INPUT_MODE)` once, and the browser starts receiving values without writing any `pinMode` / `analogRead` code itself.
+
+---
+
+# Shared potentiometer
+
+The Arduino tells the browser "I have an analog input on A0 — start polling it." The browser does nothing more than listen. A turn of the knob shows up live on screen.
+
+## What this example demonstrates
+
+The companion to shared-light-switch. That one showed the Arduino *pushing* values to the browser; this one shows the Arduino *announcing* a pin so the browser auto-starts polling — without any `pinMode` or `analogRead` call on the JS side.
+
+The minimal Arduino sketch:
+
+```cpp
+void setup() {
+    Pardalote.begin();
+    pinMode(POT, INPUT);
+    Pardalote.share(POT, ANALOG_INPUT_MODE);  // ← tells the browser
+}
+
+void loop() {
+    Pardalote.run();
+    // nothing else — the browser polls, Pardalote.run() handles it
+}
+```
+
+The minimal browser sketch:
+
+```js
+arduino.pin('A0').on('change', ({ value }) => updateDisplay(value));
+```
+
+No `arduino.pinMode`, no `arduino.analogRead`. The polling pipeline is set up automatically when the Arduino's `share(A0, ANALOG_INPUT_MODE)` arrives.
+
+## Hardware
+
+- Arduino UNO R4 WiFi or ESP32 development board
+- Potentiometer (10 kΩ is fine; anything in the 1 kΩ – 100 kΩ range works)
+
+Wire it as a voltage divider:
+
+| Pot pin | Connect to |
+|---|---|
+| Outer 1 | 3.3 V |
+| Wiper (centre) | A0 |
+| Outer 2 | GND |
+
+## Run it
+
+1. In Arduino IDE: **File → Examples → Pardalote → shared-potentiometer**, select your board, upload.
+2. Find the Arduino's IP from the LED matrix (UNO R4) or Serial Monitor (ESP32).
+3. Open `index.html` and press **Connect** — enter the IP (or switch to **USB**). No code editing needed; the setting is remembered per browser.
+5. Turn the pot. The number on screen and the bar should follow it in real time.
+
+## What's happening on the wire
+
+```
+Arduino: Pardalote.share(A0, ANALOG_INPUT_MODE)
+       → CMD_PIN_MODE A0 = ANALOG_INPUT_MODE
+Browser receives CMD_PIN_MODE:
+       → starts a default-interval (200 ms) analogRead poll
+       → CMD_ANALOG_READ A0 [interval=200]
+Arduino registers the periodic action; every 200 ms:
+       → reads A0, broadcasts CMD_ANALOG_READ A0 = <value>
+Browser receives CMD_ANALOG_READ:
+       → updates cache, fires arduino.pin('A0').on('change', …)
+       → display updates
+```
+
+The JS code on the page is just the pin handle's `'change'` listener. The rest of the pipeline was set up by the Arduino's one-line call to `share()`.
+
+## Why this is useful
+
+In a project where the **Arduino sketch is the source of truth** about which pins are wired to what (and the browser is just a viewer), `share()` lets the Arduino describe its hardware setup *to* the browser, instead of every browser sketch having to repeat the wiring knowledge.
+
+Polling rate is 200 ms here (the browser's default). If you want different rates, the browser can override after connect with `arduino.analogRead('A0', 50)` — that just updates the interval; no need to re-declare the mode.
+
+---
+
+# Messaging
+
+Named **key/value messages** between the browser and the Arduino sketch — no
+pin, no hardware device. Send a value under a key, watch keys for changes, and
+inspect *all* WebSocket traffic with the frame monitor.
+
+## What it shows
+
+- **Send** any value type from the browser — `int`, `float`, `bool`, or `text`
+  (auto-typed from the text box) — with optional `retain` and `broadcast`.
+- **Receive** every message via `arduino.on('message', …)`, and one specific
+  key (`uptime`) via `arduino.watch(…)`.
+- **Frame monitor** — tick the checkbox to log every frame in and out
+  (`SERVO_WRITE`, `DIGITAL_WRITE`, `MESSAGE`, …), decoded and named.
+
+The sketch (`messaging.ino`) drives the built-in LED from a `led` message, logs
+every message to Serial, and sends a **retained** `uptime` counter once a second
+— retained means a browser that connects later immediately gets the current value.
+
+## Run it
+
+1. In Arduino IDE: **File → Examples → Pardalote → messaging**, select your board, upload.
+2. Open `index.html` in a browser.
+3. Type the board's IP into the **Board IP** field and press **Connect** —
+   this is a **tool**, so no code editing is needed and the browser remembers
+   the IP for next time.
+
+Try sending `led` = `true` / `false` to toggle the LED. Open the page in **two
+browser tabs** and send with **broadcast** ticked — the other tab sees it too
+(the board relays it). Tick **retain**, reload, and the value is still there.
+
+## API used
+
+```js
+arduino.send('mode', 'idle', { retain: true, broadcast: true });
+arduino.send('count', 42);            // int    (auto-typed)
+arduino.send('temp', 22.5);           // float
+arduino.send('on', true);             // bool
+
+arduino.watch('uptime', (v, key, type) => …);
+arduino.on('message', ({ key, value, type }) => …);
+arduino.messages['mode'];             // last received value
+
+arduino.on('frame', ({ dir, cmdName, target, params }) => …);   // inspect all traffic
+```
+
+```cpp
+Pardalote.send("uptime", secs, MSG_FLAG_RETAIN);
+Pardalote.watch("led", onLed);        // void onLed(const Message& m)
+Pardalote.onMessage(onAny);
+Pardalote.onFrame(onFrame);           // void onFrame(const FrameEvent& ev)
+```
+
+---
+
+# Shared servo
+
+A servo the **Arduino sketch creates** and the browser receives automatically. One line on the board:
+
+```cpp
+pan = PardaloteServo.attach("pan", 9);
+```
+
+and `arduino.pan` exists in every connected browser — a full `Servo` instance, identical to one created with `arduino.add('pan', new Servo())`. No JS-side setup.
+
+## What this example demonstrates
+
+- **The sketch creates the servo** — `PardaloteServo.attach("pan", pin)` attaches it on the board and announces it to browsers in the same act. Browsers that connect later get it too.
+- **The browser object is the real thing** — `arduino.pan.write()`, `writeTimed()`, `whenDone()`, groups, limits: everything a browser-created servo has.
+- **Both sides drive it, both stay in sync** — the sketch nods the servo every 4 s (`PardaloteServo.writeTimed(pan, …)`), the browser grabs it with the mouse. Sketch writes are auto-echoed, so `arduino.pan.angle` always tracks whoever wrote last.
+
+This is the actuator counterpart of `Pardalote.share(pin, mode)` — except a servo has no life outside Pardalote, so there's no separate "share" step: creating it *is* sharing it. A servo that should stay private to the sketch shouldn't go through Pardalote at all — use the plain `Servo`/`ESP32Servo` library, the way unshared pins just use `pinMode()`.
+
+## Hardware
+
+- Arduino UNO R4 WiFi or ESP32 development board
+- Hobby servo: signal on **pin 9**, plus 5 V and GND (power a real servo from a supply, not the board's 5 V pin)
+
+## Run it
+
+1. In Arduino IDE: **File → Examples → Pardalote → shared-servo**, select your board, upload.
+2. Find the Arduino's IP from the LED matrix (UNO R4) or Serial Monitor (ESP32).
+3. Open `index.html` and press **Connect** — enter the IP (or switch to **USB**). No code editing needed; the setting is remembered per browser.
+5. Watch the sketch move the servo; press the mouse to take over.
+
+## What's happening under the hood
+
+On attach, the board broadcasts a `SHARE` frame (`[logicalId]` + the name) followed by the servo's attach state and angle. The JS core intercepts `SHARE`, constructs a `Servo`, and binds it as `arduino.pan`; the state frames then sync it through the normal announce machinery. The same sequence replays for every browser that connects later, so the object is always there before `'ready'` fires.
+
+```javascript
+arduino.on('share', ({ name, extension }) => { ... });  // optional: the moment it appears
+arduino.on('ready', () => { arduino.pan.write(90); });  // it's simply there
+```
+
+---
+
+# Servo control
+
+A p5.js sketch that lets you control a servo with the mouse or keyboard. Visualises the servo arm angle on screen in real time.
+
+## What This Example Does
+
+- **Mouse mode (default):** horizontal mouse position maps directly to servo angle (0–180°)
+- **Auto sweep:** presses `S` to continuously sweep the servo back and forth using `sweep()`
+- **Preset positions:** `C` = centre (90°), `L` = min (0°), `R` = max (180°)
+- **Angle display:** a servo arm is drawn on the canvas, driven by a local `angle` variable updated each time the sketch commands a new position
+
+## Hardware Requirements
+
+- **Arduino UNO R4 WiFi** or **ESP32 development board**
+- **Servo motor** (standard 5 V hobby servo)
+- Arduino and browser must be on the same WiFi network
+
+### Wiring
+
+| Servo wire | Arduino |
+|---|---|
+| Power (red) | 5 V |
+| Ground (brown/black) | GND |
+| Signal (orange/yellow) | Pin 7 (configurable in sketch.js) |
+
+For more than one or two servos, power them from an external 5 V supply rather than the Arduino's 5 V pin.
+
+### Arduino libraries
+
+Install via Arduino IDE → Tools → Manage Libraries:
+- `WebSocketsServer` (by Markus Sattler)
+- `ESP32Servo` (ESP32 only — not needed for UNO R4)
+
+Install Pardalote itself by copying `pardalote-arduino/library/Pardalote/` into your Arduino libraries folder (see the top-level README).
+
+## Quick Start
+
+### 1. Upload the firmware
+
+1. In Arduino IDE: **File → Examples → Pardalote → servo-control**. The sketch is two lines:
+   ```cpp
+   #include <Pardalote.h>
+   #include <PardaloteServo.h>
+
+   void setup() { Pardalote.begin(); }
+   void loop()  { Pardalote.run();   }
+   ```
+2. Select your board and upload
+3. Open the Serial Monitor at 115200 baud — on first boot Pardalote asks for your WiFi credentials:
+   ```
+   === Pardalote ===
+   No WiFi networks stored.
+   === WiFi Configuration ===
+   [a]dd  [d]elete  [c]lear all  [s]how  [x] exit
+   > a
+   SSID: YourWiFiName
+   Password: ********
+   Saved: YourWiFiName
+   > x
+   ```
+   Credentials are saved to EEPROM and survive re-uploads. Press `w` within 5 seconds of any boot to update them.
+
+   **Prefer compile-time credentials?** Create a `secrets.h` file in the sketch folder with:
+   ```cpp
+   #define SECRET_SSID "YourWiFiName"
+   #define SECRET_PASS "YourWiFiPassword"
+   ```
+   If both are configured, `secrets.h` is tried first.
+
+4. Find your Arduino's IP address:
+   - **UNO R4 WiFi:** scrolls across the LED matrix
+   - **ESP32:** printed in the Serial Monitor
+
+### 2. Open the example
+
+This is a **tool** — it works out of the box, no code editing:
+
+1. Open `index.html` in a browser.
+2. Type the board's IP into the **Board IP** row and press **Connect**.
+3. Set the servo pin in the **Wiring** row under the gauge (default 11) —
+   changing it reconnects and re-attaches.
+
+The browser remembers the IP and pin, so next visit it reconnects with one
+click. Each control row exercises one part of the servo API — immediate
+writes, timed moves with an awaited `whenDone()`, soft limits (watch the
+clamp appear in the log and on the gauge), and set-home / go-home — with a
+live gauge and call log underneath.
+
+## How It Works
+
+```javascript
+arduino = new Arduino();
+arduino.connect(ArduinoIP);
+
+// Register the servo extension
+arduino.add('myServo', new Servo());
+arduino.myServo.attach(7);    // attach to pin 7
+arduino.myServo.center();     // move to 90° on startup
+```
+
+A timed move with awaited arrival:
+
+```javascript
+const move = arduino.myServo.writeTimed(target, duration);  // interpolated on-board
+const ok   = await move.whenDone();   // true = arrived, false = safety timeout
+```
+
+The gauge tracks `arduino.myServo.angle` — the value the library actually
+applied, already clamped to any soft limits — so a clamped command is visible
+on screen (and noted in the log). A PWM servo has no position feedback:
+`angle` is the commanded value, which for a hobby servo *is* its state.
+
+## Script loading order
+
+Include the `pardalote.js` bundle (core + every extension) before your sketch:
+
+```html
+<script src="../../lib/pardalote.js"></script>
+<script src="sketch.js"></script>
+```
+
+## Troubleshooting
+
+**"Servo doesn't move"**
+- Check wiring: signal to pin 7, power to 5 V, ground to GND
+- Verify the sketch has `#include <PardaloteServo.h>`
+- Check the browser console for connection errors
+
+**"Servo jitters"**
+- `write()` is called every frame in mouse mode — the library has a built-in 20 ms throttle, but if the servo still jitters check its power supply
+- Use `setThreshold(2)` to ignore small angle changes: `arduino.myServo.setThreshold(2)`
+
+**"Servo moves to wrong position on startup"**
+- `center()` moves to 90° — if the servo arm is mounted off-centre this is mechanical, not a code issue
+
+## File Structure
+
+```
+servo-control/
+├── index.html      # Canvas page (loads p5.js and the pardalote.js bundle)
+├── sketch.js       # Servo control and visualisation
+└── README.md       # This file
+
+dist/
+└── pardalote.js    # Pardalote bundle (core + all extensions)
+```
+
+## Next Steps
+
+- Up to 8 servos simultaneously: `arduino.add('tilt', new Servo())`
+- Fine-grained control: `arduino.myServo.writeMicroseconds(1500)`
+- Custom pulse range: `arduino.myServo.attach(7, 544, 2400)`
+- Combine with a sensor: map `analogRead()` directly to servo angle
+
+---
+
+# Stepper motor
+
+Drive a stepper motor from the browser with Pardalote. Demonstrates
+accel-limited position moves, continuous rotation, live position readout,
+and the `done` completion event.
+
+## Hardware
+
+- Arduino UNO R4 WiFi or ESP32
+- A STEP/DIR stepper driver: **TMC2208**, **TMC2209**, **A4988**, or
+  **EasyDriver** (or a 28BYJ-48 + ULN2003 — see `attach4wire` below)
+- A stepper motor with its **own power supply** (do not run the motor coils
+  off the board's 5 V rail)
+
+Wiring for a STEP/DIR driver:
+
+| Driver pin | Arduino |
+|---|---|
+| STEP | pin 2 (default — change it in the page's Wiring row) |
+| DIR  | pin 3 (default) |
+| EN   | pin 4 (default) — optional, active-LOW on most drivers; −1 = none |
+| GND  | shared ground with the Arduino |
+
+Set microstepping with the driver's MS pins as usual, then tell the JS side
+how many steps that makes per revolution with `setStepsPerRev()`.
+
+## Arduino
+
+Install the **AccelStepper** library (Arduino IDE → Manage Libraries), then
+upload **File → Examples → Pardalote → stepper-motor**. Note the IP address the
+board reports (LED matrix on UNO R4, Serial Monitor on ESP32).
+
+## Browser
+
+This is a **tool** — it works out of the box, no code editing:
+
+1. Open `index.html` in a browser.
+2. Type the board's IP into the **Board** row and press **Connect**.
+3. Pick your driver type and pins in the **Wiring** row (STEP/DIR or 4 coil
+   pins), then press **Connect** again to apply.
+
+The browser remembers your IP, wiring, and motion profile, so next visit it
+reconnects with one click. Every stepper feature has a control row — position
+and timed moves, continuous spin, torque on/off, soft limits, limit switches,
+and the homing routine — with a live dial and a call log underneath.
+
+## Notes
+
+- **Motion runs on the board.** The browser sends targets and motion
+  profiles; the Arduino generates the step pulses via AccelStepper. You never
+  stream individual steps over WiFi.
+- **Soft limits** (`setLimits(-6400, 6400)`) are enforced on the Arduino — the
+  board clamps every target, so the browser (or an LLM driving it) can't send
+  the motor past the set range.
+- **`done`** fires when a position move completes. `await arduino.x.moveTo(n).whenDone()`
+  resolves at the same moment — handy for sequencing moves.
+
+---
+
+# Bus servos
+
+Drive two Feetech ST-series serial bus servos from the browser: drag to
+command position, read live position / load / voltage / temperature back,
+and free a joint to hand-pose it (torque off) then re-hold it.
+
+## Hardware
+
+- Arduino UNO R4 WiFi or ESP32
+- A **Waveshare Serial Bus Servo Driver** board (or equivalent half-duplex
+  UART adapter), wired to a hardware serial port:
+  - UNO R4 WiFi → **Serial1** (D0 = RX, D1 = TX)
+  - ESP32 → Serial1 or Serial2 (set the pins with `configureBus({ rxPin, txPin })`)
+- Two **Feetech STS3215** (or other ST/SMS) servos, daisy-chained on the bus,
+  set to IDs **1** and **2**
+- A servo power supply (6–7.4 V typical) — not the board's 5 V rail
+
+The STS3215 is the same servo used in the LeRobot SO-100/SO-101 arms.
+
+### Setting servo IDs
+
+Servos ship as ID 1. To renumber, put a **single** servo on the bus, attach
+it, and call `setId(newId)` — then repeat one at a time. `scan()` lists the
+IDs currently responding on the bus.
+
+## Arduino
+
+Install the **SCServo** library (from the Waveshare Bus Servo Adapter wiki or
+the Feetech SDK — usually a ZIP, not in the Library Manager), then upload
+**File → Examples → Pardalote → bus-servos**. Note the IP the board reports.
+
+## Browser
+
+This is a **tool** — it works out of the box, no code editing:
+
+1. Open `index.html` in a browser.
+2. Type the board's IP into the **Board IP** row and press **Connect**.
+3. Set the two joints' bus IDs in the **Servos** row under the display
+   (defaults 1 and 2) — changing an ID reconnects and re-attaches.
+
+The browser remembers the IP and IDs, so next visit it reconnects with one
+click.
+
+| Input | Action |
+|---|---|
+| Drag a dial | command that joint's position |
+| Torque buttons or `1` / `2` | free that joint (torque off) to pose by hand; press again to re-hold |
+
+## Notes
+
+- **Positions are raw encoder counts**, not degrees — ST series is 0–4095
+  (centre 2048), SC series is 0–1023. `write()` takes counts; `writeDegrees()`
+  and `.positionDegrees` convert (accurate for ST, nominal for SC).
+- **Limits are enforced by the servo itself.** `setLimits(min, max)` writes the
+  servo's own Min/Max position registers, so the range holds even without the
+  browser in the loop.
+- **Torque off = teaching by demonstration.** `disableTorque()` lets you move
+  the joint by hand while `read()` streams the position back — the basis of the
+  record-a-trajectory workflow in projects like LeRobot.
+- **Calibration:** move a joint to its zero pose (torque off), then
+  `calibrate()` sets that as centre (like LeRobot centring on `resolution / 2`).
+
+---
+
+# Coordinated motion
+
+Two motors sweep **in unison** using a Pardalote group.
+Each motor's type — **PWM servo**, **serial bus servo**, or **stepper** — is
+chosen independently from the popup under its dial, so the pair can be **mixed**
+(the default is a servo + a stepper). Both motors ping-pong between two positions,
+arriving together on every leg. Each dial visualises the motion — a **180° gauge**
+for PWM servos, a **360° dial** for bus servos and steppers.
+
+This is the p5.js demonstration of `group.writeTimed()` / `whenDone()`: one call
+moves both motors, and each motor type reaches its target its own way (bus
+servos via matched-speed SyncWrite, PWM servos via on-board interpolation,
+steppers via a board-timed constant-speed move) — all in one WebSocket message.
+
+## Hardware
+
+Any Pardalote board (UNO R4 WiFi or ESP32) plus **two motors of any type**:
+
+| Type | Wiring (defaults — editable under each dial) |
+|---|---|
+| Servo (PWM) | two servos on pins **5** and **6** |
+| Bus Servo (ST) | two Feetech ST servos, IDs **1** and **2**, on the serial bus |
+| Stepper (driver) | two STEP/DIR drivers on pins **2,3** and **8,9** |
+| Stepper (4-wire) | e.g. 28BYJ-48 via ULN2003 — IN1–IN4 on **8,9,10,11** and **4,5,6,7** |
+
+The Arduino sketch just needs the matching extension(s) included — the simplest
+is to include all three so you can switch type without re-flashing:
+
+```cpp
+#include <Pardalote.h>
+#include <PardaloteServo.h>
+#include <PardaloteBusServo.h>
+#include <PardaloteStepper.h>
+
+void setup() { Pardalote.begin(); }
+void loop()  { Pardalote.run();   }
+```
+
+## Browser
+
+This is a **tool** — it works out of the box, no code editing:
+
+1. Open `index.html` in a browser.
+2. Type the board's IP into the field at the top and press **Connect**.
+3. Pick each motor's type from the popup under its dial and set its pin(s)
+   (or bus ID) in the fields below — changes rebuild the group and reconnect.
+
+The browser remembers the IP, motor types, and pins for next time. Without a
+connection the dials still preview the sweep.
+
+| Control | Action |
+|---|---|
+| Popup + pin fields under each dial | choose Servo / Bus Servo / Stepper and its pins/ID for that motor (rebuilds the group) |
+| Pause / Resume | stop and start the sweep |
+| Duration slider | time per leg — both motors still arrive together |
+
+## Notes
+
+- The dials animate a **display interpolation** of the commanded sweep, so they
+  move smoothly even before the board connects (you'll see `status:
+  reconnecting…` until it does). The `feedback` readout shows each motor's real
+  position once polling returns values (bus servo / stepper).
+- The sweep starts each leg from the last commanded position, so the motors are
+  snapped to the low pose once on connect (`group.write`) to establish a known
+  start — see the note on first moves in the Groups docs.
+- Edit the `low` / `high` values in `TYPES` to change each type's sweep range.
+
+---
+
+# Leader → Follower
+
+Teleoperate a robot arm by hand. Move a **leader** arm and a second **follower**
+arm mirrors it live, joint for joint — the leader/follower setup from the
+LeRobot project, running entirely in the browser. Two boards, two arms, one
+web page.
+
+The leader is free (torque off), so you back-drive it by hand; the browser
+streams its six joint positions to the follower, which holds and follows.
+
+## Hardware
+
+- **Two** WiFi Arduinos — UNO R4 WiFi or ESP32, one per arm.
+- **Two identical arms**, each with six Feetech **STS3215** bus servos on a
+  serial-bus driver board, servo IDs **1–6**. (The STS3215 is the servo in the
+  LeRobot SO-100 / SO-101 arms.)
+- A servo power supply per arm (6–7.4 V) — not the board's 5 V rail.
+
+Bus wiring is the same as the Bus servos example: UNO R4 →
+Serial1 (D0/D1); ESP32 → set the pins with the **bus** RX/TX fields on the page.
+
+## Arduino
+
+Both boards run the **same** bus-servo firmware — upload **File → Examples →
+Pardalote → bus-servos** to each, and note the IP each reports. Nothing arm-
+specific lives on the board; the leader/follower logic is all in the browser.
+
+## Browser
+
+This is a **tool** — no code editing. Open `index.html` and:
+
+1. Enter each board's address in the **Leader** and **Follower** rows (WiFi IP,
+   or switch a row to **USB**) and press **Connect** on each — the button turns
+   green when it's up.
+2. Line the arms up joint for joint and press **sync all** to match every
+   joint's origin (this cancels any difference in how the servos were installed).
+3. Press **start relay**. Move the leader by hand; the follower mirrors it.
+
+| Control | What it does |
+|---|---|
+| **sync all** | capture both arms' current positions as matched origins for every joint (press again to clear) |
+| **on/off** (per pair) | the checkbox above each column excludes that joint pair from the system — its follower goes limp |
+| **flip** (per joint) | mirror that joint — leader forward → follower backward |
+| **set limits** | free the follower, hand-move it to record safe soft limits, press again to lock |
+| **free follower** | release the follower's torque to pose it by hand |
+| **start relay** | stream leader → follower |
+
+Every setting is remembered per browser, so a return visit reconnects with one
+click.
+
+## How it works
+
+**Two boards means two `Arduino` instances** — one connection each:
+
+```javascript
+const leader   = new Arduino();
+const follower = new Arduino();
+leader.connect('192.168.1.41');
+follower.connect('192.168.1.42');
+```
+
+**Six bus servos per arm.** Each arm gets six `BusServo`s, attached to IDs 1–6.
+The leader is freed and polled so we get live positions; the follower is held:
+
+```javascript
+for (let i = 1; i <= 6; i++) {
+    leader.add('L' + i, new BusServo());
+    follower.add('F' + i, new BusServo());
+}
+
+leader.on('ready', () => {
+    for (let i = 1; i <= 6; i++) {
+        const s = leader['L' + i];
+        s.attach(i, 'ST');
+        s.disableTorque();   // back-drivable — move it by hand
+        s.read(50);          // stream its position ~20×/sec
+    }
+});
+```
+
+**The follower moves as a group.** A group writes all
+six joints in one Feetech SyncWrite packet (one WebSocket message), so they move
+together instead of trickling in one at a time:
+
+```javascript
+const arm = follower.group('arm', {
+    1: follower.F1, 2: follower.F2, 3: follower.F3,
+    4: follower.F4, 5: follower.F5, 6: follower.F6,
+});
+```
+
+**The relay** copies the leader's live positions to the follower on a timer:
+
+```javascript
+setInterval(() => {
+    const vals = {};
+    for (let i = 1; i <= 6; i++) vals[i] = leader['L' + i].position;
+    arm.write(vals);   // one coordinated move
+}, 50);
+```
+
+**Sync and flip** are just a per-joint remap. Each joint remembers a *leader
+origin* and a *follower origin* (captured when you toggle **sync**, or the servo
+centre otherwise), and the follower target is the leader's movement *relative* to
+that origin — optionally mirrored:
+
+```javascript
+const delta  = leaderPos - leaderOrigin;
+const target = followerOrigin + (flip ? -delta : delta);
+```
+
+Because the target is relative to a matched origin, the arms don't need to be
+built or mounted identically — you line them up once, sync, and the offset
+cancels out.
+
+## Notes
+
+- **Positions are raw encoder counts** (0–4095 for ST servos, centre 2048), not
+  degrees.
+- **Soft limits are enforced on the follower's board.** "set limits" records the
+  hand-moved range and applies it with `setLimits()`, so a relayed move can't
+  drive the follower past it.
+- The leader only ever reads; the follower only ever writes — so there's no
+  fighting between hand-posing and the relay.
+
+---
+
+# Gesture Builder
+
+Author expressive motion on a timeline, then play it back through Pardalote's
+`gesture()` — an on-board **segment schedule** each output runs on its own clock.
+One web page, one Arduino, any mix of outputs.
+
+Each **row** is one **output** (labelled **Output N**, editable). Click its gutter
+summary to open a **settings dialog** — choose **Bus servo**, **PWM servo**, or
+**Stepper** and set its connection pins there; the value axis and units follow the
+type (counts / degrees / steps). Each **keyframe** is a time × a value; the line
+between two keyframes is a **segment** you can shape with an easing curve. **Play** sends every row as one lane of a single `arduino.gesture({…})`
+so they all start together and arrive together — starting from the **playhead** you
+position on the ruler. **Pause** freezes the playhead and lets you **scrub** the
+outputs through the sequence by hand.
+
+## Hardware
+
+- **One** WiFi Arduino — UNO R4 WiFi or ESP32.
+- Any mix of outputs the firmware supports:
+  - **Bus servos** — Feetech **ST-series** on a serial-bus driver board, each a distinct
+    bus **ID** (1–253); a servo supply (6–7.4 V), not the board's 5 V rail. (ESP32 → set
+    the **bus** RX/TX pins on the page; UNO R4 → Serial1 on D0/D1.)
+  - **PWM servos** — a signal **Pin** each.
+  - **Steppers** — a **STEP** and **DIR** pin, and optionally an **EN** (enable) pin
+    (`-1` for none). Only bus servos report position, so **pose** (hand-authoring) and
+    **free** are bus-servo features; PWM servos always hold, and steppers free only with
+    an EN pin.
+
+Wiring for bus servos is exactly the Bus servos example.
+
+## Arduino
+
+Upload a Pardalote sketch that registers the outputs you'll use — bus servos, PWM
+servos, and/or steppers — and note the IP it reports. (The
+Coordinated motion example is a ready-made mixed rig — its
+sketch already includes the `PardaloteServo` / `PardaloteBusServo` / `PardaloteStepper`
+headers, so you can attach whatever mix of outputs you need.) Nothing tool-specific
+lives on the board: the timeline is all in the
+browser and the board just plays the gestures it's sent, on whatever outputs it has.
+
+## Browser
+
+This is a **tool** — no code editing. Open `index.html` and:
+
+1. Connect (WiFi IP or **USB**) — the button turns green when it's up.
+2. For each row, **click its gutter summary** to open the settings dialog — pick the
+   output type and set its pins (ID / Pin / STEP·DIR·EN). Add or remove rows with the
+   **+ / −** buttons in the gutter.
+3. Build the motion on the timeline:
+
+| Action | What it does |
+|---|---|
+| **click a row's gutter summary** | open the **settings** dialog — output type + connection pins (draggable; OK keeps, cancel/Esc revert) |
+| **double-click a lane** | add a **keyframe** at that time and value |
+| **drag a keyframe** | set its value (up/down) and time (left/right) |
+| **right-click a keyframe** | **delete** it, or **pose servo** (bus servos only) — free the servo, hand-move it, click to commit (Esc cancels) |
+| **right-click a segment** | set its **shape** (easing) — linear / easeIn / easeOut / easeInOut / back |
+| **drag the last keyframe** past the right edge | extend the timeline |
+| **drag a max / min value** (gutter) | set that output's soft limit (the value axis spans min–max, in the type's unit) |
+| **right-click a max / min value** | **reset** to the type's default range — or (bus servos only) **pose limits** by sweeping the range by hand |
+| **drag the playhead** (ruler) | set where **play** starts; while **paused**, scrub it to drive the outputs through the sequence |
+| **▶ play** | play from the playhead (one batched `arduino.gesture({…})`) |
+| **❙❙ pause** | freeze the playhead; scrub to move the outputs (a held `group.write()`) |
+| **■ stop** | cancel the gesture, hold, return the playhead to the start |
+| **free** / **free all** | release an output's torque to hand-pose it — bus servos and steppers-with-EN only (greyed otherwise) |
+
+The teal marker in each row's gutter is that output's **live position** (sensed for bus
+servos; last-commanded for PWM servos and steppers).
+Everything (rows, keyframes, shapes, connection) is remembered per browser.
+
+## Export
+
+Two code panels below the timeline show the built gesture as runnable code, updating
+live as you edit. In both, the movement is wrapped in a **`playGesture()`** function
+you call from whatever triggers it — a sensor, a button, an LLM, any command:
+
+- **JavaScript** (browser) — output setup + limits in `on('ready')`; the movement is
+  the batched `arduino.gesture({…})` (or a single `output.gesture([…])` for one output).
+- **C++** (a board-side Arduino sketch) — the same gesture as `static const PardaloteSeg`
+  schedules in flash, attached in `setup()` and played with `Pardalote.gesture().add(…).play()`
+  (or `Pardalote<Type>.gesture(id, segs, count)` for one output). No browser needed.
+
+Each `on('ready')` / `setup()` calls `playGesture()` once as a demo. **Copy** whichever
+you need. Switched-off rows are omitted, matching what **play** sends.
+
+## How it works
+
+**Each row becomes a `gesture()`.** A row's keyframes are turned into an absolute
+segment schedule — a lead-in from the servo's live position to the first keyframe,
+then one segment per gap. Each segment carries the *left* keyframe's easing curve:
+
+```javascript
+// row points [{t, v, curve}, …]  →  gesture segments (values in servo counts)
+const segs = [{ to: pts[0].v, dur: pts[0].t, curve: 'linear' }];
+for (let i = 1; i < pts.length; i++)
+    segs.push({ to: pts[i].v, dur: pts[i].t - pts[i-1].t, curve: pts[i-1].curve });
+
+servo.gesture(segs, { absolute: true });
+```
+
+**All rows play together.** Instead of firing each `gesture()` separately, the
+rows are sent as one multi-channel `arduino.gesture({…})` — a single batched
+message where every channel starts together, and shorter lanes are padded with a
+trailing hold so every servo arrives together:
+
+```javascript
+arduino.gesture({ seq0: segsA, seq1: segsB }, { absolute: true });
+```
+
+(The keys are the actuator names you passed to `arduino.add(name, …)`. Under the
+hood this runs through a transient group; when you're
+already holding a named group for live control, `group.gesture()` does the same.)
+
+**The preview uses the same easing math as the board** (`curveShape()`), so the
+shape you draw on screen is the shape the schedule encodes.
+
+## Notes
+
+- **Angles are raw ST encoder counts** under the hood (0–4095 over a nominal
+  360°); the read-outs show degrees.
+- **Board limits:** up to **12 segments per servo** and (here) **10 keyframes
+  per row** — plenty for a gesture, and it keeps room for the group's arrive-
+  together padding.
+- **Bus servos run their own motion.** Unlike a PWM `Servo` (where the board
+  renders the easing *inside* each segment), a Feetech bus servo executes each
+  segment as a single speed-matched move — so the easing **curve** you pick is
+  faithfully drawn in the preview and encoded on the wire, but a bus servo won't
+  visibly render an ease *within* one segment. To make a shape read on real
+  bus-servo hardware, **decompose** the move into more, shorter segments (more
+  keyframes) — the tool's per-segment timing then does the shaping. This is the
+  authoring front-end; deeper on-hardware curve rendering for bus servos is a
+  natural next step.
+
+---
+
+# NeoPixel
+
+An interactive p5.js colour mixer that drives a NeoPixel LED strip in real time. Move the mouse across the canvas — left/right for hue, up/down for brightness — and the strip follows the colour under the cursor. Hover the centre for white.
+
+## What This Example Does
+
+- Draws an HSB colour field on a 600×400 p5.js canvas
+- Samples the canvas colour under the mouse and sets all 8 LEDs to match — or white when the cursor is over the centre circle
+- The circle in the middle previews the colour currently sent to the strip
+
+## Hardware Requirements
+
+- **Arduino UNO R4 WiFi** or **ESP32 development board**
+- **NeoPixel LED strip** — WS2812B or compatible, 8 LEDs (configurable)
+- Arduino and browser must be on the same WiFi network
+
+### Wiring
+
+| NeoPixel wire | Arduino |
+|---|---|
+| VCC (red) | 5 V |
+| GND (black) | GND |
+| Data (white/yellow) | data pin (set on the page) |
+
+For strips longer than ~30 LEDs use an external 5 V supply. Connect all grounds (Arduino, strip, supply) together. The data line still goes to the Arduino pin.
+
+### Arduino libraries
+
+Install via Arduino IDE → Tools → Manage Libraries:
+- `WebSocketsServer` (by Markus Sattler)
+- `Adafruit NeoPixel` (by Adafruit)
+
+Install Pardalote itself by copying `pardalote-arduino/library/Pardalote/` into your Arduino libraries folder (see the top-level README).
+
+## Quick Start
+
+### 1. Upload the firmware
+
+1. In Arduino IDE: **File → Examples → Pardalote → neopixel**. The sketch is two lines:
+   ```cpp
+   #include <Pardalote.h>
+   #include <PardaloteNeoPixel.h>
+
+   void setup() { Pardalote.begin(); }
+   void loop()  { Pardalote.run();   }
+   ```
+2. Select your board and upload
+3. Open the Serial Monitor at 115200 baud — on first boot Pardalote asks for your WiFi credentials:
+   ```
+   === Pardalote ===
+   No WiFi networks stored.
+   === WiFi Configuration ===
+   [a]dd  [d]elete  [c]lear all  [s]how  [x] exit
+   > a
+   SSID: YourWiFiName
+   Password: ********
+   Saved: YourWiFiName
+   > x
+   ```
+   Credentials are saved to EEPROM and survive re-uploads. Press `w` within 5 seconds of any boot to update them.
+
+   **Prefer compile-time credentials?** Create a `secrets.h` file in the sketch folder with:
+   ```cpp
+   #define SECRET_SSID "YourWiFiName"
+   #define SECRET_PASS "YourWiFiPassword"
+   ```
+   If both are configured, `secrets.h` is tried first.
+
+4. Find your Arduino's IP address:
+   - **UNO R4 WiFi:** scrolls across the LED matrix
+   - **ESP32:** printed in the Serial Monitor
+
+### 2. Open the example and connect
+
+Open `index.html` in a browser. In the **Board** row, enter the Arduino's IP
+(or switch to **USB**) and press **Connect**. Set the strip's **pixel pin** and
+**count** in the **Wiring** row under the colour field. All settings are
+remembered per browser — no code editing needed. Move the mouse across the
+colour field — the LEDs follow the colour under the cursor, and the circle in
+the middle previews it. Hover the centre for white.
+
+## How It Works
+
+```javascript
+arduino = new Arduino();
+arduino.add('strip', new NeoPixel());   // register the extension before connecting
+
+// configure the strip once the board is ready
+arduino.on('ready', () => {
+    arduino.strip.init(pixelPin, numPixels);  // pin 11, 8 pixels
+    arduino.strip.setBrightness(50);          // 0–255
+    arduino.strip.clear();
+    arduino.strip.show();
+});
+
+arduino.connect(ip);   // ip comes from the Board field on the page
+```
+
+In `draw()`, the colour under the mouse is sampled from the canvas and sent to the strip (or white when the cursor is over the centre circle):
+
+```javascript
+let pixelColor = get(mouseX, mouseY);
+let neoColor = arduino.strip.Color(red(pixelColor), green(pixelColor), blue(pixelColor));
+arduino.strip.fill(neoColor, 0, numPixels);
+arduino.strip.show();    // must call show() to push changes to the LEDs
+```
+
+Changes are buffered locally until `show()` is called — this means you can set many pixels in one `draw()` pass and send them all in a single message.
+
+## Script loading order
+
+Include the `pardalote.js` bundle (core + every extension) before your sketch:
+
+```html
+<script src="../../lib/pardalote.js"></script>
+<script src="sketch.js"></script>
+```
+
+## Troubleshooting
+
+**"LEDs don't light up"**
+- Check VCC → 5 V, GND → GND, data → pin 11
+- Verify the sketch has `#include <PardaloteNeoPixel.h>`
+- Try a lower brightness: `arduino.strip.setBrightness(20)`
+- Always call `show()` after setting colours
+
+**"Wrong colours"**
+- Most WS2812B strips use `NEO_GRB`. Try:
+  ```javascript
+  arduino.strip.init(11, 8, NEO_GRB + NEO_KHZ800);
+  ```
+- SK6812 RGBW strips use `NEO_GRBW + NEO_KHZ800`
+
+**"LEDs flicker"**
+- Power issue — add an external 5 V supply for strips longer than ~30 LEDs
+- Add a 470 Ω resistor between the Arduino data pin and the strip for longer runs
+
+**"Performance is slow" or "colours lag behind the cursor" (UNO R4)**
+- The UNO R4 WiFi WebSocket implementation occasionally drops connections — Pardalote reconnects automatically
+- Raise the colour-distance threshold to skip tiny changes: `arduino.strip.setThreshold(10)`
+- Raise the show throttle to cap how often updates are sent: `arduino.strip.setThrottle(50)` (default 20 ms = ~50 Hz; 50 ms = ~20 Hz is gentler on slow WiFi)
+
+## File Structure
+
+```
+neopixel/
+├── index.html      # Canvas page (loads p5.js and the pardalote.js bundle)
+├── sketch.js       # NeoPixel colour picker
+└── README.md       # This file
+
+dist/
+└── pardalote.js    # Pardalote bundle (core + all extensions)
+```
+
+## Next Steps
+
+- Add a second strip: `arduino.add('strip2', new NeoPixel())` — up to 4 strips simultaneously
+- Drive colours from a sensor: combine with `analogRead()` or the Ultrasonic extension
+- Try the `control-panel` example for a multi-device dashboard
+
+---
+
+# Ultrasonic sensor
+
+A p5.js sketch that reads an HC-SR04 ultrasonic distance sensor and visualises the result as a colour bar. Distance and connection status are shown on screen in real time.
+
+## What This Example Does
+
+- Polls the ultrasonic sensor every 200 ms
+- Draws a vertical bar whose height represents distance (0–200 cm)
+- Bar colour shifts from red (close) to green (far) using HSB colour mode
+- Shows distance in cm and Arduino connection status
+
+## Hardware Requirements
+
+- **Arduino UNO R4 WiFi** or **ESP32 development board**
+- **HC-SR04** ultrasonic sensor (or compatible: JSN-SR04T, HY-SRF05, etc.)
+- Arduino and browser must be on the same WiFi network
+
+### Wiring (4-wire, HC-SR04)
+
+| Sensor pin | Arduino |
+|---|---|
+| VCC | 5 V |
+| GND | GND |
+| TRIG | Pin 7 |
+| ECHO | Pin 8 |
+
+Set the **trig** and **echo** pins in the **Wiring** row on the page (defaults 12 and 14) — no code editing needed.
+
+**3-wire sensor** (trig and echo on the same pin): set both fields to the same pin.
+
+### Arduino libraries
+
+Install via Arduino IDE → Tools → Manage Libraries:
+- `WebSocketsServer` (by Markus Sattler)
+
+Install Pardalote itself by copying `pardalote-arduino/library/Pardalote/` into your Arduino libraries folder (see the top-level README).
+
+## Quick Start
+
+### 1. Upload the firmware
+
+1. In Arduino IDE: **File → Examples → Pardalote → ultrasonic-sensor**. The sketch is two lines:
+   ```cpp
+   #include <Pardalote.h>
+   #include <PardaloteUltrasonic.h>
+
+   void setup() { Pardalote.begin(); }
+   void loop()  { Pardalote.run();   }
+   ```
+2. Select your board and upload
+3. Open the Serial Monitor at 115200 baud — on first boot Pardalote asks for your WiFi credentials:
+   ```
+   === Pardalote ===
+   No WiFi networks stored.
+   === WiFi Configuration ===
+   [a]dd  [d]elete  [c]lear all  [s]how  [x] exit
+   > a
+   SSID: YourWiFiName
+   Password: ********
+   Saved: YourWiFiName
+   > x
+   ```
+   Credentials are saved to EEPROM and survive re-uploads. Press `w` within 5 seconds of any boot to update them.
+
+   **Prefer compile-time credentials?** Create a `secrets.h` file in the sketch folder with:
+   ```cpp
+   #define SECRET_SSID "YourWiFiName"
+   #define SECRET_PASS "YourWiFiPassword"
+   ```
+   If both are configured, `secrets.h` is tried first.
+
+4. Find your Arduino's IP address:
+   - **UNO R4 WiFi:** scrolls across the LED matrix
+   - **ESP32:** printed in the Serial Monitor
+
+### 2. Open the example and connect
+
+Open `index.html` in a browser. In the **Board** row, enter the Arduino's IP
+(or switch to **USB**) and press **Connect**, then set the **trig** and **echo**
+pins in the **Wiring** row. All settings are remembered per browser — no code
+editing needed. Move an object in front of the sensor — the bar should respond.
+
+## How It Works
+
+```javascript
+arduino = new Arduino();
+arduino.connect(ip);   // ip comes from the Board field on the page
+
+// Register the ultrasonic extension
+arduino.add('ultrasonicSensor', new Ultrasonic());
+arduino.ultrasonicSensor.attach(trigPin, echoPin);   // pins from the Wiring row
+arduino.ultrasonicSensor.setTimeout(40);   // 40 ms echo timeout ≈ 686 cm max range
+arduino.ultrasonicSensor.read(200, CM);    // poll every 200 ms, return cm
+```
+
+In `draw()`, `read()` returns the latest cached value — no extra network traffic:
+
+```javascript
+let cm = arduino.ultrasonicSensor.read();
+```
+
+A return value of `-1` means the echo timed out (nothing in range, or object too far away).
+
+### Echo timeout and range
+
+The echo timeout determines maximum detectable range:
+
+| Timeout | Approximate max range |
+|---|---|
+| 30 ms (default) | ~500 cm |
+| 40 ms | ~686 cm |
+
+Increase with `setTimeout()` for longer range; decrease to speed up failed reads.
+
+## Script loading order
+
+Include the `pardalote.js` bundle (core + every extension) before your sketch:
+
+```html
+<script src="../../lib/pardalote.js"></script>
+<script src="sketch.js"></script>
+```
+
+## Troubleshooting
+
+**"Always reads -1"**
+- Echo timeout too short — try `arduino.ultrasonicSensor.setTimeout(50)`
+- Point the sensor at a flat, hard surface (fabric and foam absorb ultrasound)
+- Check wiring: TRIG and ECHO to the correct pins
+
+**"Readings jump around"**
+- Normal for ultrasound — add smoothing in `draw()` with a rolling average
+- Make sure the sensor has a clear line of sight with no nearby reflective surfaces
+
+**"Sensor doesn't respond at all"**
+- Verify the sketch has `#include <PardaloteUltrasonic.h>`
+- Check VCC → 5 V and GND → GND
+
+**"Arduino won't connect"**
+- Check the IP in the **Board** field and that you pressed **Connect**
+- Arduino and browser must be on the same WiFi network
+
+## File Structure
+
+```
+ultrasonic-sensor/
+├── index.html      # Canvas page (loads p5.js and the pardalote.js bundle)
+├── sketch.js       # Sensor setup and distance visualisation
+└── README.md       # This file
+
+dist/
+└── pardalote.js    # Pardalote bundle (core + all extensions)
+```
+
+## Next Steps
+
+- Read in inches: `arduino.ultrasonicSensor.read(200, INCH)`
+- Use as a trigger: fire an event when distance crosses a threshold with `onChange()`
+- Up to 4 sensors simultaneously: `arduino.add('front', new Ultrasonic())`, `arduino.add('side', new Ultrasonic())`
+- Combine with servos or NeoPixels to build reactive physical installations
+
+---
+
+# Motion sensor (IMU)
+
+A p5.js sketch that reads a 6-DOF inertial measurement unit and renders a live 3D model that rotates with the physical sensor in all three axes. Roll, pitch and yaw are shown on a HUD overlay.
+
+## What This Example Does
+
+- Polls the IMU at 20 Hz (every 50 ms by default — gentle on UNO R4 WiFi and older ESP32 boards)
+- Computes **roll** and **pitch** via a complementary filter that combines gyroscope integration (fast response) with accelerometer tilt (gravity-anchored drift correction)
+- Computes **yaw** via pure gyro integration. The MPU-6050 has no magnetometer, so there's no gravity-like reference for heading — yaw will drift a few degrees per minute and only `c`-calibration resets it
+- Renders a 3D model in WEBGL that rotates to match the physical sensor orientation in all three axes
+- Displays roll, pitch, yaw, accelerometer, gyroscope, and temperature readings live with color-coded axis labels (red/green/blue → X/Y/Z)
+- Supports in-browser calibration with a button or the `C` key
+
+## Hardware Requirements
+
+- **Arduino UNO R4 WiFi** or **ESP32 development board**
+- **MPU-6050** (or other supported IMU — see below)
+- Arduino and browser must be on the same WiFi network
+
+### Wiring (MPU-6050 → Arduino)
+
+| Sensor pin | Arduino |
+|---|---|
+| VCC | 3.3 V |
+| GND | GND |
+| SDA | SDA pin |
+| SCL | SCL pin |
+| AD0 | GND (sets address to 0x68) |
+
+> **Note:** Most Arduino boards have dedicated SDA and SCL pins. On the UNO R4 WiFi these are A4/A5; on ESP32 boards they vary — check your pinout. On ESP32 you can use any GPIO pair with the optional `sda` / `scl` params.
+
+### Arduino libraries
+
+Install via Arduino IDE → Tools → Manage Libraries:
+- `WebSocketsServer` (by Markus Sattler)
+
+No separate IMU library is required — `PardaloteIMU.h` reads the sensor registers directly over I2C.
+
+Install Pardalote itself by copying `pardalote-arduino/library/Pardalote/` into your Arduino libraries folder (see the top-level README).
+
+## Supported Sensors
+
+The `IMU` extension supports multiple sensor families. Pass the model name to the constructor:
+
+| Model string | Chip | DOF | Default address |
+|---|---|---|---|
+| `'6050'` | InvenSense MPU-6050 | 6 | 0x68 |
+| `'6500'` | InvenSense MPU-6500 | 6 | 0x68 |
+| `'9250'` | InvenSense MPU-9250 | 9 | 0x68 |
+| `'9255'` | InvenSense MPU-9255 | 9 | 0x68 |
+| `'LSM6DS3'`  | STMicro LSM6DS3  | 6 | 0x6A |
+| `'LSM6DSOX'` | STMicro LSM6DSOX | 6 | 0x6A |
+
+The I²C **address** is set by the sensor's `AD0` (MPU) / `SA0` (LSM6) pin: tie
+it to GND for the default (`0x68`), or to 3V3 to shift it up by one (`0x69`) —
+handy for two sensors on one bus. Set the address on the page.
+
+The **SDA/SCL pins** are software-definable **on ESP32** (Pardalote passes them
+to `Wire.begin(sda, scl)`), so the page's SDA/SCL fields let you pick any pair.
+On **UNO R4** the I²C pins are fixed hardware, so those fields lock automatically
+when an R4 connects.
+
+## Quick Start
+
+### 1. Upload the firmware
+
+1. In Arduino IDE: **File → Examples → Pardalote → IMU**. The sketch is two lines:
+   ```cpp
+   #include <Pardalote.h>
+   #include <PardaloteIMU.h>
+
+   void setup() { Pardalote.begin(); }
+   void loop()  { Pardalote.run();   }
+   ```
+2. Select your board and upload
+3. Open the Serial Monitor at 115200 baud — on first boot Pardalote asks for your WiFi credentials:
+   ```
+   === Pardalote ===
+   No WiFi networks stored.
+   === WiFi Configuration ===
+   [a]dd  [d]elete  [c]lear all  [s]how  [x] exit
+   > a
+   SSID: YourWiFiName
+   Password: ********
+   Saved: YourWiFiName
+   > x
+   ```
+   Credentials are saved to EEPROM and survive re-uploads. Press `w` within 5 seconds of any boot to update them.
+
+   **Prefer compile-time credentials?** Create a `secrets.h` file in the sketch folder with:
+   ```cpp
+   #define SECRET_SSID "YourWiFiName"
+   #define SECRET_PASS "YourWiFiPassword"
+   ```
+
+4. Find your Arduino's IP address:
+   - **UNO R4 WiFi:** scrolls across the LED matrix
+   - **ESP32:** printed in the Serial Monitor
+
+### 2. Open the example and connect
+
+Open `index.html` in a browser. In the **Board** row, enter the Arduino's IP
+(or switch to **USB**) and press **Connect**. In the **Wiring** row under the
+view, set the **address** (`0x68` with AD0 → GND, `0x69` with AD0 → 3V3) and,
+on ESP32, the **SDA/SCL** pins (locked on UNO R4). All settings are remembered
+per browser. Tilt the sensor — the 3D model should follow.
+
+(This page targets the MPU-6050. To use a different sensor model in your own
+copy, change the constructor argument in `sketch.js`, e.g.
+`new IMU('LSM6DS3')`, and set the matching address in the Wiring field.)
+
+## How It Works
+
+```javascript
+arduino = new Arduino();
+arduino.add('imu', new IMU('6050'));
+arduino.connect(ip);   // ip comes from the Board field on the page
+
+arduino.on('ready', () => {
+    arduino.imu.attach(0x68);        // I2C address (0x69 if AD0 is HIGH)
+    arduino.imu.onChange(onReading); // fires each time a reading arrives
+    arduino.imu.onCalibrate(onCalibrate);
+    arduino.imu.read(POLL_MS);       // start polling
+});
+```
+
+Each reading delivers `{ accel, gyro, temp }`:
+
+```javascript
+function onReading({ accel, gyro, temp }) {
+    // accel: { x, y, z }  in g
+    // gyro:  { x, y, z }  in °/s
+    // temp:                in °C
+}
+```
+
+### Complementary filter (roll & pitch)
+
+The raw accelerometer gives a stable tilt angle but is noisy during movement. The gyroscope gives smooth, fast response but drifts over time. The complementary filter blends them — gyro integration dominates short-term response; accelerometer tilt slowly pulls the estimate back toward the true gravity-down direction:
+
+```javascript
+const ALPHA = 0.96;  // 96% gyro, 4% accel correction
+
+roll  = ALPHA * (roll  + gyro.x * toRad * dt) + (1 - ALPHA) * aRoll;
+pitch = ALPHA * (pitch + gyro.y * toRad * dt) + (1 - ALPHA) * aPitch;
+```
+
+Increase `ALPHA` for faster response (more gyro trust, more drift). Decrease it for more stability (more accel, noisier during motion).
+
+### Yaw (pure gyro integration)
+
+```javascript
+yaw += gyro.z * toRad * dt;
+```
+
+No accelerometer correction is possible — gravity tells you which way is down, but doesn't tell you which way is north. The MPU-6050 has no magnetometer, so yaw drifts. Press `C` to recalibrate and zero it back to its reference heading.
+
+### Calibration
+
+Click the **CALIBRATE** button or press **C** while the sensor is flat and still. The Arduino collects 200 samples (~400 ms) and computes offset corrections. After calibration:
+
+- Accel: x ≈ 0 g, y ≈ 0 g, z ≈ +1 g (gravity preserved)
+- Gyro: x ≈ 0, y ≈ 0, z ≈ 0
+
+Offsets are stored on the Arduino and re-sent to any browser that reconnects — you don't need to calibrate again after a page reload.
+
+## Tuning the orientation
+
+If the 3D model rotates in the wrong direction, flip the sign in `draw()`. The current sketch uses aerospace order (yaw → pitch → roll):
+
+```javascript
+rotateY(yaw);     // → rotateY(-yaw)    to flip heading direction
+rotateX(-roll);   // → rotateX(roll)    to flip left/right tilt
+rotateZ(pitch);   // → rotateZ(-pitch)  to flip forward/back tilt
+```
+
+For non-standard sensor mounting, you may also need to swap which gyro axis feeds which angle in the filter calculation.
+
+## Changing the poll rate
+
+```javascript
+const POLL_MS = 50;  // 50 ms = 20 Hz
+```
+
+Lower values give smoother motion but use more I²C bandwidth and WiFi. **On the UNO R4 WiFi and older ESP32 boards (WROVER class) keep this at 50 ms or higher** — faster polling can hang the I²C bus on those chips. Newer ESP32-S3 / C3 boards can handle 20 ms (50 Hz) reliably.
+
+## Script loading order
+
+Include the `pardalote.js` bundle (core + every extension) before your sketch:
+
+```html
+<script src="../../lib/pardalote.js"></script>
+<script src="sketch.js"></script>
+```
+
+## Troubleshooting
+
+**"IMU not responding"**
+- Check SDA and SCL wiring; confirm the I2C address (AD0/SA0 state)
+- Check Serial Monitor for `IMU WHO_AM_I mismatch` — this means the wrong model string was passed or the wiring is incorrect
+- Verify the sketch has `#include <PardaloteIMU.h>`
+
+**"3D model drifts over time when stationary"**
+- For roll/pitch drift: normal gyro bias — run calibration. The accelerometer correction factor `ALPHA` gradually pulls the angle back; lowering it (e.g. to 0.90) makes correction faster at the cost of more noise during motion
+- For yaw drift specifically: this is unavoidable on the MPU-6050 (no magnetometer). A few degrees per minute is normal. Press `C` to recalibrate and zero the heading
+
+**"Board hangs after a few seconds"**
+- Most common on UNO R4 WiFi and older ESP32 boards (WROVER class). The I²C peripheral can stall under sustained high-rate reads. Raise `POLL_MS` to 50 or higher
+
+**"Readings are noisy during fast motion"**
+- Normal — accelerometer tilt angles are unreliable when the board is accelerating
+- Increase `ALPHA` slightly so the filter trusts the gyro more during motion
+
+**"Temperature reading seems wrong"**
+- The MPU-6050 die temperature runs ~10–15 °C above ambient — this is expected
+- Use it for relative drift compensation, not as an ambient thermometer
+
+**"Arduino won't connect"**
+- Check the IP address in `sketch.js`
+- Arduino and browser must be on the same WiFi network
+
+## File Structure
+
+```
+IMU/
+├── index.html      # Canvas page (loads p5.js and the pardalote.js bundle)
+├── sketch.js       # IMU setup, complementary filter, 3D render
+├── style.css       # Dark HUD overlay
+└── README.md       # This file
+
+dist/
+└── pardalote.js    # Pardalote bundle (core + all extensions)
+```
+
+## Next Steps
+
+- Change model: `new IMU('9250')` for a 9-DOF MPU-9250
+- Two sensors on the same bus: use different addresses (0x68 and 0x69) and `arduino.add('imu1', new IMU('6050'))`, `arduino.add('imu2', new IMU('6050'))`
+- Set accel/gyro range: `arduino.imu.setAccelRange(4)` (±4g), `arduino.imu.setGyroRange(1000)` (±1000°/s)
+- Use on ESP32 with custom I2C pins: `arduino.imu.attach(0x68, 21, 22)`
+- Build a full AHRS by adding a magnetometer reading from a 9-DOF variant
+
+---
+
+# Camera stream
+
+Streams live MJPEG video from an ESP32 camera module into a p5.js canvas over WiFi.
+
+Video is served over a separate HTTP connection — it does not flow through the WebSocket control channel, so camera streaming and Arduino control can run simultaneously without interfering with each other.
+
+---
+
+## What you need
+
+- An ESP32 board with a camera module and PSRAM (see supported boards below)
+- The board flashed with a sketch that `#include`s `<PardaloteCamera.h>` (the bundled `camera` example fits the bill)
+- A web browser on the same WiFi network
+
+---
+
+## Files
+
+| File | Purpose |
+|---|---|
+| `index.html` | Loads p5.js, Pardalote, and the sketch |
+| `sketch.js` | p5.js sketch — connects, streams, draws |
+| `style.css` | Minimal page reset |
+
+---
+
+## Arduino setup
+
+### 1. Open the library example
+
+In Arduino IDE: **File → Examples → Pardalote → camera-stream**. The sketch looks like:
+
+```cpp
+// Uncomment ONE:
+#define CAMERA_MODEL_WROVER_KIT               // Freenove ESP32-WROVER-DEV
+// #define CAMERA_MODEL_AI_THINKER            // AI-Thinker ESP32-CAM
+// #define CAMERA_MODEL_XIAO_ESP32S3          // Seeed XIAO ESP32S3 Sense
+// #define CAMERA_MODEL_ESP32S3_EYE           // Espressif ESP32-S3-EYE
+// #define CAMERA_MODEL_M5STACK_PSRAM         // M5Stack PSRAM
+// #define CAMERA_MODEL_M5STACK_WIDE          // M5Stack Wide
+// ... (see PardaloteCamera.h for all supported models)
+
+#include <Pardalote.h>
+#include <PardaloteCamera.h>
+
+void setup() { Pardalote.begin(); }
+void loop()  { Pardalote.run();   }
+```
+
+Pick the `CAMERA_MODEL_*` define that matches your hardware before the include.
+
+### 2. Upload
+
+Flash the sketch to your board. Once connected to WiFi, the IP address is printed in the Serial Monitor (115200 baud).
+
+---
+
+## Browser setup
+
+### 1. Connect on the page
+
+Open `index.html`, then in the **Board** row enter the Arduino's IP (or switch
+to **USB**) and press **Connect** — no code editing needed, and the setting is
+remembered per browser. The camera's stream port is fixed by the firmware
+(`82`), so there's nothing else to set.
+
+### 2. Open the example
+
+Serve the folder from a local web server and open `index.html` in a browser. You can use any static server — for example:
+
+```
+npx serve .
+```
+If you are using a code editor you can run the web server there.
+
+> **Why a server?** Browsers block WebSocket connections from `file://` pages on some platforms. A local server avoids this.
+
+---
+
+## How it works
+
+```
+Arduino                          Browser
+────────────────────────────────────────────────────────
+WebSocket :81  ←──── control ────→  pardalote.js (Camera extension)
+HTTP      :82  ──── MJPEG stream ──→  <img src="http://ip:82/stream">
+```
+
+1. `arduino.connect()` opens a WebSocket on port 81.
+2. On `ready`, `arduino.cam.attach(CAMERA_PORT)` sends a `CMD_CAMERA_INIT` frame to the Arduino over the WebSocket. The Arduino initialises the camera hardware and starts an HTTP server on the requested port.
+3. The Arduino echoes the confirmed port back. The Camera extension sets an `<img>` element's `src` to `http://<ip>:<port>/stream` and emits the `stream` event.
+4. The browser fetches the MJPEG stream directly over HTTP — the WebSocket is only used for the initial handshake and any subsequent control commands (resolution, quality).
+5. In `draw()`, `image(camEl, 0, 0, width, height)` renders the current frame to the p5.js canvas.
+
+---
+
+## Adjusting the stream
+
+```javascript
+// Resolution — call before or after attach()
+arduino.cam.setResolution(FRAMESIZE_QVGA);   // 320×240  ← default
+arduino.cam.setResolution(FRAMESIZE_VGA);    // 640×480
+arduino.cam.setResolution(FRAMESIZE_HD);     // 1280×720 — see Troubleshooting
+
+// JPEG quality: 0 = best image / highest bandwidth
+//              63 = worst image / lowest bandwidth
+arduino.cam.setQuality(12);  // default
+```
+
+| Constant | Resolution |
+|---|---|
+| `FRAMESIZE_QQVGA` | 160×120 |
+| `FRAMESIZE_QVGA` | 320×240 |
+| `FRAMESIZE_HVGA` | 480×320 |
+| `FRAMESIZE_VGA` | 640×480 |
+| `FRAMESIZE_SVGA` | 800×600 |
+| `FRAMESIZE_HD` | 1280×720 |
+
+Higher resolutions require more bandwidth and may reduce frame rate. QVGA is a good starting point for most WiFi environments. Anything above QQVGA also needs **PSRAM enabled**, and the largest sizes don't work on every sensor — see Troubleshooting below.
+
+---
+
+## Snapshots
+
+Capture a single JPEG still without interrupting the stream:
+
+```javascript
+const url = await arduino.cam.snapshot();
+// url is a blob: URL — use as an <img> src or save it
+// revoke when done to free memory:
+URL.revokeObjectURL(url);
+```
+
+The snapshot is served from `http://<ip>:<port>/snapshot` — a separate endpoint from the stream.
+
+---
+
+## Pixel manipulation
+
+Because the camera HTTP server sends `Access-Control-Allow-Origin: *`, p5.js can read pixel data from the stream:
+
+```javascript
+arduino.cam.on('stream', ({ url }) => {
+    camEl = createImg(url, '');
+    camEl.hide();
+});
+
+function draw() {
+    if (camEl) {
+        image(camEl, 0, 0, width, height);
+        loadPixels();
+        // pixels[] is now available — RGBA values for every canvas pixel
+        for (let i = 0; i < pixels.length; i += 4) {
+            pixels[i] = 255 - pixels[i];     // invert red
+            pixels[i+1] = 255 - pixels[i+1]; // invert green
+            pixels[i+2] = 255 - pixels[i+2]; // invert blue
+        }
+        updatePixels();
+    }
+}
+```
+
+Note: `loadPixels()` on every frame is CPU-intensive. For heavy processing, consider drawing to an off-screen `createGraphics()` buffer and only calling `loadPixels()` on that.
+
+---
+
+## Troubleshooting
+
+**Stream doesn't appear**
+- Check that the IP in the **Board** field is correct and you pressed **Connect**
+- Open `http://<ip>:<port>/stream` directly in a browser tab — if you see video there, the Arduino is working and the issue is in the JS
+- Check the browser console for errors
+
+**"Camera Init failed: 0x106 (ESP_ERR_NOT_SUPPORTED)"**
+- Wrong board define — the camera sensor PID didn't match. Select the correct `CAMERA_MODEL_*` for your hardware and re-flash.
+
+**Low frame rate**
+- Reduce resolution with `setResolution(FRAMESIZE_QVGA)` or increase quality number (lower quality) with `setQuality(20)`
+- Move the Arduino closer to the WiFi access point
+- Disable WiFi modem sleep — Pardalote does this automatically with `WiFi.setSleep(false)`
+
+**Image is stuck at 160×120 (QQVGA) and `setResolution()` won't change it**
+- Anything above QQVGA needs the board's **PSRAM enabled and working**. Without it the camera falls back to a single QQVGA (160×120) frame buffer in internal RAM, and any `setResolution()` to a larger size is refused — you'll see `[Camera] No PSRAM — using DRAM, forced to QQVGA` in the Serial Monitor. Fix PSRAM and the higher resolutions come back.
+- **Seeed XIAO ESP32S3:** it has 8 MB of octal PSRAM, but you must select it — **Tools → PSRAM → `OPI PSRAM`** (not "QSPI PSRAM", not "Disabled"). Re-flash; the "No PSRAM" line should be gone.
+- **ESP32 WROVER:** PSRAM is enabled automatically by the "ESP32 Wrover Module" board, so there's no PSRAM menu to set. If the Serial Monitor shows `esp_psram: SPI SRAM memory test fail … writes failed`, PSRAM *is* enabled but the module's chip is failing its power-on test — usually marginal power or a faulty module. Try a full power-cycle with a different USB cable/port, drop **Tools → Flash Frequency → 40 MHz**, and if it persists use a different WROVER (that PSRAM chip is likely bad).
+
+**`FRAMESIZE_HD` stutters or drops the stream (`cam_hal: FB-OVF` / `net::ERR_INCOMPLETE_CHUNKED_ENCODING`)**
+- The largest sizes push the sensor's data rate hard, and HD's 16:9 mode is the flakiest — some modules (the XIAO's OV2640 among them) can't sustain it and drop frames, which shows in the browser console as `net::ERR_INCOMPLETE_CHUNKED_ENCODING`. Pardalote now rides out the occasional dropped frame rather than closing the stream, but a size that overflows *every* frame is the sensor's ceiling, not a bug. Step down to **`FRAMESIZE_SVGA` (800×600)**, which streams reliably on the XIAO.
+
+**XIAO ESP32S3 won't connect to WiFi**
+- The Sense board has a u.FL connector for an external antenna. If the antenna switch is set to external and nothing is plugged in, the radio has no antenna and cannot connect. Either attach an external antenna or move the antenna switch to the internal position.
+
+**Canvas size doesn't match stream**
+- The canvas size and stream resolution are independent. `image(camEl, 0, 0, width, height)` scales the stream to fill the canvas. Adjust `createCanvas()` dimensions to match your desired aspect ratio.
+
+**Only one browser can receive the stream at a time**
+- This is a fundamental limitation of the ESP32 camera driver. The camera's `esp_camera_fb_get()` function is single-consumer by design — only one HTTP client can receive MJPEG frames at a time. A second browser connecting will see a black screen and will only get the feed once the first disconnects. This behaviour is identical to Espressif's own CameraWebServer example. Multi-client streaming requires a dedicated FreeRTOS task that owns the camera, copies each frame to a shared PSRAM buffer, and fans it out to all connected clients — this is not currently implemented in Pardalote.

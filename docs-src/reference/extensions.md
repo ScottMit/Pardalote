@@ -159,6 +159,50 @@ PardaloteBusServo.torque(id, false);     // release / hold
 
 All three run through the **same command path the browser uses** — so they respect soft limits, cancel timed moves, and auto-echo the commanded value back to the browser so its record stays in sync.
 
+### Board-authored gestures
+
+"Whoever speaks is in control": the browser can compose-and-play a [gesture](gesture.html), and so can the sketch. The board authors a gesture as a `PardaloteSeg[]` — `{ curve, dur, value }` in the actuator's native unit — and plays the schedule on its **own clock, no browser needed**. Because Pardalote is 32-bit only, a `static const PardaloteSeg[]` lives in flash and costs no RAM.
+
+<div class="sig">PardaloteServo.<span class="fn">gesture</span>(id, segments, count, [flags])</div>
+
+```cpp
+static const PardaloteSeg NOD[] = {
+    { CURVE_EASE_OUT,    250,  60 },   // to 60°  (absolute by default)
+    { CURVE_EASE_IN_OUT, 400, 120 },
+};
+PardaloteServo.gesture(pan,  NOD,  2);     // servo degrees
+PardaloteStepper.gesture(lift, LIFT, 3);   // stepper steps
+PardaloteBusServo.gesture(grip, GRIP, 2);  // bus-servo counts
+```
+
+Segments are **absolute** by default (`value` is a target); pass `flags = 0` for relative (`value` is a delta off the live position). Curves are the `CURVE_*` ids (`CURVE_LINEAR`, `CURVE_EASE_IN`, `CURVE_EASE_OUT`, `CURVE_EASE_IN_OUT`, `CURVE_BACK`). This is the sketch twin of JavaScript [`servo.gesture()`](gesture.html) — same segment model, same on-board player, so a board- and a browser-authored gesture play identically.
+
+**Coordinate several actuators** with `Pardalote.gesture()` — the board-side twin of [`arduino.gesture()`](gesture.html#many-at-once--arduinogesture). Add one lane per actuator by `DEVICE_*` id; shorter lanes are padded so every lane **arrives together**, and all start on one clock:
+
+```cpp
+Pardalote.gesture()                                  // each array a PardaloteSeg[] as above
+    .add(DEVICE_SERVO,   shoulder, SHOULDER, 2)
+    .add(DEVICE_SERVO,   wrist,    WRIST,    1)      // shorter → padded to arrive together
+    .add(DEVICE_STEPPER, lift,     LIFT,     3)
+    .play();
+```
+
+**Coordinated `write` / `writeTimed`** — the twins of [`arduino.write()` / `arduino.writeTimed()`](groups.html#writetimed) — take one target per actuator instead of a schedule:
+
+```cpp
+Pardalote.write().add(DEVICE_SERVO, pan, 90).add(DEVICE_STEPPER, lift, 0).play();            // immediate
+Pardalote.writeTimed(1500).add(DEVICE_SERVO, pan, 45).add(DEVICE_SERVO, tilt, 135).play();   // arrive together
+```
+
+**Chain gestures headlessly** with `onGestureDone(id, cb)` — the board-side `whenDone()`. The callback fires when the last segment lands, so the sketch can run a sequence (or an idle loop) with no browser at all:
+
+```cpp
+void onNodDone(int id) { PardaloteServo.gesture(id, IDLE, 2); }   // loop back to idle
+PardaloteServo.onGestureDone(pan, onNodDone);
+```
+
+Watchers stay in sync: a board-authored gesture broadcasts its **existence** (never its shape) to every browser, which sees the actuator's `isGesturing` flag flip and `gesturestart` / `gestureend` fire — the same signals a browser-authored gesture gives. See the **`board-gestures`** sketch in the Arduino examples for a complete headless creature-head, and the [Gesture](gesture.html) page for the concept.
+
 ### Status helpers
 
 ```cpp

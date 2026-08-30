@@ -105,6 +105,7 @@ SIDEBAR = """<aside class="ref-nav">
   <a href="stepper.html">Stepper</a>
   <a href="bus-servo.html">Bus servo</a>
   <a href="groups.html">Groups</a>
+  <a href="gesture.html">Gesture</a>
   <a href="neopixel.html">NeoPixel</a>
   <a href="ultrasonic.html">Ultrasonic</a>
   <a href="encoder.html">Rotary encoder</a>

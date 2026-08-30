@@ -21,6 +21,7 @@ The complete API reference as a single file for AI-assisted coding: [llms-full.t
 - [Stepper](https://scottmit.github.io/Pardalote/reference/stepper.html): Up to 6 stepper motors with accel-limited moves, continuous rotation, soft limits and live position — motion runs on the Arduino.
 - [Bus servo](https://scottmit.github.io/Pardalote/reference/bus-servo.html): Up to 16 smart serial servos on one shared UART — position, speed, torque control and rich feedback, Feetech ST and SC series.
 - [Groups](https://scottmit.github.io/Pardalote/reference/groups.html): Drive several actuators as one — a single message moves every member, and coordinated moves arrive together.
+- [Gesture](https://scottmit.github.io/Pardalote/reference/gesture.html): Author a timed motion — a segment schedule the board runs on its own clock. One channel, or many together in a single message.
 
 ## Sensors & output
 - [NeoPixel](https://scottmit.github.io/Pardalote/reference/neopixel.html): Up to 4 addressable LED strips — buffered pixel changes, brightness control, and throttled updates for smooth animation.
@@ -33,6 +34,26 @@ The complete API reference as a single file for AI-assisted coding: [llms-full.t
 - [Protocol](https://scottmit.github.io/Pardalote/reference/protocol.html): The compact binary WebSocket protocol underneath everything — for the curious, and for anyone building their own extension.
 - [Pin capabilities](https://scottmit.github.io/Pardalote/reference/pin-capabilities.html): What each pin can actually do on the supported boards — analog in, digital in/out, PWM — and the gotchas that come from the silicon, not from Pardalote.
 - [Troubleshooting](https://scottmit.github.io/Pardalote/reference/troubleshooting.html): Common issues and their usual fixes, roughly in the order people hit them.
+
+## Examples
+Complete, working projects (Arduino sketch + web page). Full source: https://github.com/ScottMit/Pardalote/tree/main/examples.
+- [Control panel](https://scottmit.github.io/Pardalote/examples/control-panel.html): A dashboard for every pin on your board, laid out over a photo of it. Test circuits without writing a line of code.
+- [Basic light switch](https://scottmit.github.io/Pardalote/examples/basic-light-switch.html): Two buttons on a web page turn the board's LED on and off. The simplest possible start — no frameworks at all.
+- [Potentiometer](https://scottmit.github.io/Pardalote/examples/potentiometer-p5js.html): Turn a knob, and a circle on screen grows and shrinks with it. Your first taste of live data flowing into a p5.js sketch.
+- [Shared light switch](https://scottmit.github.io/Pardalote/examples/shared-light-switch.html): One light, four switches: two physical buttons and two on screen. Press any of them — everything stays in sync.
+- [Shared potentiometer](https://scottmit.github.io/Pardalote/examples/shared-potentiometer.html): The Arduino announces its own analog input and the browser listens — a turn of the knob shows up live on screen with no JS setup.
+- [Messaging](https://scottmit.github.io/Pardalote/examples/messaging.html): Send named key/value messages between the browser and the sketch — no pins involved — and inspect every frame on the wire with the live traffic monitor.
+- [Shared servo](https://scottmit.github.io/Pardalote/examples/shared-servo.html): The Arduino sketch creates the servo and the browser receives it automatically — then both sides drive the same horn.
+- [Servo control](https://scottmit.github.io/Pardalote/examples/servo-control.html): A full servo control panel: immediate and timed moves, soft limits, and homing, with a live gauge and call log.
+- [Stepper motor](https://scottmit.github.io/Pardalote/examples/stepper-motor.html): Precise position moves, continuous rotation, and a live position readout — the browser as a motor controller.
+- [Bus servos](https://scottmit.github.io/Pardalote/examples/bus-servos.html): Drive smart serial servos — the kind used in robot arms. Pose a joint by hand, read it back, and replay it.
+- [Coordinated motion](https://scottmit.github.io/Pardalote/examples/coordinated-motion.html): Two different motors — mix a servo, stepper, or bus servo — sweep in perfect unison using a group.
+- [Leader → Follower](https://scottmit.github.io/Pardalote/examples/leader-follower.html): Teleoperate a robot arm by hand: move a leader arm and a second follower arm mirrors it live, joint for joint — the LeRobot leader/follower rig, in the browser across two boards.
+- [Gesture Builder](https://scottmit.github.io/Pardalote/examples/gesture-builder.html): Author expressive motion on a timeline — draw keyframes for any mix of servos, bus servos, and steppers, play it back phase-locked, and copy out the JavaScript or Arduino code.
+- [NeoPixel](https://scottmit.github.io/Pardalote/examples/neopixel.html): Mix a colour by moving the mouse across a hue-and-brightness field, and an LED strip follows the colour under your cursor live.
+- [Ultrasonic sensor](https://scottmit.github.io/Pardalote/examples/ultrasonic-sensor.html): A distance sensor paints a colour bar that responds as you move your hand closer and further away.
+- [Motion sensor (IMU)](https://scottmit.github.io/Pardalote/examples/IMU.html): Tilt the sensor and watch a 3D model rotate with it, live, in all three axes.
+- [Camera stream](https://scottmit.github.io/Pardalote/examples/camera-stream.html): Live video from an ESP32 camera lands on a p5.js canvas, pixels and all — ready for creative coding.
 
 ## Source
 - [GitHub repository](https://github.com/ScottMit/Pardalote): source code, examples, and the Arduino library.

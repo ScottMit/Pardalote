@@ -23,7 +23,7 @@ A minimal Pardalote sketch using p5.js. Reads an analog sensor (potentiometer) a
 | One outer pin | 3.3 V (ESP32) or 5 V (UNO R4) |
 | Other outer pin | GND |
 
-The example sketch uses `POTPIN = A0`. Change this constant at the top of `sketch.js` to match your wiring.
+Set the wiper's pin in the **Wiring** row on the page (default 14 = A0 on the UNO R4).
 
 ## Quick Start
 
@@ -56,35 +56,26 @@ The example sketch uses `POTPIN = A0`. Change this constant at the top of `sketc
    - **UNO R4 WiFi:** scrolls across the LED matrix
    - **ESP32:** printed in the Serial Monitor
 
-### 2. Configure sketch.js
+### 2. Open the example and connect
 
-Open `sketch.js` and update the IP address and pin:
+Open `index.html` in a browser. In the **Board** row, enter the Arduino's IP
+(or switch to **USB**) and press **Connect**, then set the **pot pin** in the
+**Wiring** row. Both settings are remembered per browser — no code editing
+needed. Turn the potentiometer — the circle should grow and shrink.
 
-```javascript
-let ArduinoIP = '192.168.1.42';  // your Arduino's IP
-
-const POTPIN = A0;  // the pin your potentiometer's wiper is on
-```
-
-### 2a. Pin aliases
-
-Named pins like `A0` and `D13` work by name in any sketch, with nothing extra
-to include — each resolves to the right physical pin for the board you connect
-to (see the [Pins reference](../../docs-src/reference/pins.md)). This example
-just uses a raw GPIO number (`const POTPIN = 14;`), which always works too.
-
-### 3. Open the example
-
-Open `index.html` in a browser. Turn the potentiometer — the circle should grow and shrink.
+Named pins like `A0` and `D13` also work by name in your own sketches, each
+resolving to the right physical pin for the board you connect to (see the
+[Pins reference](../../docs-src/reference/pins.md)); this page uses a raw GPIO
+number in the pin field.
 
 ## How It Works
 
 ```javascript
 arduino = new Arduino();
-arduino.connect(ArduinoIP);
+arduino.connect(ip);   // ip comes from the Board field on the page
 
 // Configure pin with a 50 ms poll interval
-arduino.pinMode(POTPIN, ANALOG_INPUT_MODE, 50);
+arduino.pinMode(potPin, ANALOG_INPUT_MODE, 50);
 ```
 
 In `draw()`, `analogRead()` returns the latest cached value — no extra network traffic:

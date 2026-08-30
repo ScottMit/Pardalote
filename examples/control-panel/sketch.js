@@ -16,7 +16,7 @@ function persist() {
 }
 
 let arduino;
-let ipInput, transportSelect, connectLbl, boardSelect, statusEl, connectBtn, disconnectBtn;
+let ipInput, transportSelect, boardSelect, statusEl, connectBtn, disconnectBtn;
 let panelEl      = null;
 let currentBoard = null;   // name of the board currently rendered
 let manualBoard  = false;  // true if the user has manually chosen a board
@@ -48,8 +48,7 @@ function setup() {
     statusEl = select('#status');
 
     // Connection — WiFi (IP) or USB (Web Serial), remembered per browser
-    let r = row(main, 'Board IP');
-    connectLbl = r.elt.querySelector('.lbl');
+    let r = row(main, 'Board');
     transportSelect = createSelect().parent(r);
     transportSelect.option('WiFi');
     transportSelect.option('USB');
@@ -63,7 +62,7 @@ function setup() {
     applyTransport();
 
     // Board selector — auto-set from the HELLO handshake unless chosen here
-    r = row(main, 'Board');
+    r = row(main, 'Board type');
     boardSelect = createSelect().parent(r);
     Object.keys(BOARDS).forEach(name => boardSelect.option(name));
     boardSelect.changed(() => {
@@ -110,7 +109,6 @@ function setup() {
 function applyTransport() {
     const usb = (saved.transport === 'usb');
     ipInput.style('display', usb ? 'none' : '');
-    if (connectLbl) connectLbl.textContent = usb ? 'Board USB' : 'Board IP';
 }
 
 async function doConnect() {

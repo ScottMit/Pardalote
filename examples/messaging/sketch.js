@@ -26,7 +26,6 @@ const ipEl = document.getElementById('ip');
 const transportEl = document.getElementById('transport');
 const connectEl = document.getElementById('connect');
 const disconnectEl = document.getElementById('disconnect');
-const connectLblEl = document.getElementById('connect-lbl');
 ipEl.value = saved.ip;
 transportEl.value = (saved.transport === 'usb') ? 'USB' : 'WiFi';
 
@@ -39,7 +38,6 @@ function persistConn() {
 function applyTransport() {
     const usb = (transportEl.value === 'USB');
     ipEl.style.display = usb ? 'none' : '';
-    connectLblEl.textContent = usb ? 'Board USB' : 'Board IP';
 }
 function setConnected(on) {
     connectEl.textContent = on ? 'Connected' : 'Connect';

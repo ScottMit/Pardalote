@@ -28,7 +28,9 @@ Per channel:  [ logicalId u8 ][ flags u8 ][ count u8 ]  then count × segment
 Per segment:  [ curve u8 ][ dur u16, ms ][ value i32 ]        (big-endian)
 ```
 
-`flags` bit 0 selects the reference frame (relative delta vs absolute target); `value` is a signed displacement or target in the actuator's native unit (degrees, steps, counts); `curve` indexes the shared easing table (`linear`, `easeIn`, `easeOut`, `easeInOut`, `back`). A [group gesture](groups.html#gesture) batches every type's frame into one message. This same record layout is what an on-device sequencer replays — one gesture vocabulary shared across the browser and the board.
+`flags` bit 0 selects the reference frame (relative delta vs absolute target); `value` is a signed displacement or target in the actuator's native unit (degrees, steps, counts); `curve` indexes the shared easing table (`linear`, `easeIn`, `easeOut`, `easeInOut`, `back`). A [group gesture](groups.html#gesture) batches every type's frame into one message. This same record layout is what an on-device sequencer replays — one gesture vocabulary shared across the browser and the board — so a [sketch can author gestures](extensions.html#board-authored-gestures) with the identical frames.
+
+While a schedule plays, the board emits a lightweight `CMD_*_GESTURE_STATE` (`0x64`/`0x65`/`0x66`, `[id, active]`) on the start and end of the motion — **existence, never the schedule** — so every browser can reflect an `isGesturing` state (and a reconnecting one learns it in the state sync below). It fires whoever authored the gesture, browser or sketch. Added in protocol **v1.1** (backward-compatible: older clients ignore the unknown code).
 
 ## State sync on connect
 

@@ -68,6 +68,7 @@
   <a href="stepper.html">Stepper</a>
   <a href="bus-servo.html">Bus servo</a>
   <a href="groups.html">Groups</a>
+  <a href="gesture.html">Gesture</a>
   <a href="neopixel.html">NeoPixel</a>
   <a href="ultrasonic.html">Ultrasonic</a>
   <a href="encoder.html">Rotary encoder</a>
@@ -144,6 +145,7 @@
 </table>
 <div class="code-ex"><span class="lang-badge lang-js">JS</span><div class="bar">Example — write everyone at once</div><pre><code><span class="nx">arm</span><span class="p">.</span><span class="nx">write</span><span class="p">({</span><span class="w"> </span><span class="nx">shoulder</span><span class="o">:</span><span class="w"> </span><span class="mf">2048</span><span class="p">,</span><span class="w"> </span><span class="nx">elbow</span><span class="o">:</span><span class="w"> </span><span class="mf">3000</span><span class="p">,</span><span class="w"> </span><span class="nx">base</span><span class="o">:</span><span class="w"> </span><span class="mf">1600</span><span class="p">,</span><span class="w"> </span><span class="nx">wrist</span><span class="o">:</span><span class="w"> </span><span class="mf">90</span><span class="w"> </span><span class="p">});</span>
 </code></pre></div>
+<p>To write several actuators at once <strong>without</strong> holding a named group, use <code>arduino.write({ name: value, … })</code> — the same batched write through a transient group (it returns that group, so <code>whenDone()</code> chains). Hold a named group instead when you'll write the set repeatedly (a control loop, scrubbing) or need <code>read()</code> / <code>stop()</code> on it. Same pattern as <a href="gesture.html"><code>arduino.gesture()</code></a>.</p>
 <h2 id="writetimed">writeTimed()</h2>
 <p>Moves every member to its target so they all finish after about <code>duration</code> ms — the same shape as a single actuator's <code>writeTimed(value, duration)</code>. Each actuator type uses its own native mechanism:</p>
 <table>
@@ -194,6 +196,7 @@
 <div class="code-ex"><span class="lang-badge lang-js">JS</span><div class="bar">Example — arrive together</div><pre><code><span class="nx">arm</span><span class="p">.</span><span class="nx">writeTimed</span><span class="p">({</span><span class="w"> </span><span class="nx">shoulder</span><span class="o">:</span><span class="w"> </span><span class="mf">3000</span><span class="p">,</span><span class="w"> </span><span class="nx">elbow</span><span class="o">:</span><span class="w"> </span><span class="mf">1200</span><span class="p">,</span><span class="w"> </span><span class="nx">base</span><span class="o">:</span><span class="w"> </span><span class="mf">0</span><span class="p">,</span><span class="w"> </span><span class="nx">wrist</span><span class="o">:</span><span class="w"> </span><span class="mf">120</span><span class="w"> </span><span class="p">},</span><span class="w"> </span><span class="mf">1500</span><span class="p">);</span>
 </code></pre></div>
 <p><code>duration</code> is approximate — it's the <em>arrival synchronisation</em> that's exact. For an accurate first move from an unknown pose, either poll <code>read()</code> first or start from a known pose (<code>center()</code> / <code>write()</code>), since <code>writeTimed</code> measures distance from each member's last commanded position.</p>
+<p>For a one-shot coordinated move without a named group, use <code>arduino.writeTimed({ name: value, … }, duration)</code> — the transient-group counterpart (returns the group for <code>whenDone()</code>).</p>
 <h2 id="gesture">gesture()</h2>
 <p>Coordinated <strong>expressive motion</strong> — each member plays its own <a href="servo.html#gesture">segment schedule</a>, all pushed in <strong>one batched message</strong> and played on the board's own clock. Lanes are per-member, so overlapping timings give coordination and follow-through. Uneven lanes are padded with a trailing hold so every member still <strong>arrives together</strong> — the expressive counterpart of <code>writeTimed()</code>.</p>
 <div class="sig sig-js">arm.<span class="fn">gesture</span>(lanes, [opts])</div>
@@ -219,6 +222,7 @@
 </tbody>
 </table>
 <p>Each lane is relative (<code>by</code>) by default, or absolute (<code>to</code>) per lane. Lanes of unequal total duration are padded (a trailing hold) to the longest so they finish together. A lane naming a member that doesn't support <code>gesture()</code>, an unknown member, or an empty array is skipped with a warning; the rest still play.</p>
+<p>To fire a multi-channel gesture <strong>without</strong> holding a named group, use <a href="gesture.html"><code>arduino.gesture(lanes)</code></a> — it does the same batching through a transient group. See the <a href="gesture.html">Gesture</a> page for the segment format and all three forms.</p>
 <div class="code-ex"><span class="lang-badge lang-js">JS</span><div class="bar">Example — a coordinated reach with follow-through</div><pre><code><span class="nx">arm</span><span class="p">.</span><span class="nx">gesture</span><span class="p">({</span>
 <span class="w">    </span><span class="nx">shoulder</span><span class="o">:</span><span class="w"> </span><span class="p">[{</span><span class="w"> </span><span class="nx">by</span><span class="o">:</span><span class="w"> </span><span class="mf">300</span><span class="p">,</span><span class="w"> </span><span class="nx">dur</span><span class="o">:</span><span class="w"> </span><span class="mf">400</span><span class="p">,</span><span class="w"> </span><span class="nx">curve</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;easeOut&#39;</span><span class="w">   </span><span class="p">},</span>
 <span class="w">               </span><span class="p">{</span><span class="w"> </span><span class="nx">by</span><span class="o">:-</span><span class="mf">300</span><span class="p">,</span><span class="w"> </span><span class="nx">dur</span><span class="o">:</span><span class="w"> </span><span class="mf">600</span><span class="p">,</span><span class="w"> </span><span class="nx">curve</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;easeInOut&#39;</span><span class="w"> </span><span class="p">}],</span><span class="w">   </span><span class="c1">// 1000 ms</span>

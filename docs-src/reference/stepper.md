@@ -262,8 +262,9 @@ arduino.x.moveRevolutions(0.5);
 | `'move'` | `{ target }` | THIS page issued a move (including group moves it participates in) — a command echo, like servo `'write'`. Other browsers' moves arrive via the read stream and `'done'`/`'limit'`, not `'move'`. `runSpeed()` emits nothing (continuous rotation has no destination). |
 | `'limit'` | `{ which, position }` | A limit switch tripped and the board hard-stopped the motor. |
 | `'home:fail'` | `{ position }` | Homing gave up (seek/back-off timeout) — the switch never responded. |
+| `'gesturestart'` / `'gestureend'` | `{}` | The board starts / ends playing a schedule on this stepper — **any** origin (this browser, another, or the sketch). End = completion or a superseding move. |
 
-Shorthand: `onChange(fn)`, `onDone(fn)`, `onMove(fn)`, `onLimit(fn)`, `onHomeFail(fn)`.
+Shorthand: `onChange(fn)`, `onDone(fn)`, `onMove(fn)`, `onLimit(fn)`, `onHomeFail(fn)`, `onGestureStart(fn)`, `onGestureEnd(fn)`. The `isGesturing` property tracks whether a schedule is playing (any origin).
 
 ## Properties and state
 
@@ -274,6 +275,7 @@ Shorthand: `onChange(fn)`, `onDone(fn)`, `onMove(fn)`, `onLimit(fn)`, `onHomeFai
 | `arduino.x.distanceToGo` | Steps remaining to target. |
 | `arduino.x.speed` | Current speed (steps/sec). |
 | `arduino.x.isRunning` | Boolean. |
+| `arduino.x.isGesturing` | `true` while the board is playing a segment schedule on this stepper (any origin). |
 
 `target` vs `position`: `moveTo(n)` sets `target` to `n` **right away**, so you can show where it's headed without waiting for a poll; `position` is real feedback and only advances toward `target` as read polls (or the `done` event) arrive. `target` also self-corrects from read feedback — so it stays right even when the *Arduino sketch* issued the move.
 

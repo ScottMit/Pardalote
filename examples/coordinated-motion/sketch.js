@@ -59,7 +59,7 @@ let arduino, group, motorA, motorB;
 let typeA = saved.typeA, typeB = saved.typeB;
 
 let ipIn, selectA, selectB, pinsA = [], pinsB = [], revA = null, revB = null, cellA, cellB;
-let toggleButton, durSlider, durValEl, statusEl, transportSelect, connectLbl, connectBtn, disconnectBtn;
+let toggleButton, durSlider, durValEl, statusEl, transportSelect, connectBtn, disconnectBtn;
 let running = false, ready = false;
 let loopToken = 0;
 let legDur = 1500;
@@ -82,7 +82,7 @@ function setup() {
     statusEl = select('#status');
 
     let r = createDiv().class('row').parent(topBar);
-    connectLbl = createSpan('Board IP').class('lbl').parent(r).elt;
+    createSpan('Board').class('lbl').parent(r);
     transportSelect = createSelect().parent(r);
     transportSelect.option('WiFi'); transportSelect.option('USB');
     transportSelect.elt.value = (saved.transport === 'usb') ? 'USB' : 'WiFi';
@@ -251,7 +251,6 @@ function doDisconnect() {
 function applyTransport() {
     const usb = (transportSelect.value() === 'USB');
     ipIn.style('display', usb ? 'none' : '');
-    if (connectLbl) connectLbl.textContent = usb ? 'Board USB' : 'Board IP';
 }
 function setConnected(on) {
     if (connectBtn) {

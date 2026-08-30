@@ -179,3 +179,6 @@ canvas {
     margin-top: 18px;
     max-width: 56ch;
 }
+
+/* uniform control height — buttons, selects and text inputs line up in the setup rows */
+.row button, .row select, .row input[type=text], .row input[type=number] { height: 32px; }

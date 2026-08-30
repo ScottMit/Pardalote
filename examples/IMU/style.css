@@ -1,8 +1,8 @@
 /* ==========================================================================
    Pardalote example — house style (IMU variant)
-   Matches the website ("Graph Line / Bauhaus"): white paper, Poppins,
-   1.5px ink outlines, teal / amber / orange accents. This example is a
-   full-window WEBGL canvas with a HUD overlay card.
+   Standard house style (white paper, graph-paper wash, Poppins, 1.5px ink
+   outlines, teal / amber / orange accents) plus the IMU's on-canvas readout
+   overlay. The 3D view sits in the page flow like every other example.
    ========================================================================== */
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
 
@@ -14,79 +14,155 @@
     --cream:    #F2E9D8;
     --orange:   #D3542B;
     --teal:     #3FA9A0;
+    --green:    #3E9C54;
     --amber:    #E8A33D;
+    --red:      #D22B2B;
     --line:     #2B2420;
     --hair:     #d9d2c2;
     --grid:     #ededed;
     --mono: "SF Mono", "Fira Code", ui-monospace, Consolas, monospace;
 }
 
-* { margin: 0; padding: 0; box-sizing: border-box; }
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
 
 body {
-    background: var(--paper);
-    overflow: hidden;
     font-family: 'Poppins', -apple-system, system-ui, sans-serif;
-}
-
-canvas { display: block; }
-
-/* ── HUD overlay — an outlined house card ────────────────────── */
-#hud {
-    position: fixed;
-    top: 20px;
-    left: 20px;
-    font-family: var(--mono);
-    font-size: 13px;
-    color: var(--ink-soft);
-    background: var(--paper);
-    border: 1.5px solid var(--line);
-    padding: 16px 20px;
-    min-width: 250px;
+    color: var(--ink);
+    background-color: var(--paper);
+    background-image:
+        linear-gradient(var(--grid) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 40px 40px;
     line-height: 1.5;
-    pointer-events: none;   /* let clicks fall through to canvas */
-    user-select: none;
 }
 
-/* re-enable pointer events only where needed */
-#hud button { pointer-events: all; }
+main {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 26px clamp(16px, 4vw, 40px) 44px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+}
 
-#hud .brand {
-    font-family: 'Poppins', system-ui, sans-serif;
-    font-size: 13px;         /* smaller than the 16px HUD heading */
+/* ---- header ---- */
+.brand {
+    font-size: 17px;
     font-weight: 700;
     letter-spacing: -0.01em;
-    color: #f2b705;          /* pardalote yellow — matches "working together" on the home page */
+    color: #f2b705;
     margin-bottom: 2px;
 }
 .brand a { color: inherit; text-decoration: none; }
 .brand a:hover { text-decoration: underline; }
-#hud .heading {
-    font-family: 'Poppins', system-ui, sans-serif;
-    font-size: 16px;
+.heading {
+    font-size: 22px;
     font-weight: 700;
-    color: var(--ink);
+    letter-spacing: -0.01em;
     margin-bottom: 2px;
 }
-#hud .heading::after {
+.heading::after {
     content: "";
     display: block;
-    width: 36px;
+    width: 44px;
     height: 3px;
     background: var(--amber);
-    margin: 5px 0 10px;
+    margin-top: 6px;
+}
+#status {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--grey);
+    margin: 8px 0 14px;
+    max-width: 62ch;
 }
 
-#status {
-    font-size: 11px;
-    letter-spacing: 1px;
-    margin-bottom: 14px;
+/* ---- control rows ---- */
+.row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    font-size: 13px;
+    color: var(--ink-soft);
+    margin-bottom: 8px;
+    flex-wrap: wrap;
 }
-#status.connected    { color: var(--teal); }
-#status.disconnected { color: var(--orange); }
+.lbl {
+    width: 74px;
+    flex: none;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: var(--ink);
+}
+
+/* ---- controls ---- */
+button, select {
+    font-family: 'Poppins', system-ui, sans-serif;
+    font-size: 12.5px;
+    font-weight: 600;
+    padding: 5px 12px;
+    background: var(--paper);
+    color: var(--ink);
+    border: 1.5px solid var(--line);
+    border-radius: 0;
+    cursor: pointer;
+    transition: background .15s, color .15s, border-color .15s;
+}
+button:hover { background: var(--ink); color: #fff; }
+button.primary { background: var(--ink); color: #fff; }
+button.primary:hover { background: var(--green); border-color: var(--green); color: #fff; }
+button.connected { background: var(--green); border-color: var(--green); color: #fff; }
+button.connected:hover { background: var(--green); border-color: var(--green); color: #fff; }
+
+input[type=text], input[type=number] {
+    font-family: var(--mono);
+    font-size: 13px;
+    padding: 4px 7px;
+    background: var(--paper);
+    color: var(--ink);
+    border: 1.5px solid var(--line);
+    border-radius: 0;
+}
+input[type=number] { width: 64px; }
+
+/* uniform control height — buttons, selects and text inputs line up in the setup rows */
+.row button, .row select, .row input[type=text], .row input[type=number] { height: 32px; }
+
+/* ---- the 3D stage + on-canvas readout ---------------------------------- */
+#stage {
+    position: relative;
+    display: inline-block;
+    margin: 12px 0 26px;
+}
+#stage canvas {
+    display: block;
+    margin: 0;
+    background: var(--paper);
+    border: 1.5px solid var(--line);
+}
+
+/* readout — an outlined house card, floating over the top-left of the view */
+#readout {
+    position: absolute;
+    top: 16px;
+    left: 16px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-soft);
+    background: var(--paper);
+    border: 1.5px solid var(--line);
+    padding: 12px 14px;
+    min-width: 190px;
+    line-height: 1.5;
+    pointer-events: none;   /* let clicks fall through to the canvas */
+    user-select: none;
+}
+#readout button { pointer-events: all; }
 
 .section { margin-bottom: 10px; }
-
 .label {
     font-size: 9px;
     letter-spacing: 2px;
@@ -108,13 +184,10 @@ canvas { display: block; }
 #angles .axis-x { color: var(--orange); letter-spacing: 1.5px; font-size: 11px; }
 #angles .axis-y { color: var(--teal);   letter-spacing: 1.5px; font-size: 11px; }
 #angles .axis-z { color: var(--amber);  letter-spacing: 1.5px; font-size: 11px; }
-#angles .angle-val {
-    text-align: right;
-    font-variant-numeric: tabular-nums;
-}
+#angles .angle-val { text-align: right; font-variant-numeric: tabular-nums; }
 #angles .deg { color: var(--grey); font-size: 13px; }
 
-/* ── Calibrate button ────────────────────────────────────────── */
+/* ---- Calibrate button ---- */
 #cal-btn {
     display: block;
     margin-top: 14px;
@@ -132,7 +205,6 @@ canvas { display: block; }
 }
 #cal-btn:hover  { background: var(--ink); color: #fff; }
 #cal-btn:active { background: var(--orange); border-color: var(--orange); color: #fff; }
-
 #cal-msg {
     margin-top: 8px;
     font-size: 11px;

@@ -25,8 +25,7 @@ This is the actuator counterpart of `Pardalote.share(pin, mode)` — except a se
 
 1. In Arduino IDE: **File → Examples → Pardalote → shared-servo**, select your board, upload.
 2. Find the Arduino's IP from the LED matrix (UNO R4) or Serial Monitor (ESP32).
-3. Edit `ArduinoIP` in `sketch.js` to match.
-4. Open `index.html` in a browser.
+3. Open `index.html` and press **Connect** — enter the IP (or switch to **USB**). No code editing needed; the setting is remembered per browser.
 5. Watch the sketch move the servo; press the mouse to take over.
 
 ## What's happening under the hood

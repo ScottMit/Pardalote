@@ -280,6 +280,8 @@ PardaloteBusServo.torque(id, false);     // release / hold
 
 All three run through the **same command path the browser uses** — so they respect soft limits, cancel timed moves, and auto-echo the commanded value back to the browser so its record stays in sync.
 
+The sketch can also **author gestures**, not just the browser — the board-side twin of the JavaScript gesture surface, so a sketch runs expressive motion with no browser at all. `PardaloteServo.gesture(id, segs, count)` plays a `PardaloteSeg[]` schedule; `Pardalote.gesture().add(DEVICE_*, id, segs, count).play()` coordinates several actuators (arriving together); `Pardalote.write()` / `Pardalote.writeTimed(dur)` are the coordinated one-shot twins; and `onGestureDone(id, cb)` chains gestures for a headless sequence. A running gesture broadcasts its *existence* to every browser (an `isGesturing` flag + `gesturestart` / `gestureend` events), never its schedule. See the `board-gestures` example.
+
 Notes:
 - A **bus servo read/scan/write is a blocking bus transaction** — fine in `setup()` or a throttled `loop()`, not a tight high-rate loop competing with the browser's own polling.
 - **Sketch writes update the browser's record automatically.** A sketch write echoes the commanded value to the browser exactly as if the browser had issued it — a PWM servo sets the browser's `angle`, a stepper or bus servo sets its `target`. So the browser's record stays coherent with no `read()` needed. (The live `position` feedback is separate — that still comes from polling, as always.)

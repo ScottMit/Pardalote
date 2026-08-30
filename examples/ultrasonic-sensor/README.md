@@ -24,9 +24,9 @@ A p5.js sketch that reads an HC-SR04 ultrasonic distance sensor and visualises t
 | TRIG | Pin 7 |
 | ECHO | Pin 8 |
 
-The example uses pins 7 (trig) and 8 (echo). Change `attach(7, 8)` in `sketch.js` if you use different pins.
+Set the **trig** and **echo** pins in the **Wiring** row on the page (defaults 12 and 14) — no code editing needed.
 
-**3-wire sensor** (trig and echo on the same pin): `arduino.ultrasonicSensor.attach(7)`.
+**3-wire sensor** (trig and echo on the same pin): set both fields to the same pin.
 
 ### Arduino libraries
 
@@ -73,25 +73,22 @@ Install Pardalote itself by copying `pardalote-arduino/library/Pardalote/` into 
    - **UNO R4 WiFi:** scrolls across the LED matrix
    - **ESP32:** printed in the Serial Monitor
 
-### 2. Configure sketch.js
+### 2. Open the example and connect
 
-```javascript
-let ArduinoIP = '192.168.1.42';   // your Arduino's IP
-```
-
-### 3. Open the example
-
-Open `index.html` in a browser. Move an object in front of the sensor — the bar should respond.
+Open `index.html` in a browser. In the **Board** row, enter the Arduino's IP
+(or switch to **USB**) and press **Connect**, then set the **trig** and **echo**
+pins in the **Wiring** row. All settings are remembered per browser — no code
+editing needed. Move an object in front of the sensor — the bar should respond.
 
 ## How It Works
 
 ```javascript
 arduino = new Arduino();
-arduino.connect(ArduinoIP);
+arduino.connect(ip);   // ip comes from the Board field on the page
 
 // Register the ultrasonic extension
 arduino.add('ultrasonicSensor', new Ultrasonic());
-arduino.ultrasonicSensor.attach(7, 8);     // trig pin 7, echo pin 8
+arduino.ultrasonicSensor.attach(trigPin, echoPin);   // pins from the Wiring row
 arduino.ultrasonicSensor.setTimeout(40);   // 40 ms echo timeout ≈ 686 cm max range
 arduino.ultrasonicSensor.read(200, CM);    // poll every 200 ms, return cm
 ```
@@ -140,7 +137,7 @@ Include the `pardalote.js` bundle (core + every extension) before your sketch:
 - Check VCC → 5 V and GND → GND
 
 **"Arduino won't connect"**
-- Check the IP address in `sketch.js`
+- Check the IP in the **Board** field and that you pressed **Connect**
 - Arduino and browser must be on the same WiFi network
 
 ## File Structure

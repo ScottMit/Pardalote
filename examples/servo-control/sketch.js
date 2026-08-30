@@ -47,7 +47,7 @@ let disp = 90, from = 90, to = 90, moveStart = 0, moveDur = 200;
 let limMin = null, limMax = null, homeAngle = 90;
 
 let statusEl, logEl, ipIn, pinIn, targetSlider, durSlider, durVal,
-    minInput, maxInput, homeInput, transportSelect, connectLbl, connectBtn, disconnectBtn;
+    minInput, maxInput, homeInput, transportSelect, connectBtn, disconnectBtn;
 let logLines = [];
 
 // Brief ring pulse when a whenDone() settles — teal = arrived, orange = timeout.
@@ -63,8 +63,7 @@ function setup() {
     statusEl = select('#status');
 
     // Board — WiFi (IP) or USB (Web Serial), connect/disconnect
-    let r = row(main, 'Board IP');
-    connectLbl = r.elt.querySelector('.lbl');
+    let r = row(main, 'Board');
     transportSelect = createSelect().parent(r);
     transportSelect.option('WiFi'); transportSelect.option('USB');
     transportSelect.elt.value = (saved.transport === 'usb') ? 'USB' : 'WiFi';
@@ -75,6 +74,13 @@ function setup() {
     connectBtn.addClass('primary');
     disconnectBtn = createButton('Disconnect').parent(r).mousePressed(doDisconnect);
     applyTransport();
+
+    // Wiring — the servo pin (changing it reconnects), grouped with the settings
+    r = row(main, 'Wiring');
+    createSpan('servo pin').parent(r);
+    pinIn = createInput(String(saved.pin), 'number').parent(r);
+    pinIn.style('width', '56px');
+    pinIn.changed(() => { if (arduino.connected) doConnect(); });
 
     // Immediate write
     r = row(main, 'Write');
@@ -111,13 +117,6 @@ function setup() {
     // --- the display ---
     createCanvas(W, H).parent(main);
     textFont('Poppins');
-
-    // --- wiring, under the display (house rule) ---
-    r = row(main, 'Wiring');
-    createSpan('servo pin').parent(r);
-    pinIn = createInput(String(saved.pin), 'number').parent(r);
-    pinIn.style('width', '56px');
-    pinIn.changed(() => { if (arduino.connected) doConnect(); });
 
     logEl = createDiv('').id('log').parent(main);
 
@@ -170,7 +169,6 @@ function doDisconnect() {
 function applyTransport() {
     const usb = (transportSelect.value() === 'USB');
     ipIn.style('display', usb ? 'none' : '');
-    if (connectLbl) connectLbl.textContent = usb ? 'Board USB' : 'Board IP';
 }
 // Green "Connected" when live, plain "Connect" otherwise; restore Disconnect.
 function setConnected(on) {

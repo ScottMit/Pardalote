@@ -47,6 +47,8 @@ Writes all named members at once — the group counterpart of `servo.write()` / 
 arm.write({ shoulder: 2048, elbow: 3000, base: 1600, wrist: 90 });
 ```
 
+To write several actuators at once **without** holding a named group, use `arduino.write({ name: value, … })` — the same batched write through a transient group (it returns that group, so `whenDone()` chains). Hold a named group instead when you'll write the set repeatedly (a control loop, scrubbing) or need `read()` / `stop()` on it. Same pattern as [`arduino.gesture()`](gesture.html).
+
 ## writeTimed()
 
 Moves every member to its target so they all finish after about `duration` ms — the same shape as a single actuator's `writeTimed(value, duration)`. Each actuator type uses its own native mechanism:
@@ -72,6 +74,8 @@ arm.writeTimed({ shoulder: 3000, elbow: 1200, base: 0, wrist: 120 }, 1500);
 
 `duration` is approximate — it's the *arrival synchronisation* that's exact. For an accurate first move from an unknown pose, either poll `read()` first or start from a known pose (`center()` / `write()`), since `writeTimed` measures distance from each member's last commanded position.
 
+For a one-shot coordinated move without a named group, use `arduino.writeTimed({ name: value, … }, duration)` — the transient-group counterpart (returns the group for `whenDone()`).
+
 ## gesture()
 
 Coordinated **expressive motion** — each member plays its own [segment schedule](servo.html#gesture), all pushed in **one batched message** and played on the board's own clock. Lanes are per-member, so overlapping timings give coordination and follow-through. Uneven lanes are padded with a trailing hold so every member still **arrives together** — the expressive counterpart of `writeTimed()`.
@@ -84,6 +88,8 @@ Coordinated **expressive motion** — each member plays its own [segment schedul
 | `opts` | object | Optional. `{ absolute }` forces the reference frame for all lanes. |
 
 Each lane is relative (`by`) by default, or absolute (`to`) per lane. Lanes of unequal total duration are padded (a trailing hold) to the longest so they finish together. A lane naming a member that doesn't support `gesture()`, an unknown member, or an empty array is skipped with a warning; the rest still play.
+
+To fire a multi-channel gesture **without** holding a named group, use [`arduino.gesture(lanes)`](gesture.html) — it does the same batching through a transient group. See the [Gesture](gesture.html) page for the segment format and all three forms.
 
 ```javascript Example — a coordinated reach with follow-through
 arm.gesture({

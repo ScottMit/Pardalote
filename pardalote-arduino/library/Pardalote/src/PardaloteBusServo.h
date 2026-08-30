@@ -152,11 +152,13 @@ private:
     struct BSeg { uint8_t curve; uint16_t dur; int32_t value; };
     inline static BSeg     _bsegs[MAX_BUS_SERVOS][MAX_BUS_SERVO_SEGMENTS] = {};
     inline static uint8_t  _bsegCount[MAX_BUS_SERVOS]  = {};   // 0 = no gesture running
+    inline static bool     _gestureActive[MAX_BUS_SERVOS] = {};   // last-broadcast gesturing state
     inline static uint8_t  _bsegIndex[MAX_BUS_SERVOS]  = {};
     inline static uint8_t  _bsegFlags[MAX_BUS_SERVOS]  = {};   // GESTURE_FLAG_*
     inline static int32_t  _bsegFrom[MAX_BUS_SERVOS]   = {};   // start of the current segment
     inline static int32_t  _bsegTarget[MAX_BUS_SERVOS] = {};   // end of the current segment (chained)
     inline static uint16_t _bsegDurMs[MAX_BUS_SERVOS]  = {};   // authored duration — segment's time floor
+    inline static PardaloteGestureDone _onDone[MAX_BUS_SERVOS] = {};   // sketch whenDone() callback
 
     static bool validId(int id) { return id >= 0 && id < MAX_BUS_SERVOS; }
     static bool isSC(int id)    { return _series[id] == BUSSERVO_SERIES_SC; }
@@ -283,7 +285,79 @@ private:
     // superseding command owns completion.
     static void cancelBusGesture(int id) { if (validId(id)) _bsegCount[id] = 0; }
 
+    // Gesture-active state (Ar→JS, existence only): broadcast on the _bsegCount
+    // 0<->positive edge so browsers reflect "gesturing" for JS- OR sketch-
+    // authored gestures, and however they end (see loop()).
+    static void sendGestureState(uint8_t clientNum, int id, uint8_t active) {
+        FrameBuilder fb;
+        fb.begin(CMD_BUSSERVO_GESTURE_STATE, DEVICE_BUSSERVO);
+        fb.addInt(id);
+        fb.addInt(active);
+        if (clientNum == 0xFF) Pardalote.broadcastFrame(fb);
+        else                   Pardalote.sendFrame(clientNum, fb);
+    }
+    static void updateGestureState(int id) {
+        bool active = _bsegCount[id] > 0;
+        if (active != _gestureActive[id]) {
+            _gestureActive[id] = active;
+            sendGestureState(0xFF, id, active ? 1 : 0);
+        }
+    }
+
 public:
+    // Compose-and-play a segment schedule from the sketch — the board-side
+    // gesture() (see internal/gesture.h). The same code the CMD_BUSSERVO_GESTURE
+    // wire path runs, minus the byte unpack. Registered as the DEVICE_BUSSERVO
+    // starter for the coordinated PardaloteGesture builder. A bus servo is
+    // arrival-clocked (advances on the Moving-flag settle, not a timer), so the
+    // shared startMs is unused; padToMs appends a trailing hold so short lanes
+    // arrive with the longest (approximate for bus servos — see the class note).
+    static void startGesture(int id, const PardaloteSeg* segs, uint8_t count,
+                             uint8_t flags, uint32_t /*startMs*/, uint32_t padToMs = 0) {
+        if (!validId(id) || !_attached[id] || !segs || count == 0) return;
+        ensureBus();
+        uint8_t  n     = count > MAX_BUS_SERVO_SEGMENTS ? MAX_BUS_SERVO_SEGMENTS : count;
+        uint32_t total = 0;
+        for (uint8_t i = 0; i < n; i++) {
+            _bsegs[id][i].curve = segs[i].curve;
+            _bsegs[id][i].dur   = segs[i].dur ? segs[i].dur : 1;
+            _bsegs[id][i].value = segs[i].value;
+            total += _bsegs[id][i].dur;
+        }
+        if (padToMs > total && n < MAX_BUS_SERVO_SEGMENTS) {   // trailing hold → arrive together
+            uint32_t padMs = padToMs - total;
+            _bsegs[id][n].curve = CURVE_LINEAR;
+            _bsegs[id][n].dur   = padMs > 0xFFFF ? 0xFFFF : (uint16_t)padMs;
+            _bsegs[id][n].value = (flags & GESTURE_FLAG_ABSOLUTE) ? _bsegs[id][n - 1].value : 0;
+            n++;
+        }
+        _bsegCount[id] = n;
+        _bsegFlags[id] = flags;
+        int32_t from = readPos(_servoId[id]);   // live start (relative anchor)
+        if (from < 0) from = 0;
+        _bsegFrom[id] = from;
+        loadBusSegment(id, 0);
+    }
+
+    // Register a whenDone() callback (nullptr clears it).
+    static void setOnGestureDone(int id, PardaloteGestureDone cb) {
+        if (validId(id)) _onDone[id] = cb;
+    }
+
+    // Immediate write to an absolute position — the DEVICE_BUSSERVO
+    // ImmediateWriter for Pardalote.write(). Mirrors CMD_BUSSERVO_WRITE
+    // (cancels any gesture, clamps, arms the done poller) + echoes. Uses the
+    // same default speed/acc as the browser write().
+    static void writeNow(int id, int32_t target) {
+        if (!validId(id) || !_attached[id]) return;
+        cancelBusGesture(id);
+        int pos = (int)target;
+        if (_limitSet[id]) pos = constrain(pos, (int)_minPos[id], (int)_maxPos[id]);
+        writePos(id, pos, 2400, 50);
+        beginAwaitDone(id);
+        echoTarget(id, pos);
+    }
+
     // -------------------------------------------------------------------
     // Bus-level primitives, addressed by HARDWARE servo ID (the number
     // scan() returns) — used by discovery (scan/ping), the frame handler,
@@ -906,6 +980,7 @@ public:
             // Gesture sequencing — a segment just settled. On real arrival with
             // more segments, chain to the next (no DONE). On the last segment,
             // or if the move was lost/timed out, finish and emit DONE below.
+            bool wasGesture = _bsegCount[id] > 0;   // vs a plain awaited write
             if (_bsegCount[id] > 0) {
                 if (arrived && _bsegIndex[id] + 1 < _bsegCount[id]) {
                     _bsegFrom[id] = _bsegTarget[id];        // chain from the commanded target
@@ -921,6 +996,7 @@ public:
             fb.addInt(id);
             fb.addInt(pos);
             Pardalote.broadcastFrame(fb);
+            if (wasGesture && _onDone[id]) _onDone[id](id);   // sketch whenDone() hook
         }
 
         // Board-side periodic reads — ONE FeedBack() transaction per due
@@ -964,6 +1040,10 @@ public:
             for (uint8_t c = 0; c < PARDALOTE_MAX_CLIENTS; c++)
                 if (p.gate(c, pos, now)) Pardalote.sendFrame(c, fb);
         }
+
+        // Gesture-active edge (start / finish / superseding write).
+        for (int i = 0; i < MAX_BUS_SERVOS; i++)
+            if (_attached[i] || _gestureActive[i]) updateGestureState(i);
     }
 
     // Client disconnect — drop its read registrations.
@@ -1020,6 +1100,9 @@ public:
             sendFwLimits(clientNum, i);
             // Replay the cached attach-time presence too.
             sendPresence(clientNum, i);
+
+            // Tell a reconnecting browser this servo is mid-gesture (existence).
+            if (_gestureActive[i]) sendGestureState(clientNum, i, 1);
         }
     }
 };
@@ -1088,11 +1171,30 @@ public:
         Pardalote.command(DEVICE_BUSSERVO, CMD_BUSSERVO_TORQUE, id, on ? 1 : 0);
         BusServoExt::echoTorque(id, on);
     }
+
+    // gesture(id, segs, count, flags?) — play a SEGMENT SCHEDULE on the board,
+    // the sketch-side twin of JS busServo.gesture(). segs is a PardaloteSeg[]
+    // (counts; absolute by default, flags = 0 for relative). Segments advance on
+    // true arrival (Moving-flag settle), not a timer; the per-segment curve is
+    // stored but not rendered intra-segment. Coordinate via Pardalote.gesture().
+    void gesture(int id, const PardaloteSeg* segs, uint8_t count,
+                 uint8_t flags = GESTURE_FLAG_ABSOLUTE) const {
+        BusServoExt::startGesture(id, segs, count, flags, millis());
+    }
+    // onGestureDone(id, cb) — board-side whenDone(): cb(id) on the last segment.
+    void onGestureDone(int id, PardaloteGestureDone cb) const { BusServoExt::setOnGestureDone(id, cb); }
 };
 inline PardaloteBusServoAccess PardaloteBusServo;
 
 // Self-register — runs before setup().
 INSTALL_EXTENSION(DEVICE_BUSSERVO, BusServoExt::handle, BusServoExt::announce,
                   BusServoExt::disconnect, BusServoExt::loop)
+
+// Register the board-side gesture starter so Pardalote.gesture() can drive bus
+// servos in a coordinated group by DEVICE_BUSSERVO id (see internal/gesture.h).
+INSTALL_GESTURE(DEVICE_BUSSERVO, BusServoExt::startGesture)
+
+// Register the immediate writer so Pardalote.write() can drive bus servos.
+INSTALL_WRITER(DEVICE_BUSSERVO, BusServoExt::writeNow)
 
 #endif

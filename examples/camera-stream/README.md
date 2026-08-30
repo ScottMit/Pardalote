@@ -57,16 +57,12 @@ Flash the sketch to your board. Once connected to WiFi, the IP address is printe
 
 ## Browser setup
 
-### 1. Set the IP address
+### 1. Connect on the page
 
-Open `sketch.js` and update the Arduino IP address:
-
-```javascript
-const ARDUINO_IP  = '10.1.1.128';  // ← your Arduino's IP
-const CAMERA_PORT = 82;             // ← port for the camera HTTP server
-```
-
-`CAMERA_PORT` can be any unused port. `82` is the default — change it only if something else on your network uses that port.
+Open `index.html`, then in the **Board** row enter the Arduino's IP (or switch
+to **USB**) and press **Connect** — no code editing needed, and the setting is
+remembered per browser. The camera's stream port is fixed by the firmware
+(`82`), so there's nothing else to set.
 
 ### 2. Open the example
 
@@ -171,7 +167,7 @@ Note: `loadPixels()` on every frame is CPU-intensive. For heavy processing, cons
 ## Troubleshooting
 
 **Stream doesn't appear**
-- Check that `ARDUINO_IP` and `CAMERA_PORT` in `sketch.js` are correct
+- Check that the IP in the **Board** field is correct and you pressed **Connect**
 - Open `http://<ip>:<port>/stream` directly in a browser tab — if you see video there, the Arduino is working and the issue is in the JS
 - Check the browser console for errors
 

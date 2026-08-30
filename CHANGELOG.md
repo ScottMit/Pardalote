@@ -18,6 +18,32 @@ Pardalote versions **two things independently**:
 
 ## [Unreleased]
 
+- **Sketch-authored gestures — the board composes motion too.** Following the rule
+  that whoever speaks is in control, the Arduino side gains the full gesture surface
+  the browser already had, so a sketch can run expressive motion with **no browser**.
+  `PardaloteServo.gesture(id, segs, count)` (and the stepper / bus-servo twins) plays
+  an authored `PardaloteSeg[]` segment schedule on the board's own clock — the same
+  on-board player and byte-identical result as a browser-authored gesture. Segments
+  are `{ curve, dur, value }` in the actuator's native unit, absolute by default; a
+  `static const PardaloteSeg[]` lives in flash (32-bit boards) at zero RAM cost.
+- **Coordinated one-shot actions from the sketch.** `Pardalote.gesture()` is the
+  board-side twin of `arduino.gesture()` — add one lane per actuator by `DEVICE_*`
+  id and `play()` them phase-locked, with shorter lanes padded to arrive together;
+  it drives mixed actuator types through a decoupled, opt-in registry. `Pardalote.write()`
+  and `Pardalote.writeTimed(dur)` mirror `arduino.write()` / `arduino.writeTimed()`
+  for immediate and arrive-together coordinated moves. `onGestureDone(id, cb)` is the
+  board-side `whenDone()`, so a headless sketch can chain gestures into a sequence.
+  New IDE example **`board-gestures`** — a two-servo creature head that idles and
+  reacts to a button, entirely on the board.
+- **Gesture-active visibility (protocol v1.1).** A playing schedule now broadcasts a
+  lightweight `CMD_*_GESTURE_STATE [id, active]` (`0x64`/`0x65`/`0x66`) on its start
+  and end — **existence, never the schedule** — so every browser reflects an
+  `isGesturing` flag and `gesturestart` / `gestureend` events, and a browser
+  reconnecting mid-gesture learns the state on sync. It fires whoever authored the
+  gesture — another browser or the sketch — making board- and browser-authored
+  gestures equally visible. Backward-compatible: older clients ignore the new code
+  (protocol MINOR 0 → 1, no MAJOR break).
+
 ## [1.1.0] — 2026-08-17
 
 - **Named pins are now built in.** `D13`, `A0`, `SDA`, `LED_BUILTIN` and friends

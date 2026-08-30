@@ -200,10 +200,12 @@ else showError('pan servo not responding');
 |---|---|---|
 | `'change'` | `{ angle }` | The angle changed by at least the threshold. |
 | `'write'` | `{ angle }` | A write is issued. |
-| `'gesture'` | `{ segments, absolute, duration }` | A gesture starts playing. |
+| `'gesture'` | `{ segments, absolute, duration }` | *This* browser sends a gesture (local echo). |
+| `'gesturestart'` | `{}` | The board starts playing a schedule on this servo — **any** origin (this browser, another, or the sketch). |
+| `'gestureend'` | `{}` | …that schedule ends — completion or a superseding write. |
 | `'done'` | `{ angle }` | A timed move or gesture reaches its target. |
 
-Shorthand: `onChange(fn)`, `onWrite(fn)`, `onDone(fn)`.
+Shorthand: `onChange(fn)`, `onWrite(fn)`, `onDone(fn)`, `onGestureStart(fn)`, `onGestureEnd(fn)`. The board reports whether a schedule is playing (any origin) via the `isGesturing` property; a browser that connects mid-gesture learns it on sync.
 
 ## setWriteThrottle() / setWriteThreshold()
 
@@ -223,6 +225,7 @@ The write family paces what you **send** (min ms between writes; skip deltas und
 | Property | Description |
 |---|---|
 | `arduino.pan.angle` | Locally cached snapshot, updated on every `write()`. |
+| `arduino.pan.isGesturing` | `true` while the board is playing a segment schedule on this servo (any origin). |
 
 <div class="sig">arduino.pan.<span class="fn">getState</span>()</div>
 

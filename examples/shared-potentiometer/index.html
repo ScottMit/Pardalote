@@ -11,7 +11,15 @@
         <div id="top">
             <div class="brand"><a href="https://scottmit.github.io/Pardalote/examples/shared-potentiometer.html">Pardalote</a></div>
             <div class="heading">Shared potentiometer</div>
-            <div id="status">set ARDUINO_IP in sketch.js — the Arduino announces the input itself</div>
+            <div id="status">Upload the shared-potentiometer example, then connect below (WiFi IP or USB) — the Arduino announces the input itself.</div>
+        </div>
+
+        <div class="row">
+            <span class="lbl">Board</span>
+            <select id="transport"><option>WiFi</option><option>USB</option></select>
+            <input id="ip" type="text" style="width:130px">
+            <button id="connect" class="primary">Connect</button>
+            <button id="disconnect">Disconnect</button>
         </div>
 
         <div id="value">—</div>

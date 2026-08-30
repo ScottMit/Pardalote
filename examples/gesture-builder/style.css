@@ -1,0 +1,452 @@
+/* ==========================================================================
+   Pardalote example — house style
+   Matches the website ("Graph Line / Bauhaus"): white paper, graph-paper
+   wash, Poppins, 1.5px ink outlines, teal / amber / orange accents.
+   Copy this file as-is into new examples so they all stay in step.
+   ========================================================================== */
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
+
+:root {
+    --ink:      #2B2420;
+    --ink-soft: #4a463f;
+    --grey:     #6d6a5f;
+    --paper:    #FFFFFF;
+    --cream:    #F2E9D8;
+    --orange:   #D3542B;   /* primary accent / warnings   */
+    --teal:     #3FA9A0;   /* live / active               */
+    --green:    #3E9C54;   /* connected                   */
+    --amber:    #E8A33D;   /* highlights / secondary      */
+    --red:      #D22B2B;   /* servo powered/active + limits */
+    --line:     #2B2420;   /* structural outlines         */
+    --hair:     #d9d2c2;   /* soft dividers               */
+    --grid:     #ededed;   /* graph-paper lines           */
+    --mono: "SF Mono", "Fira Code", ui-monospace, Consolas, monospace;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+
+body {
+    font-family: 'Poppins', -apple-system, system-ui, sans-serif;
+    color: var(--ink);
+    background-color: var(--paper);
+    background-image:
+        linear-gradient(var(--grid) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 40px 40px;
+    line-height: 1.5;
+}
+
+main {
+    max-width: none;   /* this example: let the timeline fill the window */
+    margin: 0 auto;
+    padding: 26px clamp(16px, 4vw, 40px) 44px;   /* keeps min edge padding */
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+/* ---- header ---- */
+.brand {
+    font-family: 'Poppins', -apple-system, system-ui, sans-serif;
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    color: #f2b705;          /* pardalote yellow — matches "working together" on the home page */
+    margin-bottom: 2px;
+}
+.brand a { color: inherit; text-decoration: none; }
+.brand a:hover { text-decoration: underline; }
+.heading {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    margin-bottom: 2px;
+}
+.heading::after {
+    content: "";
+    display: block;
+    width: 44px;
+    height: 3px;
+    background: var(--amber);
+    margin-top: 6px;
+}
+#status {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--grey);
+    margin: 8px 0 14px;
+}
+
+/* ---- control rows ---- */
+.row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    font-size: 13px;
+    color: var(--ink-soft);
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+}
+.lbl {
+    width: 74px;
+    flex: none;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: var(--ink);
+}
+
+/* ---- controls ---- */
+button, select {
+    font-family: 'Poppins', system-ui, sans-serif;
+    font-size: 12.5px;
+    font-weight: 600;
+    padding: 5px 12px;
+    background: var(--paper);
+    color: var(--ink);
+    border: 1.5px solid var(--line);
+    border-radius: 0;
+    cursor: pointer;
+    transition: background .15s, color .15s, border-color .15s;
+}
+button:hover { background: var(--ink); color: #fff; }
+
+/* primary action (Connect, etc.) */
+button.primary { background: var(--ink); color: #fff; }
+button.primary:hover { background: var(--green); border-color: var(--green); color: #fff; }
+/* connected state (Connect button, WiFi or USB) */
+button.connected { background: var(--green); border-color: var(--green); color: #fff; }
+button.connected:hover { background: var(--green); border-color: var(--green); color: #fff; }
+
+/* highlighted toggle state (enable, switch-set) */
+button.active { background: var(--teal); border-color: var(--teal); color: #fff; }
+button.active:hover { background: var(--teal); color: #fff; }
+/* highlighted "released/off" state (disable) */
+button.active-warn { background: var(--orange); border-color: var(--orange); color: #fff; }
+button.active-warn:hover { background: var(--orange); color: #fff; }
+/* powered / under-active-control state (bus-servo torque held) */
+button.active-red { background: var(--red); border-color: var(--red); color: #fff; }
+button.active-red:hover { background: var(--red); color: #fff; }
+
+input[type=text], input[type=number] {
+    font-family: var(--mono);
+    font-size: 13px;
+    padding: 4px 7px;
+    background: var(--paper);
+    color: var(--ink);
+    border: 1.5px solid var(--line);
+    border-radius: 0;
+}
+input[type=number] { width: 64px; }
+input[type=range] { accent-color: var(--teal); }
+
+/* uniform control height — buttons, selects and text inputs line up in the setup rows */
+.row button, .row select, .row input[type=text], .row input[type=number] { height: 32px; }
+
+/* ---- canvas card ---- */
+canvas {
+    display: block;
+    margin: 12px 0 26px;   /* clear space between the display and what follows */
+    background: var(--paper);
+    border: 1.5px solid var(--line);
+}
+
+/* ---- log ---- */
+#log {
+    margin-top: 12px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--grey);
+    line-height: 1.55;
+    min-height: 150px;
+}
+#log div:first-child { color: var(--ink); }
+
+/* ---- this example: instructional hint under the timeline ---- */
+.hint {
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--grey);
+    margin: 6px 0 16px;
+    max-width: 74ch;
+}
+
+/* ---- this example: SVG timeline (fixed gutter + scrollable lanes) ---- */
+main { position: relative; }   /* anchor the row context-menu */
+
+/* ---- this example: exported Pardalote code ---- */
+.codeout { width: 100%; margin: 18px 0 0; }
+.codeout-head { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
+.codeout-head .lbl { width: auto; }
+.codeblock {
+    width: 100%; box-sizing: border-box;
+    height: 260px; resize: vertical; margin: 0;
+    padding: 10px 12px; overflow: auto;
+    font-family: var(--mono); font-size: 12.5px; line-height: 1.5; tab-size: 2;
+    color: var(--ink); background: var(--paper);
+    border: 1.5px solid var(--line); border-radius: 0;
+    white-space: pre;
+}
+.codeblock code { font: inherit; color: inherit; background: none; padding: 0; }
+/* syntax tokens — same palette as the docs reference pages (Pygments, light theme) */
+.codeblock .k  { color: #9a6b00; }                          /* keywords */
+.codeblock .nf { color: #2a7ab5; }                          /* function / constructor calls */
+.codeblock .s1 { color: #b05c3a; }                          /* strings */
+.codeblock .mi, .codeblock .no { color: #8a4fbf; }          /* numbers / CONSTANTS */
+.codeblock .c1 { color: #8a867f; font-style: italic; }      /* comments */
+.codeblock .o  { color: var(--grey); }                      /* operators */
+.codeblock .nx, .codeblock .p { color: var(--ink); }        /* names / punctuation */
+
+/* Dragging (keyframes, playhead, limit labels, the settings dialog) starts in
+   these areas — suppress text selection so a drag never highlights gutter/ruler
+   text. The code panels and page copy stay selectable; editable fields below
+   opt back in. */
+.timeline, #outputDialog {
+    -webkit-user-select: none; -moz-user-select: none; user-select: none;
+}
+.timeline input, .timeline select,
+#outputDialog input, #outputDialog select {
+    -webkit-user-select: text; -moz-user-select: text; user-select: text;
+}
+
+.timeline {
+    display: flex;
+    align-items: flex-start;
+    width: 100%;                 /* fill main (which now fills the window) */
+    margin: 12px 0 0;            /* ribbon connects to the bottom edge */
+    border: 1.5px solid var(--line);
+    background: var(--paper);
+}
+
+/* transport + status ribbon along the bottom of the timeline.
+   The side zones are equal (flex-basis 0) so the centre group is truly centred. */
+.ribbon {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 7px 10px;
+    margin: 0 0 16px;
+    border: 1.5px solid var(--line);
+    border-top: none;            /* the timeline's bottom border divides them */
+    background: var(--paper);
+}
+/* free all sits under the gutter (gutter width 160px − ribbon's 10px left pad);
+   the transport group then starts under the timeline lanes. */
+.ribbon-gutter    { width: 150px; flex: none; display: flex; }
+.ribbon-transport { display: flex; gap: 8px; flex-wrap: wrap; }
+.ribbon-right     { flex: 1; min-width: 0; display: flex; justify-content: flex-end; padding-left: 8px; }
+.ribbon #status { margin: 0; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* editable status fields (manual entry) — #status scope beats the house input rules */
+#status .status-num, #status .status-sel {
+    height: 19px; padding: 0 3px; margin: 0 1px; vertical-align: middle;
+    font-family: var(--mono); font-size: 12px; color: var(--ink);
+    background: var(--paper); border: 1.5px solid var(--line); border-radius: 0;
+}
+#status .status-num { width: 54px; -moz-appearance: textfield; appearance: textfield; }
+#status .status-num::-webkit-outer-spin-button,
+#status .status-num::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+#status .status-sel { cursor: pointer; }
+.gutter {
+    flex: none;
+    width: 160px;
+    position: relative;
+    border-right: 1.5px solid var(--line);
+}
+.gutter .corner {
+    display: flex; align-items: center;
+    padding-left: 8px;
+    font-size: 11px; color: var(--ink);
+    border-bottom: 1px solid var(--hair);
+    box-sizing: border-box;
+}
+.rowlabel {
+    position: relative;
+    box-sizing: border-box;
+    display: flex; flex-direction: column;
+    padding: 8px;
+    /* height = ROW_H + ROW_GAP (set inline): the ROW_GAP is inside the cell at the
+       bottom, so the divider sits at the slot boundary — no gap above any row. */
+    border-bottom: 1px solid var(--hair);
+}
+
+/* + / − row controls, pinned to the bottom of the cell */
+.rl-btns { display: flex; gap: 4px; margin-top: auto; }
+.rl-btn {
+    width: 20px; height: 20px; padding: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Poppins', system-ui, sans-serif; font-size: 15px; line-height: 1; font-weight: 600;
+    background: var(--paper); color: var(--ink);
+    border: 1.5px solid var(--line); border-radius: 0;
+    cursor: pointer;
+}
+.rl-btn:hover { background: var(--ink); color: #fff; }
+/* fixed height so swapping in the edit field never bumps the controls below.
+   margin-right keeps the (truncated) name clear of the top-right value indicator ("4095") */
+.rl-name { height: 20px; line-height: 20px; font-size: 13px; color: var(--ink); cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-right: 26px; }
+.rl-name:hover { text-decoration: underline; text-decoration-color: var(--hair); }
+/* click-to-rename field — Poppins to match the label, fits inside the fixed .rl-name box */
+.gutter .rl-name-edit {
+    width: 100%; height: 20px; box-sizing: border-box; display: block;
+    font-family: 'Poppins', system-ui, sans-serif; font-size: 13px; line-height: normal;
+    margin: 0; padding: 0 3px; color: var(--ink); background: var(--paper);
+    border: 1.5px solid var(--line); border-radius: 0;
+}
+.rl-id   { display: flex; align-items: center; gap: 5px; margin-top: 4px; font-family: var(--mono); font-size: 11px; color: var(--grey); }
+/* output summary line (type + connection) — click opens the settings dialog */
+.rl-output {
+    margin-top: 4px; margin-right: 26px; font-size: 11px; font-weight: 600; color: var(--teal);
+    cursor: pointer; user-select: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.rl-output:hover { text-decoration: underline; }
+.rl-output::before { content: "⚙ "; font-weight: 400; color: var(--grey); }
+.rl-deg  { margin-top: 4px; font-family: var(--mono); font-size: 11px; color: var(--grey); }
+.rl-deg.live    { color: var(--teal); }
+.rl-deg.missing { color: var(--red); }
+/* per-servo controls row: "on" toggle + "free" button */
+.rl-ctrls { display: flex; align-items: center; gap: 6px; margin-top: 5px; }
+.rl-on    { display: flex; align-items: center; gap: 3px; font-size: 11px; color: var(--ink-soft); cursor: pointer; user-select: none; }
+.rl-on input { width: 13px; height: 13px; margin: 0; accent-color: var(--teal); cursor: pointer; }
+.rl-free  {
+    height: 20px; padding: 0 8px;
+    font-family: 'Poppins', system-ui, sans-serif; font-size: 11px; font-weight: 600;
+    background: var(--paper); color: var(--ink);
+    border: 1.5px solid var(--line); border-radius: 0; cursor: pointer;
+}
+/* freed (torque off) — solid green toggle state on the per-row and "free all" buttons */
+.rl-free.freed, #freeAll.freed { background: var(--green); border-color: var(--green); color: #fff; }
+/* rollover on the free buttons is a slightly lighter green (in either state) */
+.rl-free:hover, .rl-free.freed:hover,
+#freeAll:hover, #freeAll.freed:hover { background: #4CB165; border-color: #4CB165; color: #fff; }
+/* greyed free button — output type can't be freed (PWM servo, or stepper with no EN pin) */
+.rl-free.disabled, .rl-free:disabled { color: var(--hair); border-color: var(--hair); background: var(--paper); cursor: default; }
+.rl-free.disabled:hover, .rl-free:disabled:hover { color: var(--hair); border-color: var(--hair); background: var(--paper); }
+/* switched-off row: dim its label (controls stay crisp); lane fill is set below */
+.rowlabel.off .rl-name, .rowlabel.off .rl-deg { color: var(--grey); }
+/* centred on the value extents: max at laneTop (VP), min at laneBot (ROW_H − VP) */
+.rl-scale     { position: absolute; right: 6px; padding: 2px 1px 2px 6px; font-family: var(--mono); font-size: 9px; color: var(--grey); transform: translateY(-50%); cursor: ns-resize; user-select: none; }
+.rl-scale:hover { color: var(--ink); }
+.rl-scale-top { top: 9px; }    /* = VP */
+.rl-scale-bot { top: 135px; }  /* = ROW_H + ROW_GAP − VP (value area spans the full slot) */
+.rl-marker {
+    position: absolute; right: -1px;
+    width: 0; height: 0;
+    border-top: 4px solid transparent; border-bottom: 4px solid transparent;
+    border-right: 8px solid var(--teal);
+    transform: translateY(-4px);
+    display: none;
+}
+
+/* editable servo-id field (spinners removed so the digits stay visible) */
+/* .gutter-scoped so the width beats the house input[type=number] rule */
+.gutter .idfield {
+    width: 43px; height: 20px;
+    padding: 1px 3px;
+    font-family: var(--mono); font-size: 11px;
+    color: var(--ink); background: var(--paper);
+    border: 1.5px solid var(--line); border-radius: 0;
+    box-sizing: border-box;
+    -moz-appearance: textfield; appearance: textfield;
+}
+.gutter .idfield::-webkit-outer-spin-button,
+.gutter .idfield::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
+/* the scrollable lanes pane + its SVG — flex to fill the space after the gutter */
+.lanes-scroll { flex: 1; min-width: 0; overflow-x: auto; overflow-y: hidden; }
+#lanes { display: block; }
+
+/* SVG timeline elements — styled by class */
+.ruler .ruler-base { stroke: var(--hair); stroke-width: 1; }
+.ruler .tick       { stroke: var(--hair); stroke-width: 1; }
+.ruler .ticklbl    { fill: var(--grey); font-family: 'Poppins', sans-serif; font-size: 10px; text-anchor: middle; dominant-baseline: middle; }
+.lane      { fill: #ffffff; }
+.lane.sel  { fill: #faf7ef; }
+/* switched-off rows stay dimmed even when selected (.off.sel outranks .sel) */
+.lane.off, .lane.off.sel { fill: #a8a59b; }
+/* row divider — visible on white and on the dark off-fill */
+.lane-div { stroke: #c4bba7; stroke-width: 1; pointer-events: none; }
+.guide     { stroke: #efece4; stroke-width: 1; }
+.seg       { fill: none; stroke: var(--teal); stroke-width: 2; pointer-events: none; }
+.seg.sel   { stroke: var(--orange); stroke-width: 3; }
+.seghit    { fill: none; stroke: transparent; stroke-width: 12; cursor: pointer; }
+.pt        { fill: var(--paper); stroke: var(--ink); stroke-width: 1.5; cursor: pointer; }
+.pt:hover  { fill: #f2ede0; }
+.pt.sel    { fill: var(--amber); }
+.pt.posing { fill: var(--green); stroke: var(--green); }   /* "pose servo" — tracks the live servo angle */
+.playhead  { stroke: var(--red); stroke-width: 1.5; pointer-events: none; }
+.playhead-handle { fill: var(--red); cursor: ew-resize; }
+.ruler-hit { fill: transparent; cursor: ew-resize; }
+.ruler .ruler-base, .ruler .tick, .ruler .ticklbl { pointer-events: none; }   /* only .ruler-hit grabs the playhead */
+
+/* right-click context menu (rows / segments / points; positioned within <main>) */
+#ctxmenu {
+    position: absolute; z-index: 20;
+    display: flex; flex-direction: column;
+    min-width: 132px;
+    background: var(--paper); border: 1.5px solid var(--line);
+    box-shadow: 3px 3px 0 rgba(43, 36, 32, 0.14);
+}
+#ctxmenu[hidden] { display: none; }
+#ctxmenu button {
+    height: auto; width: 100%;
+    text-align: left; padding: 7px 12px;
+    font-size: 12.5px; font-weight: 500;
+    background: var(--paper); color: var(--ink);
+    border: none; border-bottom: 1px solid var(--hair);
+    border-radius: 0; cursor: pointer;
+}
+#ctxmenu button:last-child { border-bottom: none; }
+#ctxmenu button:hover { background: var(--ink); color: #fff; }
+#ctxmenu button.active { font-weight: 700; }              /* the segment's current shape */
+#ctxmenu button.active::before { content: "✓ "; }
+
+/* ---- floating per-output settings dialog ---- */
+#outputDialog {
+    position: fixed; z-index: 30; width: 232px;
+    background: var(--paper); border: 1.5px solid var(--line);
+    box-shadow: 4px 4px 0 rgba(43, 36, 32, 0.16);
+    padding: 12px; box-sizing: border-box;
+}
+#outputDialog[hidden] { display: none; }
+.od-head {
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
+    color: var(--ink); margin-bottom: 10px; cursor: move; user-select: none;
+}
+.od-close {
+    width: 20px; height: 20px; padding: 0; line-height: 1;
+    font-size: 15px; font-weight: 600; background: var(--paper); color: var(--ink);
+    border: 1.5px solid var(--line); border-radius: 0; cursor: pointer;
+}
+.od-close:hover { background: var(--ink); color: #fff; }
+.od-types { display: flex; gap: 0; margin-bottom: 12px; }
+.od-type {
+    flex: 1; padding: 6px 4px; font-family: 'Poppins', system-ui, sans-serif; font-size: 11px; font-weight: 600;
+    background: var(--paper); color: var(--ink); border: 1.5px solid var(--line); border-left-width: 0;
+    border-radius: 0; cursor: pointer;
+}
+.od-type:first-child { border-left-width: 1.5px; }
+.od-type:hover { background: #f2ede0; }
+.od-type.active { background: var(--teal); border-color: var(--teal); color: #fff; }
+.od-fields { display: flex; flex-wrap: wrap; gap: 8px; }
+.od-field { display: flex; flex-direction: column; gap: 3px; }
+.od-field label { font-family: var(--mono); font-size: 10px; color: var(--grey); }
+.od-field input {
+    width: 56px; height: 26px; padding: 2px 6px; box-sizing: border-box;
+    font-family: var(--mono); font-size: 13px; color: var(--ink); background: var(--paper);
+    border: 1.5px solid var(--line); border-radius: 0;
+    -moz-appearance: textfield; appearance: textfield;
+}
+.od-field input::-webkit-outer-spin-button,
+.od-field input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.od-note { margin-top: 12px; font-size: 11px; line-height: 1.4; color: var(--grey); }
+.od-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+.od-btn {
+    padding: 6px 16px; font-family: 'Poppins', system-ui, sans-serif; font-size: 12px; font-weight: 600;
+    background: var(--paper); color: var(--ink); border: 1.5px solid var(--line); border-radius: 0; cursor: pointer;
+}
+.od-btn:hover { background: var(--ink); color: #fff; }
+.od-btn.od-ok { background: var(--ink); color: #fff; }
+.od-btn.od-ok:hover { background: var(--green); border-color: var(--green); }

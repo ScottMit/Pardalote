@@ -25,6 +25,7 @@
 #include "internal/protocol.h"
 #include "internal/frame_names.h"
 #include "internal/extensions.h"
+#include "internal/gesture.h"
 #include "internal/serial_transport.h"
 #ifndef PARDALOTE_NO_WIFI
   #include <WebSocketsServer.h>
@@ -152,6 +153,19 @@ public:
     void command(uint16_t deviceId, uint8_t cmd, int32_t a, int32_t b, int32_t c, int32_t d) { int32_t p[4] = { a, b, c, d }; _command(deviceId, cmd, p, 4); }
     void command(uint16_t deviceId, uint8_t cmd, int32_t a, int32_t b, int32_t c, int32_t d, int32_t e) { int32_t p[5] = { a, b, c, d, e }; _command(deviceId, cmd, p, 5); }
     void command(uint16_t deviceId, uint8_t cmd, int32_t a, int32_t b, int32_t c, int32_t d, int32_t e, int32_t f) { int32_t p[6] = { a, b, c, d, e, f }; _command(deviceId, cmd, p, 6); }
+
+    // Coordinated one-shot actions — the board-side counterparts of JS
+    // arduino.gesture() / arduino.write() / arduino.writeTimed(). Each returns a
+    // builder: add one lane per actuator, then play() them together (see
+    // internal/gesture.h).
+    //   Pardalote.gesture().add(DEVICE_SERVO, pan, panG, 2)
+    //                      .add(DEVICE_STEPPER, lift, liftG, 3).play();
+    //   Pardalote.write().add(DEVICE_SERVO, pan, 90).play();           // immediate
+    //   Pardalote.writeTimed(1500).add(DEVICE_SERVO, pan, 90)
+    //                             .add(DEVICE_SERVO, tilt, 45).play();  // arrive together
+    PardaloteGesture gesture() const { return PardaloteGesture(); }
+    PardaloteWrite   write() const { return PardaloteWrite(0); }
+    PardaloteWrite   writeTimed(uint32_t durMs = 1000) const { return PardaloteWrite(durMs); }
 
     // Inspection helpers.
     const char* boardName() const { return PARDALOTE_BOARD; }

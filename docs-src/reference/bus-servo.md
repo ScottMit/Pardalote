@@ -248,6 +248,7 @@ Bus utilities. Servos ship as ID 1 — to renumber, put a **single** servo on th
 | `arduino.shoulder.current` | Raw units (ST only). |
 | `arduino.shoulder.firmwareLimits` | The servo's own EEPROM angle limits: `{ min, max, enabled }` or `null` (not yet read / no answer). Cached from the attach-time read — see `readFirmwareLimits()`. |
 | `arduino.shoulder.present` | Is the servo answering? `true` = found, `false` = no response (check wiring / ID / baud), `null` = not yet attached. Seeded by the attach-time ping (the browser equivalent of the serial monitor's `[found]` / `[NO RESPONSE]` line), then kept **live from `read()` feedback** — a servo powered up or unplugged mid-session updates it. See the `'presence'` event. |
+| `arduino.shoulder.isGesturing` | `true` while the board is playing a segment schedule on this servo (any origin). |
 
 `target` vs `position`: `write(n)` sets `target` immediately (where you told it to go); `position` is real encoder feedback and only tracks toward `target` while you're polling. Unlike the stepper, bus-servo `target` is browser-side only — the servo has no board-replayed goal, so it isn't restored after a board reset.
 
@@ -262,8 +263,9 @@ Bus utilities. Servos ship as ID 1 — to renumber, put a **single** servo on th
 | `'done'` | `{ position }` | A move, timed move, or gesture settles (the servo's `Moving` flag cleared). |
 | `'fwlimits'` | `{ min, max, enabled }` or `null` | The servo's firmware angle limits arrived — at attach, on reconnect, or after `readFirmwareLimits()`. |
 | `'presence'` | `{ servoId, present }` | The servo's answering state changed. Fires on the attach-time ping, on reconnect, and whenever `read()` feedback shows the servo appearing or disappearing (`present: false` = no answer — wrong ID, wiring, baud, or unpowered). Needs `read()` polling active to track mid-session changes. |
+| `'gesturestart'` / `'gestureend'` | `{}` | The board starts / ends playing a schedule on this servo — **any** origin (this browser, another, or the sketch). End = the last segment settles or a superseding write. |
 
-Shorthand: `onChange(fn)`, `onWrite(fn)`, `onDone(fn)`, `onPresence(fn)`.
+Shorthand: `onChange(fn)`, `onWrite(fn)`, `onDone(fn)`, `onPresence(fn)`, `onGestureStart(fn)`, `onGestureEnd(fn)`. The `isGesturing` property tracks whether a schedule is playing (any origin).
 
 <div class="sig">arduino.shoulder.<span class="fn">getState</span>()</div>
 

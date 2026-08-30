@@ -32,13 +32,14 @@ This is a **tool** — no code editing. Open `index.html` and:
 1. Enter each board's address in the **Leader** and **Follower** rows (WiFi IP,
    or switch a row to **USB**) and press **Connect** on each — the button turns
    green when it's up.
-2. Line up a joint on both arms and toggle its **sync** button to match their
-   origins (this cancels any difference in how the servos were installed).
+2. Line the arms up joint for joint and press **sync all** to match every
+   joint's origin (this cancels any difference in how the servos were installed).
 3. Press **start relay**. Move the leader by hand; the follower mirrors it.
 
 | Control | What it does |
 |---|---|
-| **sync** (per joint) | capture both arms' current positions as a matched origin |
+| **sync all** | capture both arms' current positions as matched origins for every joint (press again to clear) |
+| **on/off** (per pair) | the checkbox above each column excludes that joint pair from the system — its follower goes limp |
 | **flip** (per joint) | mirror that joint — leader forward → follower backward |
 | **set limits** | free the follower, hand-move it to record safe soft limits, press again to lock |
 | **free follower** | release the follower's torque to pose it by hand |

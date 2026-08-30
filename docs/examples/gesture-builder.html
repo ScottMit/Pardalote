@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gesture Builder — Pardalote examples</title>
+<meta name="description" content="Author expressive motion on a timeline — draw keyframes for any mix of servos, bus servos, and steppers, play it back phase-locked, and copy out the JavaScript or Arduino code.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../css/site.css">
+</head>
+<body data-nav="examples">
+
+<nav class="site-nav">
+  <a class="logo" href="../index.html">
+    <img src="../assets/logo.svg" width="26" height="26" alt="">
+    Pardalote
+  </a>
+  <div class="links">
+    <a data-nav="home" href="../index.html">Home</a>
+    <a data-nav="download" href="../download.html">Download</a>
+    <a data-nav="examples" href="index.html">Examples</a>
+    <a data-nav="reference" href="../reference/index.html">Reference</a>
+    <a href="https://github.com/ScottMit/Pardalote">GitHub</a>
+  </div>
+</nav>
+
+<div class="page-head">
+  <div class="wrap">
+    <div class="crumb"><a href="index.html">Examples</a> / Gesture Builder</div>
+    <h1>Gesture Builder</h1>
+    <p>Author expressive motion on a timeline — draw keyframes for any mix of servos, bus servos, and steppers, play it back phase-locked, and copy out the JavaScript or Arduino code.</p>
+  </div>
+</div>
+
+<div class="wrap md-layout">
+  <div class="md-body">
+    <div class="tags" style="margin-bottom:.5rem;"><span class="tag lvl-adv">Advanced</span><span class="tag">Motion</span><span class="tag">Tool</span></div>
+    <div class="ex-meta-row">
+      <a class="btn btn-dark" href="https://github.com/ScottMit/Pardalote/tree/main/examples/gesture-builder">View the code on GitHub</a>
+    </div>
+    <div class="screenshot-slot">Screenshot / video of this example — coming soon</div>
+<h1 id="gesture-builder">Gesture Builder</h1>
+<p>Author expressive motion on a timeline, then play it back through Pardalote's
+<code>gesture()</code> — an on-board <strong>segment schedule</strong> each output runs on its own clock.
+One web page, one Arduino, any mix of outputs.</p>
+<p>Each <strong>row</strong> is one <strong>output</strong> (labelled <strong>Output N</strong>, editable). Click its gutter
+summary to open a <strong>settings dialog</strong> — choose <strong>Bus servo</strong>, <strong>PWM servo</strong>, or
+<strong>Stepper</strong> and set its connection pins there; the value axis and units follow the
+type (counts / degrees / steps). Each <strong>keyframe</strong> is a time × a value; the line
+between two keyframes is a <strong>segment</strong> you can shape with an easing curve. <strong>Play</strong> sends every row as one lane of a single <code>arduino.gesture({…})</code>
+so they all start together and arrive together — starting from the <strong>playhead</strong> you
+position on the ruler. <strong>Pause</strong> freezes the playhead and lets you <strong>scrub</strong> the
+outputs through the sequence by hand.</p>
+
+  </div>
+
+  <div class="md-body">
+<h2 id="hardware">Hardware</h2>
+<ul>
+<li><strong>One</strong> WiFi Arduino — UNO R4 WiFi or ESP32.</li>
+<li>Any mix of outputs the firmware supports:
+<ul>
+<li><strong>Bus servos</strong> — Feetech <strong>ST-series</strong> on a serial-bus driver board, each a distinct
+bus <strong>ID</strong> (1–253); a servo supply (6–7.4 V), not the board's 5 V rail. (ESP32 → set
+the <strong>bus</strong> RX/TX pins on the page; UNO R4 → Serial1 on D0/D1.)</li>
+<li><strong>PWM servos</strong> — a signal <strong>Pin</strong> each.</li>
+<li><strong>Steppers</strong> — a <strong>STEP</strong> and <strong>DIR</strong> pin, and optionally an <strong>EN</strong> (enable) pin
+(<code>-1</code> for none). Only bus servos report position, so <strong>pose</strong> (hand-authoring) and
+<strong>free</strong> are bus-servo features; PWM servos always hold, and steppers free only with
+an EN pin.</li>
+</ul>
+</li>
+</ul>
+<p>Wiring for bus servos is exactly the <a href="bus-servos.html">Bus servos</a> example.</p>
+<h2 id="arduino">Arduino</h2>
+<p>Upload a Pardalote sketch that registers the outputs you'll use — bus servos, PWM
+servos, and/or steppers — and note the IP it reports. (The
+<a href="coordinated-motion.html">Coordinated motion</a> example is a ready-made mixed rig — its
+sketch already includes the <code>PardaloteServo</code> / <code>PardaloteBusServo</code> / <code>PardaloteStepper</code>
+headers, so you can attach whatever mix of outputs you need.) Nothing tool-specific
+lives on the board: the timeline is all in the
+browser and the board just plays the gestures it's sent, on whatever outputs it has.</p>
+<h2 id="browser">Browser</h2>
+<p>This is a <strong>tool</strong> — no code editing. Open <code>index.html</code> and:</p>
+<ol>
+<li>Connect (WiFi IP or <strong>USB</strong>) — the button turns green when it's up.</li>
+<li>For each row, <strong>click its gutter summary</strong> to open the settings dialog — pick the
+output type and set its pins (ID / Pin / STEP·DIR·EN). Add or remove rows with the
+<strong>+ / −</strong> buttons in the gutter.</li>
+<li>Build the motion on the timeline:</li>
+</ol>
+<table>
+<thead>
+<tr>
+<th>Action</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>click a row's gutter summary</strong></td>
+<td>open the <strong>settings</strong> dialog — output type + connection pins (draggable; OK keeps, cancel/Esc revert)</td>
+</tr>
+<tr>
+<td><strong>double-click a lane</strong></td>
+<td>add a <strong>keyframe</strong> at that time and value</td>
+</tr>
+<tr>
+<td><strong>drag a keyframe</strong></td>
+<td>set its value (up/down) and time (left/right)</td>
+</tr>
+<tr>
+<td><strong>right-click a keyframe</strong></td>
+<td><strong>delete</strong> it, or <strong>pose servo</strong> (bus servos only) — free the servo, hand-move it, click to commit (Esc cancels)</td>
+</tr>
+<tr>
+<td><strong>right-click a segment</strong></td>
+<td>set its <strong>shape</strong> (easing) — linear / easeIn / easeOut / easeInOut / back</td>
+</tr>
+<tr>
+<td><strong>drag the last keyframe</strong> past the right edge</td>
+<td>extend the timeline</td>
+</tr>
+<tr>
+<td><strong>drag a max / min value</strong> (gutter)</td>
+<td>set that output's soft limit (the value axis spans min–max, in the type's unit)</td>
+</tr>
+<tr>
+<td><strong>right-click a max / min value</strong></td>
+<td><strong>reset</strong> to the type's default range — or (bus servos only) <strong>pose limits</strong> by sweeping the range by hand</td>
+</tr>
+<tr>
+<td><strong>drag the playhead</strong> (ruler)</td>
+<td>set where <strong>play</strong> starts; while <strong>paused</strong>, scrub it to drive the outputs through the sequence</td>
+</tr>
+<tr>
+<td><strong>▶ play</strong></td>
+<td>play from the playhead (one batched <code>arduino.gesture({…})</code>)</td>
+</tr>
+<tr>
+<td><strong>❙❙ pause</strong></td>
+<td>freeze the playhead; scrub to move the outputs (a held <code>group.write()</code>)</td>
+</tr>
+<tr>
+<td><strong>■ stop</strong></td>
+<td>cancel the gesture, hold, return the playhead to the start</td>
+</tr>
+<tr>
+<td><strong>free</strong> / <strong>free all</strong></td>
+<td>release an output's torque to hand-pose it — bus servos and steppers-with-EN only (greyed otherwise)</td>
+</tr>
+</tbody>
+</table>
+<p>The teal marker in each row's gutter is that output's <strong>live position</strong> (sensed for bus
+servos; last-commanded for PWM servos and steppers).
+Everything (rows, keyframes, shapes, connection) is remembered per browser.</p>
+<h2 id="export">Export</h2>
+<p>Two code panels below the timeline show the built gesture as runnable code, updating
+live as you edit. In both, the movement is wrapped in a <strong><code>playGesture()</code></strong> function
+you call from whatever triggers it — a sensor, a button, an LLM, any command:</p>
+<ul>
+<li><strong>JavaScript</strong> (browser) — output setup + limits in <code>on('ready')</code>; the movement is
+the batched <code>arduino.gesture({…})</code> (or a single <code>output.gesture([…])</code> for one output).</li>
+<li><strong>C++</strong> (a board-side Arduino sketch) — the same gesture as <code>static const PardaloteSeg</code>
+schedules in flash, attached in <code>setup()</code> and played with <code>Pardalote.gesture().add(…).play()</code>
+(or <code>Pardalote&lt;Type&gt;.gesture(id, segs, count)</code> for one output). No browser needed.</li>
+</ul>
+<p>Each <code>on('ready')</code> / <code>setup()</code> calls <code>playGesture()</code> once as a demo. <strong>Copy</strong> whichever
+you need. Switched-off rows are omitted, matching what <strong>play</strong> sends.</p>
+<h2 id="how-it-works">How it works</h2>
+<p><strong>Each row becomes a <code>gesture()</code>.</strong> A row's keyframes are turned into an absolute
+segment schedule — a lead-in from the servo's live position to the first keyframe,
+then one segment per gap. Each segment carries the <em>left</em> keyframe's easing curve:</p>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><pre><code><span class="c1">// row points [{t, v, curve}, …]  →  gesture segments (values in servo counts)</span>
+<span class="kd">const</span><span class="w"> </span><span class="nx">segs</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[{</span><span class="w"> </span><span class="nx">to</span><span class="o">:</span><span class="w"> </span><span class="nx">pts</span><span class="p">[</span><span class="mf">0</span><span class="p">].</span><span class="nx">v</span><span class="p">,</span><span class="w"> </span><span class="nx">dur</span><span class="o">:</span><span class="w"> </span><span class="nx">pts</span><span class="p">[</span><span class="mf">0</span><span class="p">].</span><span class="nx">t</span><span class="p">,</span><span class="w"> </span><span class="nx">curve</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;linear&#39;</span><span class="w"> </span><span class="p">}];</span>
+<span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kd">let</span><span class="w"> </span><span class="nx">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">1</span><span class="p">;</span><span class="w"> </span><span class="nx">i</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="nx">pts</span><span class="p">.</span><span class="nx">length</span><span class="p">;</span><span class="w"> </span><span class="nx">i</span><span class="o">++</span><span class="p">)</span>
+<span class="w">    </span><span class="nx">segs</span><span class="p">.</span><span class="nx">push</span><span class="p">({</span><span class="w"> </span><span class="nx">to</span><span class="o">:</span><span class="w"> </span><span class="nx">pts</span><span class="p">[</span><span class="nx">i</span><span class="p">].</span><span class="nx">v</span><span class="p">,</span><span class="w"> </span><span class="nx">dur</span><span class="o">:</span><span class="w"> </span><span class="nx">pts</span><span class="p">[</span><span class="nx">i</span><span class="p">].</span><span class="nx">t</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="nx">pts</span><span class="p">[</span><span class="nx">i</span><span class="o">-</span><span class="mf">1</span><span class="p">].</span><span class="nx">t</span><span class="p">,</span><span class="w"> </span><span class="nx">curve</span><span class="o">:</span><span class="w"> </span><span class="nx">pts</span><span class="p">[</span><span class="nx">i</span><span class="o">-</span><span class="mf">1</span><span class="p">].</span><span class="nx">curve</span><span class="w"> </span><span class="p">});</span>
+
+<span class="nx">servo</span><span class="p">.</span><span class="nx">gesture</span><span class="p">(</span><span class="nx">segs</span><span class="p">,</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">absolute</span><span class="o">:</span><span class="w"> </span><span class="kc">true</span><span class="w"> </span><span class="p">});</span>
+</code></pre></div>
+<p><strong>All rows play together.</strong> Instead of firing each <code>gesture()</code> separately, the
+rows are sent as one multi-channel <code>arduino.gesture({…})</code> — a single batched
+message where every channel starts together, and shorter lanes are padded with a
+trailing hold so every servo arrives together:</p>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">gesture</span><span class="p">({</span><span class="w"> </span><span class="nx">seq0</span><span class="o">:</span><span class="w"> </span><span class="nx">segsA</span><span class="p">,</span><span class="w"> </span><span class="nx">seq1</span><span class="o">:</span><span class="w"> </span><span class="nx">segsB</span><span class="w"> </span><span class="p">},</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">absolute</span><span class="o">:</span><span class="w"> </span><span class="kc">true</span><span class="w"> </span><span class="p">});</span>
+</code></pre></div>
+<p>(The keys are the actuator names you passed to <code>arduino.add(name, …)</code>. Under the
+hood this runs through a transient <a href="https://github.com/ScottMit/Pardalote/blob/main/examples/gesture-builder/../reference/groups.html">group</a>; when you're
+already holding a named group for live control, <code>group.gesture()</code> does the same.)</p>
+<p><strong>The preview uses the same easing math as the board</strong> (<code>curveShape()</code>), so the
+shape you draw on screen is the shape the schedule encodes.</p>
+<h2 id="notes">Notes</h2>
+<ul>
+<li><strong>Angles are raw ST encoder counts</strong> under the hood (0–4095 over a nominal
+360°); the read-outs show degrees.</li>
+<li><strong>Board limits:</strong> up to <strong>12 segments per servo</strong> and (here) <strong>10 keyframes
+per row</strong> — plenty for a gesture, and it keeps room for the group's arrive-
+together padding.</li>
+<li><strong>Bus servos run their own motion.</strong> Unlike a PWM <code>Servo</code> (where the board
+renders the easing <em>inside</em> each segment), a Feetech bus servo executes each
+segment as a single speed-matched move — so the easing <strong>curve</strong> you pick is
+faithfully drawn in the preview and encoded on the wire, but a bus servo won't
+visibly render an ease <em>within</em> one segment. To make a shape read on real
+bus-servo hardware, <strong>decompose</strong> the move into more, shorter segments (more
+keyframes) — the tool's per-segment timing then does the shaping. This is the
+authoring front-end; deeper on-hardware curve rendering for bus servos is a
+natural next step.</li>
+</ul>
+
+  </div>
+</div>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <span>Pardalote — created by Scott Mitchell for design education and creative technology.</span>
+    <span><a href="../reference/index.html">Reference</a> · <a href="https://github.com/ScottMit/Pardalote">GitHub</a> · GPL-3.0-or-later</span>
+  </div>
+</footer>
+
+<script src="../js/site.js"></script>
+</body>
+</html>

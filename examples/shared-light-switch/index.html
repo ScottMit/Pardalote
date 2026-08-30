@@ -11,7 +11,15 @@
         <div id="top">
             <div class="brand"><a href="https://scottmit.github.io/Pardalote/examples/shared-light-switch.html">Pardalote</a></div>
             <div class="heading">Shared light switch</div>
-            <div id="status">set ARDUINO_IP in sketch.js — one light, four switches</div>
+            <div id="status">Upload the shared-light-switch example, then connect below (WiFi IP or USB) — one light, four switches.</div>
+        </div>
+
+        <div class="row">
+            <span class="lbl">Board</span>
+            <select id="transport"><option>WiFi</option><option>USB</option></select>
+            <input id="ip" type="text" style="width:130px">
+            <button id="connect" class="primary">Connect</button>
+            <button id="disconnect">Disconnect</button>
         </div>
 
         <div id="light" class="off">OFF</div>

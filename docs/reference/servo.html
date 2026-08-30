@@ -68,6 +68,7 @@
   <a href="stepper.html">Stepper</a>
   <a href="bus-servo.html">Bus servo</a>
   <a href="groups.html">Groups</a>
+  <a href="gesture.html">Gesture</a>
   <a href="neopixel.html">NeoPixel</a>
   <a href="ultrasonic.html">Ultrasonic</a>
   <a href="encoder.html">Rotary encoder</a>
@@ -366,7 +367,17 @@
 <tr>
 <td><code>'gesture'</code></td>
 <td><code>{ segments, absolute, duration }</code></td>
-<td>A gesture starts playing.</td>
+<td><em>This</em> browser sends a gesture (local echo).</td>
+</tr>
+<tr>
+<td><code>'gesturestart'</code></td>
+<td><code>{}</code></td>
+<td>The board starts playing a schedule on this servo — <strong>any</strong> origin (this browser, another, or the sketch).</td>
+</tr>
+<tr>
+<td><code>'gestureend'</code></td>
+<td><code>{}</code></td>
+<td>…that schedule ends — completion or a superseding write.</td>
 </tr>
 <tr>
 <td><code>'done'</code></td>
@@ -375,7 +386,7 @@
 </tr>
 </tbody>
 </table>
-<p>Shorthand: <code>onChange(fn)</code>, <code>onWrite(fn)</code>, <code>onDone(fn)</code>.</p>
+<p>Shorthand: <code>onChange(fn)</code>, <code>onWrite(fn)</code>, <code>onDone(fn)</code>, <code>onGestureStart(fn)</code>, <code>onGestureEnd(fn)</code>. The board reports whether a schedule is playing (any origin) via the <code>isGesturing</code> property; a browser that connects mid-gesture learns it on sync.</p>
 <h2 id="setwritethrottle--setwritethreshold">setWriteThrottle() / setWriteThreshold()</h2>
 <p>Rate-limits outgoing writes — useful when driving the servo from mouse movement or a draw loop.</p>
 <div class="sig sig-js">arduino.pan.<span class="fn">setWriteThrottle</span>(ms) · arduino.pan.<span class="fn">setWriteThreshold</span>(degrees)</div>
@@ -413,6 +424,10 @@
 <tr>
 <td><code>arduino.pan.angle</code></td>
 <td>Locally cached snapshot, updated on every <code>write()</code>.</td>
+</tr>
+<tr>
+<td><code>arduino.pan.isGesturing</code></td>
+<td><code>true</code> while the board is playing a segment schedule on this servo (any origin).</td>
 </tr>
 </tbody>
 </table>

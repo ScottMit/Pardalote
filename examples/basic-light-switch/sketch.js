@@ -1,34 +1,104 @@
 // ==============================================================
 // Basic light switch
-// Basic example showing how to use p5.js to control an LED with Pardalote
+// Two buttons drive an LED with digitalWrite(). Connection and the LED pin
+// are set on the page (and remembered by this browser) — no code editing
+// needed.
+// House style: see style.css — shared by every Pardalote example.
 // by Scott Mitchell
 // GPL-3.0-or-later License
 // ==============================================================
 
-let ArduinoIP = '192.168.x.x';   // Change this to your Arduino's IP
+// --- Saved settings (browser localStorage) -----------------------------
+const STORE = 'pardalote-basic-light-switch';
+const saved = { ip: '192.168.x.x', transport: 'wifi', pin: 13, ...(JSON.parse(localStorage.getItem(STORE) || '{}')) };
 
-let arduino;
-let LEDpin = 13;
+const arduino = new Arduino();
+const ipEl = document.getElementById('ip');
+const transportEl = document.getElementById('transport');
+const connectEl = document.getElementById('connect');
+const disconnectEl = document.getElementById('disconnect');
+const pinEl = document.getElementById('led-pin');
+ipEl.value = saved.ip;
+transportEl.value = (saved.transport === 'usb') ? 'USB' : 'WiFi';
+pinEl.value = saved.pin;
 
-// Initialize when page loads
-window.addEventListener('load', function() {
-    // Connect to Arduino
-    arduino = new Arduino();
-    arduino.connect(ArduinoIP);
+let ready = false, manualDisconnect = false, usbBusy = false;
 
-    // Set up pins once connected — pinMode must be called after the
-    // connection is established, not before, as the frame would otherwise
-    // be sent before the WebSocket is open and silently dropped.
-    arduino.on('ready', function() {
-        arduino.pinMode(LEDpin, OUTPUT);  // Built-in LED
-    });
+// --- Connection standard (see PROJECT-STATUS; duplicated per example) ---
+function persistConn() {
+    saved.ip = ipEl.value.trim();
+    saved.transport = (transportEl.value === 'USB') ? 'usb' : 'wifi';
+    saved.pin = parseInt(pinEl.value, 10);
+    localStorage.setItem(STORE, JSON.stringify(saved));
+}
+function applyTransport() {
+    const usb = (transportEl.value === 'USB');
+    ipEl.style.display = usb ? 'none' : '';
+}
+function setConnected(on) {
+    connectEl.textContent = on ? 'Connected' : 'Connect';
+    connectEl.classList.toggle('connected', on);
+    connectEl.classList.toggle('primary', !on);
+    if (!on) { disconnectEl.textContent = 'Disconnect'; disconnectEl.disabled = false; }
+}
+function switchTransport() {
+    manualDisconnect = true; ready = false;
+    arduino.disconnect();
+    setConnected(false);
+    persistConn();
+    applyTransport();
+    setStatus('channel switched — press Connect');
+}
+transportEl.onchange = switchTransport;
 
-    // Set up button event listeners
-    document.getElementById('led-on').addEventListener('click', function() {
-        arduino.digitalWrite(LEDpin, HIGH);
-    });
+async function doConnect() {
+    persistConn();
+    manualDisconnect = false; ready = false;
+    if (saved.transport === 'usb') {
+        setStatus('connecting over USB…');
+        await arduino.connectSerial(PROMPT);   // always show the port picker
+        if (!arduino.socket) setStatus('press Connect and choose the USB port');
+        return;
+    }
+    const ip = ipEl.value.trim();
+    if (!ip || ip.includes('x')) { setStatus("enter your board's IP and press Connect"); return; }
+    arduino.connect(ip);
+    setStatus('connecting…');
+}
+function doDisconnect() {
+    manualDisconnect = true; ready = false;
+    disconnectEl.textContent = 'Disconnecting…'; disconnectEl.disabled = true;
+    connectEl.textContent = 'Connect'; connectEl.classList.remove('connected'); connectEl.classList.add('primary');
+    arduino.disconnect();
+    setTimeout(() => setConnected(false), 3000);
+    setStatus('disconnected — press Connect to resume');
+}
+connectEl.onclick = doConnect;
+disconnectEl.onclick = doDisconnect;
+applyTransport();
 
-    document.getElementById('led-off').addEventListener('click', function() {
-        arduino.digitalWrite(LEDpin, LOW);
-    });
+// Configure the LED pin INSIDE 'ready' (pin state resets on every reconnect).
+arduino.on('ready', () => {
+    setConnected(true);
+    ready = true;
+    arduino.pinMode(saved.pin, OUTPUT);
+    setStatus(`ready — LED on pin ${saved.pin}`);
 });
+arduino.on('disconnect', () => {
+    ready = false; setConnected(false);
+    if (usbBusy) { usbBusy = false; setStatus('board is on WiFi — press Connect to switch it to USB'); }
+    else if (!manualDisconnect) setStatus('reconnecting…');
+});
+arduino.on('usbBusy', () => { usbBusy = true; });
+
+// Browser → Arduino: clicking the buttons sends a normal digitalWrite.
+document.getElementById('led-on').onclick  = () => { if (ready) arduino.digitalWrite(saved.pin, HIGH); };
+document.getElementById('led-off').onclick = () => { if (ready) arduino.digitalWrite(saved.pin, LOW); };
+// Re-apply pinMode when the pin field changes.
+pinEl.onchange = () => { persistConn(); if (ready) arduino.pinMode(saved.pin, OUTPUT); };
+
+// Returning visit: reconnect with the remembered settings.
+if (localStorage.getItem(STORE)) doConnect();
+else setStatus("enter your board's IP and press Connect");
+
+function setStatus(s) { document.getElementById('status').textContent = 'status: ' + s; }

@@ -51,8 +51,10 @@ structurally verified unless a bench entry says otherwise.
 
 ## What's built this session
 
-> **Note:** this file spans several sessions. The **bare-pins entry immediately
-> below** is the most recent work, then the tool-example connection
+> **Note:** this file spans several sessions. The **Gesture Builder multi-output
+> entry immediately below** is the most recent work, then the `arduino.gesture()`
+> entry, then the Gesture Builder entry, then the bare-pins entry, then
+> the tool-example connection
 > standard, the leader-follower example, the bus-servo firmware-limits entry,
 > the serial transport + connection key entry, then the
 > example rationalisation, the boot-id/provenance reconnect fix, the docs/site
@@ -60,6 +62,161 @@ structurally verified unless a bench entry says otherwise.
 > them (starting with the stepper homing rework) is from earlier sessions,
 > regardless of the "(this session)" labels still on those older bullets.
 > (The heading predates the multi-session history.)
+
+- **Gesture Builder — multi-output support: bus servo / PWM servo / stepper (current
+  session, Scott's direction).** The example is no longer bus-servo-only; every row is a
+  generic **output** whose type + pins live in a **floating settings dialog**, opened from a
+  one-line gutter summary. `examples/gesture-builder/`
+  (JS-verified in-browser; **ZERO hardware bench** — folds into the Gesture Builder checklist).
+  - **`OUTPUT_TYPES` table drives everything type-specific** — actuator class, value unit +
+    default range, connection fields, and how to attach/hold/free/read/write. Adding a
+    type = one table entry.
+    - **busservo**: `BusServo`, unit `counts`, default 0–4095 (hard max 4095), field **ID**;
+      `attach(id,'ST')`; frees via `disableTorque` (freed on connect for hand-posing); has
+      live-position feedback → **pose servo / pose limits available**.
+    - **servo** (PWM): `Servo`, unit `°`, default 0–180, field **Pin**; `attach(pin)`;
+      **can't be freed** (free button greyed) and **no feedback** (no pose); live value = last
+      commanded `angle`.
+    - **stepper**: `Stepper`, unit `steps`, default 0–2000 (open-ended hard max — drag past it),
+      fields **STEP / DIR / EN** (EN `-1` = none, NOT 4-wire); `attach(step,dir,en)`; frees via
+      `disable()` **only when EN ≠ -1** (else greyed); no feedback; live value = commanded `position`.
+  - **Row model gained** `type` + `id/pin/step/dir/en` (all persisted). **Actuator lifecycle:**
+    `ensureActuator(r)` creates/replaces `arduino[servoName(r)]` with the right class (compared by
+    `constructor.name`); called from init + `rebuildAllDom` + on type change. `bindRow`/`onReady`/
+    `rebindAll` are type-aware; `onReady` runs `configureBus` on the first **bus** row only.
+  - **Type change** (`setOutputType`) rescales keyframes to the new unit (proportional to each
+    type's default range: 2048 counts → 90° → 1000 steps), resets limits to the new default,
+    recreates+rebinds the actuator, and full-rebuilds the gutter. Scale labels are now positioned
+    in JS (`VP` / `ROW_H+ROW_GAP−VP`) so **`ROW_H` changes need no CSS edit**.
+  - **Settings live in a floating dialog** (`#outputDialog`), not the gutter (Scott: gutter was
+    over-packed). The gutter row shows a click-to-open **summary** (`⚙ Bus servo · ID 1`); the
+    dialog has segmented **type** buttons + the type's pin fields + a per-type note. It's
+    **draggable by its header**, and changes apply **live** (see it on the timeline) with
+    **OK / cancel / × / Esc / click-away**: OK keeps, the rest revert to a JSON snapshot taken on
+    open (`ensureActuator`+`bindRow`+`rebuildAllDom`). With fields out of the gutter, `ROW_H` went
+    back to **132**; gutter width settled at **160** (widened twice — 2-digit pins were truncating
+    the summary).
+  - **Scrub / play / hold / limits are all type-routed** through the table (`t.cur/write/hold/free`);
+    `group.write()` and `arduino.gesture()` already handle mixed types on the wire. Pose servo/limits
+    are **hidden from the menus** for non-feedback types (would call `disableTorque`, which they lack).
+    Export emits the right `new BusServo()/Servo()/Stepper()` + attach signature + `// Outputs:` desc.
+  - **Docs:** hint + README updated (types, per-type fields, pose/free caveats, mixed-rig firmware
+    note). **Not touched:** the reference pages (still pending the sidebar restructure).
+  - Bench adds: PWM-servo gesture (degrees) and stepper gesture (steps) actually move; free
+    greying matches hardware; `setOutputType` rebind doesn't leak/mis-route frames (re-`add()`
+    leaves the old instance in `_extByDevice` — fine for a tool, but watch for cross-talk).
+
+- **`arduino.gesture()` / `arduino.write()` / `arduino.writeTimed()` — first-class
+  one-shot coordinated actions (current session, Scott's architecture review).** New in
+  `lib/src/pardalote-core.js` — **rebuilt into `lib/pardalote.js` via
+  `python3 build_pardalote.py`; the bundle is GENERATED, don't edit it directly.** All
+  three share one `_anonGroup(spec, label)` helper: resolve `{ name: … }` keys → registered
+  actuators (warn+skip unknowns) → a **transient anonymous `Group`** (not stored, no shorthand)
+  → delegate to `group.gesture/write/writeTimed` → **return the group** so `.whenDone()`/`.stop()`
+  chain. `write` = immediate batched write (bus servos of a series coalesce into one SyncWrite);
+  `writeTimed(targets, dur)` = arrive-together timed move; `gesture(lanes)` = multi-channel
+  segment schedule.
+  `gesture` plays a multi-channel timed motion in **one batched frame**: keys are registered
+  actuator names (`arduino.add(name, …)`), each lane an array of segments; channels start
+  together + arrive-together padding. **Runs through a TRANSIENT anonymous `Group`** (not
+  stored in `_groups`, no `arduino[name]` shorthand) and **returns it**, so
+  `.whenDone()` / `.stop()` chain. **Zero duplicated logic** — reuses `Group.gesture()`
+  (pad → bucket-by-type → `_gestureBlock` encode). **No firmware/wire change** — the
+  `CMD_*_GESTURE` frame was already multi-channel; "group" was only ever a JS coordination layer.
+  - **Rationale:** gesture is the first-class concept — `servo.gesture([…])` (one channel),
+    `arduino.gesture({…})` (many); **`group` stays** for holding a *persistent actuator set*
+    for live control (`write/writeTimed/read/stop/home/whenDone`, sync-write latching,
+    leader-follower relay). `group.gesture()` kept (shared code, natural when you already hold a
+    group). The one-shot gesture no longer needs a named/persisted group or the triple-naming
+    (destructure + members + lanes) it forced.
+  - **Gesture Builder migrated:** `play()` → `arduino.gesture(lanes,…)` (lanes keyed by
+    `servoName(r)`); **export** emits `arduino.gesture({…})` for many outputs or
+    `output.gesture([…])` for one. **Scrub fixed:** it now holds ONE `arduino.group('seqScrub',…)`
+    for the whole pause session (built on pause, reused per pointermove, dropped on
+    resume/stop/free-all) — not a fresh group per frame. (Scrubbing = repeated writes to a fixed
+    set → a held group is the right tool, not `arduino.write` per frame.)
+  - **Docs:** example README + hint + code comments updated. **NEW reference page
+    `docs-src/reference/gesture.md` → `docs/reference/gesture.html`** (sidebar entry **Gesture
+    under Groups** in `build_reference.py`; added to `build_llms.py` ORDER; both rebuilt with
+    `docs-src/.venv/bin/python`). `groups.md` cross-refs `arduino.write/writeTimed`. **`arduino.write`
+    / `writeTimed` have no dedicated reference entry yet** — folded into the pending reference
+    SIDEBAR restructure Scott flagged (getting crowded; discussion still parked).
+  - Bench: frames are byte-identical to the old `group.gesture()`, so low risk, but the
+    `arduino.gesture()` play path + `.whenDone()` are unverified on hardware (folds into the
+    Gesture Builder checklist below).
+
+- **Gesture Builder — timeline gesture-authoring tool, major buildout (current
+  session).** `examples/gesture-builder/` — **renamed this session from "Gesture
+  Sequencer"/`gesture-sequencer`**: folder, display name, brand-link URL slug
+  (`.../examples/gesture-builder.html`), and the localStorage key
+  (`pardalote-gesture-builder`) all moved. It's the one **SVG + vanilla-JS** example
+  (not p5); browser-only; connects **one bus-servo Arduino** (the bus-servos firmware).
+  **`pardalote.js` is unchanged — this is all example code.** JS-verified in-browser
+  throughout (hardware stubbed where needed); **ZERO hardware bench — see the checklist
+  below.** Terminology settled: control-point → **keyframe** (prose) / **key** (tight UI);
+  rows are **"Output N"** by default (type-neutral, Scott's direction — future rows may be
+  PWM servos, steppers, LEDs, screens, not just bus servos).
+  - **What it does now:**
+    - Multi-row timeline, one row per output. Row label **"Output N"** (editable inline —
+      click the name; truncates with ellipsis; fixed-height so editing never shifts the
+      controls below). Custom names flow into all status/play messages and the code export.
+    - Keyframes: **double-click** add, **drag** (time+angle), **right-click → delete / pose
+      servo**. Segments: **right-click → shape** (easing). **Editable status readout** —
+      selecting a key/segment shows editable ms / counts / curve fields for precise typed entry.
+    - **Per-row soft limits:** the value axis spans each row's **[min,max]** (not a fixed
+      0–4095). **Drag** the max/min gutter labels to set them (label stays put, value changes;
+      hard-capped 0–4095). **Right-click a label → "pose limits"** (free servo, sweep its range
+      by hand, click to set → `setLimits`) or **"reset"** (0–4095 → `clearLimits`). Persisted.
+    - **Per-row controls:** an **"on"** checkbox (exclude from play; dims the lane a darker
+      grey, which selection no longer overrides) and a **"free"** button (toggle torque, **green**
+      when freed, lighter-green rollover). **"free all"** toggles every servo.
+    - **Pose servo** (right-click keyframe → pose servo; renamed from "manual set"): frees that
+      servo, the key turns **green** and live-tracks the hand-moved angle; **click** commits
+      (re-holds), **Esc** cancels (restores the value + re-holds).
+    - **Playhead:** draggable red line + ruler handle, always visible, marks where play starts.
+      **Play starts FROM the playhead** — `buildSegments(rw, T)` trims each row's schedule to
+      keys at/after T with a lead-in from the live position (keys before T are skipped). Animates
+      during play, **snaps back** to the marker on stop/done. Persisted. **Completion uses the
+      board's real gesture state (protocol v1.1):** `tick()` watches the played servos'
+      `isGesturing` flag and finishes when they actually stop (waits out a lagging servo, stops
+      clean if superseded); **falls back to the authored-duration timer for older firmware** that
+      never reports `isGesturing`. (New v1.1 surface also gives per-actuator `gesturestart`/
+      `gestureend` events + reconnect replay — not otherwise used here; a busy indicator / mid-play
+      reconnect resync is a possible future touch.)
+    - **Pause** button (between play/stop): freezes the playhead and holds the motors; **while
+      paused, scrub** the playhead to drive the motors to the interpolated position at that time
+      via **`group.write()`** (batched immediate write, NOT `gesture()`; throttled ~25/s + a final
+      write on release). **Play** resumes from the scrub point.
+    - **Export — "Pardalote code" panel** below the timeline: the built gesture as runnable
+      Pardalote code (`new Arduino()` → `arduino.add()` → destructure → `attach` + optional
+      `setLimits` + one batched `arduino.gesture({…}, {absolute:true})`, or a single
+      `output.gesture([…])` when only one output is active → `connect`). **Live-updates** on
+      every edit; **syntax-highlighted** by a self-contained
+      ~20-line JS tokenizer using the **docs Pygments palette** (`docs/css/site.css` token colors).
+      **Copy** button (clipboard + select fallback). Variable handle = the label (unnamed →
+      `output1`, "Left arm" → `leftArm`); the **bus ID lives only in `attach(id)`** and the
+      `// Outputs: …` comment. Off rows are excluded (matches play).
+    - Removed the old top **Actions/"reset keys"** row.
+  - **⚠️ BENCH TEST — none of the Gesture Builder hardware paths are verified yet:**
+    - [ ] Connect (WiFi IP **and** USB) to a bus-servo board; rows attach by ID; live-position
+      marker + gutter readout track the servos.
+    - [ ] **Play** runs the multi-row schedule via `arduino.gesture(lanes,{absolute:true})`
+      phase-locked; motion matches the on-screen curves; **starts from the playhead** (partial
+      schedule + lead-in correct; keys before the playhead skipped). **Completion:** on **v1.1**
+      firmware the playhead snaps back when the servos actually stop (verify a lagging servo makes
+      it wait, not the timer); on **pre-v1.1** firmware it still finishes on the authored timer.
+    - [ ] **Pause** mid-play holds each servo; **scrubbing** drives them to the interpolated
+      position at the playhead time via `group.write()` (bus servos of one series latch together);
+      **resume** continues from there.
+    - [ ] **Pose servo**: free → hand-move → key tracks the live angle → click commits (holds) /
+      Esc restores.
+    - [ ] **Pose limits**: free → sweep → click applies `setLimits(min,max)` (board enforces);
+      **reset** → `clearLimits`. Confirm keyframes rescale to [min,max] and the board clamps.
+    - [ ] **free / free all** toggles (`disableTorque`/`enableTorque`); **"on"** exclusion from play.
+    - [ ] The **exported code**, pasted into a fresh sketch/page, reproduces the gesture on hardware.
+    - Known caveats (carried in): bus servos **accept but don't render intra-segment easing** on-board
+      (parked); **pause holds at the last-polled position** (`write(s.position)`) so it can differ a
+      few counts from the exact interpolated value until the first scrub.
 
 - **Bare per-instance pin names — `D13`, `A0`, … work like Arduino (current
   session, Scott's direction).** Replaces the earlier plan of `arduino.pins.D13`
@@ -131,7 +288,8 @@ structurally verified unless a bench entry says otherwise.
   (current session, Scott's direction).** All "tool" examples (control-panel,
   servo-control, stepper-motor, coordinated-motion, messaging, bus-servos,
   leader-follower) should share one connection UI *pattern* — but **NOT shared
-  code**. Examples must stay copy-one-folder-and-go with zero dependencies, so
+  code**. **(As of 2026-08-19 the standard is in EVERY example, not just the
+  tools — see the "Rollout EXPANDED to ALL examples" bullet below.)** Examples must stay copy-one-folder-and-go with zero dependencies, so
   this code is **duplicated verbatim into each example**, with THIS entry as the
   single source of truth to cut from (mitigates drift). Reference implementation
   lives in **`examples/leader-follower/`** (most complete). The standard:
@@ -205,6 +363,54 @@ structurally verified unless a bench entry says otherwise.
     USB-hides-IP, R4 pin-lock all work) — **zero hardware bench**; the JS/JS-lib
     is untouched so nothing to upload, but two live USB ports + the per-tool USB
     path want a bench pass.
+  - **Rollout EXPANDED to ALL examples + fine-tuning (2026-08-19, Scott's
+    direction).** Goal: every example works out of the box with no JS editing.
+    Three parts:
+    1. **Board-row fine-tuning (all connection examples).** The row header is now
+       the static label **`Board`** — the old `Board IP`/`Board USB` toggle and
+       the whole `connectLbl` plumbing were removed everywhere (`applyTransport()`
+       now only hides/shows the IP field). leader-follower keeps its role headers
+       **`Leader`/`Follower`** but dropped the ` USB` suffix. control-panel's
+       board-model selector was renamed **`Board type`** so the connection row
+       could take `Board` without colliding. The **bus RX/TX fields moved INTO the
+       board row** (after Connect/Disconnect, bold `bus` + RX/TX) for bus-servos
+       and gesture-builder, matching leader-follower.
+    2. **Uniform control height (house style, all 17 example `style.css`).**
+       Appended `.row button, .row select, .row input[type=text], .row
+       input[type=number] { height: 32px; }`. **Scoped to `.row` on purpose** —
+       an earlier unscoped `button{height:32px}` clipped the big `.buttons` action
+       buttons in the light-switch examples; `.row` scoping fixes that (their
+       action buttons aren't in a `.row`).
+    3. **Connection added to the 9 previously-hardcoded examples** (were
+       `arduino.connect(ARDUINO_IP)` with a code-edit IP): basic-light-switch,
+       camera-stream, IMU, neopixel, potentiometer-p5js, shared-light-switch,
+       shared-potentiometer, shared-servo, ultrasonic-sensor. Each gained saved
+       settings + the Board row + reconnect-on-return. **p5 examples** build the
+       row with `createSelect`/`createInput`; **HTML examples**
+       (basic/shared-light-switch, shared-potentiometer, IMU) use the
+       messaging-style DOM connection (`getElementById` + `classList` toggling).
+  - **`Wiring` row pattern (Scott's direction, matches servo-control).** Examples
+    needing pin config get a `row(main, 'Wiring')` **directly under the canvas**
+    with labeled number fields; pins live in saved settings and **re-apply in
+    `onReady()`** when changed (no reconnect). Pin fields: potentiometer (pot
+    pin), neopixel (pixel pin + count), ultrasonic (trig + echo), basic-light-
+    switch (LED pin), IMU (I²C address, parsed via `Number('0x68')`). **No wiring
+    row** for shared-light-switch / shared-potentiometer / shared-servo (pins
+    owned by the Arduino sketch) or camera-stream (stream port fixed in firmware).
+  - **IMU restructured** from a full-window WEBGL canvas + fixed HUD overlay into
+    the house format: brand/heading/status moved OUT into a standard `#top`
+    header, Board row added, the live orientation/accel/gyro/temp readouts kept in
+    a box **overlaid on** a now-in-flow, fixed-size (760×460), bordered canvas
+    (`#stage` position:relative, `#readout` absolute, `pointer-events:none` except
+    the CALIBRATE button), and the I²C address in the Wiring row below.
+    `IMU/style.css` rebuilt on the standard house style + those overlay specifics.
+  - **READMEs updated** for all 9 (dropped every "edit `ArduinoIP` in sketch.js" /
+    "Configure sketch.js" step → page-connect + wiring-field instructions);
+    **`docs/examples/*.html` regenerated** via `build_examples.py`.
+  - **Verified in-browser, zero hardware bench** (all 9 render, no console errors,
+    none auto-connect to an invalid IP; light-switch action buttons back to full
+    size). Note: a plain `python -m http.server` serves cached JS — use a no-cache
+    server when re-verifying edits.
 
 - **Leader–Follower teleoperation example (current session)** — new browser-only
   tool `examples/leader-follower/` driving TWO boards (two `Arduino()` instances,

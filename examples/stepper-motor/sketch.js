@@ -56,7 +56,7 @@ let arduino, ready = false;
 let statusEl, logEl, logLines = [];
 
 // settings controls
-let ipIn, connectBtn, disconnectBtn, transportSelect, connectLbl, modeSel, pinIns = [], pinLbls = [];
+let ipIn, connectBtn, disconnectBtn, transportSelect, modeSel, pinIns = [], pinLbls = [];
 
 // controls
 let moveTarget, timedTarget, durSlider, durVal, speedSlider, speedVal,
@@ -80,8 +80,7 @@ function setup() {
     statusEl = select('#status');
 
     // Board — WiFi (IP) or USB (Web Serial), connect/disconnect
-    let r = row(main, 'Board IP');
-    connectLbl = r.elt.querySelector('.lbl');
+    let r = row(main, 'Board');
     transportSelect = createSelect().parent(r);
     transportSelect.option('WiFi'); transportSelect.option('USB');
     transportSelect.elt.value = (saved.transport === 'usb') ? 'USB' : 'WiFi';
@@ -92,6 +91,37 @@ function setup() {
     connectBtn.addClass('primary');
     disconnectBtn = btn(r, 'Disconnect', doDisconnect);
     applyTransport();
+
+    // Wiring — driver mode + coil/step pins, grouped with the settings
+    r = row(main, 'Wiring');
+    modeSel = createSelect().parent(r);
+    modeSel.option('STEP/DIR driver', 'driver');
+    modeSel.option('4 coil pins', '4wire');
+    modeSel.selected(saved.mode);
+    modeSel.changed(refreshPinFields);
+    for (let i = 0; i < 4; i++) {
+        pinLbls[i] = createSpan('').parent(r);
+        pinIns[i] = num(r, 0, 56);
+    }
+    refreshPinFields();
+
+    // Limit switch — MIN (pin + trigger, then the coordinate it sits at)
+    r = row(main, 'Sw MIN');
+    createSpan('pin').parent(r); minPin = num(r, 32);
+    minTrig = trigSelect(r);
+    minSetBtn = btn(r, 'set', () => setSwitch(LIMIT_MIN, minPin, minTrig, 'MIN'));
+    btn(r, 'clear', () => { if (rdy()) { arduino.myStepper.clearLimitSwitch(LIMIT_MIN); minSwSet = false; refreshToggles(); log('clearLimitSwitch(MIN)'); } });
+    createSpan('pos').parent(r); minPos = num(r, -500);
+    btn(r, 'set pos', () => { if (rdy()) { arduino.myStepper.setSwitchPosition(LIMIT_MIN, int(minPos.value())); log(`setSwitchPosition(MIN, ${int(minPos.value())})`); } });
+
+    // Limit switch — MAX
+    r = row(main, 'Sw MAX');
+    createSpan('pin').parent(r); maxPin = num(r, 33);
+    maxTrig = trigSelect(r);
+    maxSetBtn = btn(r, 'set', () => setSwitch(LIMIT_MAX, maxPin, maxTrig, 'MAX'));
+    btn(r, 'clear', () => { if (rdy()) { arduino.myStepper.clearLimitSwitch(LIMIT_MAX); maxSwSet = false; refreshToggles(); log('clearLimitSwitch(MAX)'); } });
+    createSpan('pos').parent(r); maxPos = num(r, 3200);
+    btn(r, 'set pos', () => { if (rdy()) { arduino.myStepper.setSwitchPosition(LIMIT_MAX, int(maxPos.value())); log(`setSwitchPosition(MAX, ${int(maxPos.value())})`); } });
 
     // Move (position)
     r = row(main, 'Move');
@@ -152,37 +182,6 @@ function setup() {
     createCanvas(W, H).parent(main);
     textFont('Poppins');
 
-    // --- wiring, under the display (house rule: wiring goes under the display) ---
-    r = row(main, 'Wiring');
-    modeSel = createSelect().parent(r);
-    modeSel.option('STEP/DIR driver', 'driver');
-    modeSel.option('4 coil pins', '4wire');
-    modeSel.selected(saved.mode);
-    modeSel.changed(refreshPinFields);
-    for (let i = 0; i < 4; i++) {
-        pinLbls[i] = createSpan('').parent(r);
-        pinIns[i] = num(r, 0, 56);
-    }
-    refreshPinFields();
-
-    // Limit switch — MIN (pin + trigger, then the coordinate it sits at)
-    r = row(main, 'Sw MIN');
-    createSpan('pin').parent(r); minPin = num(r, 32);
-    minTrig = trigSelect(r);
-    minSetBtn = btn(r, 'set', () => setSwitch(LIMIT_MIN, minPin, minTrig, 'MIN'));
-    btn(r, 'clear', () => { if (rdy()) { arduino.myStepper.clearLimitSwitch(LIMIT_MIN); minSwSet = false; refreshToggles(); log('clearLimitSwitch(MIN)'); } });
-    createSpan('pos').parent(r); minPos = num(r, -500);
-    btn(r, 'set pos', () => { if (rdy()) { arduino.myStepper.setSwitchPosition(LIMIT_MIN, int(minPos.value())); log(`setSwitchPosition(MIN, ${int(minPos.value())})`); } });
-
-    // Limit switch — MAX
-    r = row(main, 'Sw MAX');
-    createSpan('pin').parent(r); maxPin = num(r, 33);
-    maxTrig = trigSelect(r);
-    maxSetBtn = btn(r, 'set', () => setSwitch(LIMIT_MAX, maxPin, maxTrig, 'MAX'));
-    btn(r, 'clear', () => { if (rdy()) { arduino.myStepper.clearLimitSwitch(LIMIT_MAX); maxSwSet = false; refreshToggles(); log('clearLimitSwitch(MAX)'); } });
-    createSpan('pos').parent(r); maxPos = num(r, 3200);
-    btn(r, 'set pos', () => { if (rdy()) { arduino.myStepper.setSwitchPosition(LIMIT_MAX, int(maxPos.value())); log(`setSwitchPosition(MAX, ${int(maxPos.value())})`); } });
-
     logEl = createDiv('').id('log').parent(main);
 
     arduino = new Arduino();
@@ -240,7 +239,6 @@ function doDisconnect() {
 function applyTransport() {
     const usb = (transportSelect.value() === 'USB');
     ipIn.style('display', usb ? 'none' : '');
-    if (connectLbl) connectLbl.textContent = usb ? 'Board USB' : 'Board IP';
 }
 function setConnected(on) {
     if (connectBtn) {

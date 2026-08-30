@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gesture Builder — Pardalote</title>
+    <link rel="stylesheet" type="text/css" href="style.css">
+</head>
+<body>
+<main>
+    <div id="top">
+        <div class="brand"><a href="https://scottmit.github.io/Pardalote/examples/gesture-builder.html">Pardalote</a></div>
+        <div class="heading">Gesture Builder</div>
+    </div>
+
+    <!-- Board — WiFi/USB + IP, connect/disconnect, and the bus RX/TX pins -->
+    <div class="row">
+        <span class="lbl">Board</span>
+        <select id="transport"><option>WiFi</option><option>USB</option></select>
+        <input id="ip" type="text" style="width:130px">
+        <button id="connect" class="primary">Connect</button>
+        <button id="disconnect">Disconnect</button>
+        <span class="bus-lbl">bus</span>
+        <span>RX</span><input id="rx" type="number" style="width:62px">
+        <span>TX</span><input id="tx" type="number" style="width:62px">
+    </div>
+
+    <!-- Timeline: fixed gutter column + a horizontally-scrollable lanes area -->
+    <div class="timeline">
+        <div class="gutter" id="gutter"></div>
+        <div class="lanes-scroll" id="lanesScroll">
+            <svg id="lanes" xmlns="http://www.w3.org/2000/svg"></svg>
+        </div>
+    </div>
+
+    <!-- transport ribbon along the bottom of the timeline:
+         free all under the gutter · transport under the timeline · info readout (right) -->
+    <div class="ribbon">
+        <div class="ribbon-gutter">
+            <button id="freeAll">free all</button>
+        </div>
+        <div class="ribbon-transport">
+            <button id="toStart">|◀◀ start</button>
+            <button id="play">▶ play</button>
+            <button id="pause">❙❙ pause</button>
+            <button id="stop">■ stop</button>
+            <button id="toEnd">end ▶▶|</button>
+        </div>
+        <div class="ribbon-right"><div id="status">connect your board (WiFi IP or USB) to begin</div></div>
+    </div>
+
+    <!-- generic right-click context menu (rows / segments / keyframes) -->
+    <div id="ctxmenu" hidden></div>
+
+    <!-- floating per-output settings (type + connection pins), opened from the gutter -->
+    <div id="outputDialog" hidden></div>
+
+    <!-- Export: the gesture as runnable Pardalote code, to drop into a robot system -->
+    <div class="codeout">
+        <div class="codeout-head">
+            <span class="lbl">JavaScript code</span>
+            <button id="copyCode">copy</button>
+        </div>
+        <pre class="codeblock"><code id="codeText"></code></pre>
+    </div>
+
+    <!-- The same gesture as a board-side Arduino sketch (C++) -->
+    <div class="codeout">
+        <div class="codeout-head">
+            <span class="lbl">Arduino code</span>
+            <button id="copyIno">copy</button>
+        </div>
+        <pre class="codeblock"><code id="inoText"></code></pre>
+    </div>
+
+</main>
+
+<script src="../../lib/pardalote.js"></script>
+<script src="sketch.js"></script>
+</body>
+</html>

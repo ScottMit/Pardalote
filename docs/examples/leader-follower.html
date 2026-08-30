@@ -70,8 +70,8 @@ specific lives on the board; the leader/follower logic is all in the browser.</p
 <li>Enter each board's address in the <strong>Leader</strong> and <strong>Follower</strong> rows (WiFi IP,
 or switch a row to <strong>USB</strong>) and press <strong>Connect</strong> on each — the button turns
 green when it's up.</li>
-<li>Line up a joint on both arms and toggle its <strong>sync</strong> button to match their
-origins (this cancels any difference in how the servos were installed).</li>
+<li>Line the arms up joint for joint and press <strong>sync all</strong> to match every
+joint's origin (this cancels any difference in how the servos were installed).</li>
 <li>Press <strong>start relay</strong>. Move the leader by hand; the follower mirrors it.</li>
 </ol>
 <table>
@@ -83,8 +83,12 @@ origins (this cancels any difference in how the servos were installed).</li>
 </thead>
 <tbody>
 <tr>
-<td><strong>sync</strong> (per joint)</td>
-<td>capture both arms' current positions as a matched origin</td>
+<td><strong>sync all</strong></td>
+<td>capture both arms' current positions as matched origins for every joint (press again to clear)</td>
+</tr>
+<tr>
+<td><strong>on/off</strong> (per pair)</td>
+<td>the checkbox above each column excludes that joint pair from the system — its follower goes limp</td>
 </tr>
 <tr>
 <td><strong>flip</strong> (per joint)</td>

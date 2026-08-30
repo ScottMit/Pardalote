@@ -50,7 +50,7 @@ const W = 600, H = 340;
 
 let arduino, ready = false;
 let statusEl;
-let ipIn, transportSelect, connectLbl, idIns = [], torqueBtns = [], rxIn, txIn, connectBtn, disconnectBtn;
+let ipIn, transportSelect, idIns = [], torqueBtns = [], rxIn, txIn, connectBtn, disconnectBtn;
 let rxTxLocked = false;   // true while the pins are R4-fixed (1/2)
 let manualDisconnect = false;
 let usbBusy = false;   // board on WiFi, silent USB reconnect refused (see 'usbBusy')
@@ -64,8 +64,7 @@ function setup() {
     // Board — WiFi (IP) or USB (Web Serial), connect/disconnect.
     // Out-of-the-box: no code editing. USB needs the sketch on serial transport
     // (Pardalote.begin(PARDALOTE_SERIAL)) — see bus-servos.ino.
-    let r = row(main, 'Board IP');
-    connectLbl = r.elt.querySelector('.lbl');
+    let r = row(main, 'Board');
     transportSelect = createSelect().parent(r);
     transportSelect.option('WiFi');
     transportSelect.option('USB');
@@ -76,7 +75,27 @@ function setup() {
     connectBtn = createButton('Connect').parent(r).mousePressed(doConnect);
     connectBtn.addClass('primary');
     disconnectBtn = createButton('Disconnect').parent(r).mousePressed(doDisconnect);
+    // Servo-bus UART pins share this row (after the connection details). Used on
+    // ESP32; locked to 1/2 (Serial1 = D0/D1) when a UNO R4 connects.
+    createSpan('bus').parent(r).style('margin-left', '8px').style('font-weight', '700');
+    createSpan('RX').parent(r);
+    rxIn = createInput(String(saved.rx), 'number').parent(r);  rxIn.style('width', '62px');
+    createSpan('TX').parent(r);
+    txIn = createInput(String(saved.tx), 'number').parent(r);  txIn.style('width', '62px');
+    const applyPins = () => { persist(); if (ready) applyBusPins(); };
+    rxIn.changed(applyPins);
+    txIn.changed(applyPins);
     applyTransport();
+
+    // Servos — bus IDs, grouped with the settings (changing one re-binds in place)
+    r = row(main, 'Servos');
+    JOINTS.forEach((j, i) => {
+        createSpan(`${j.label} ID`).parent(r);
+        idIns[i] = createInput(String(saved.ids[i]), 'number').parent(r);
+        idIns[i].style('width', '56px');
+        // Re-bind this joint to the new bus id IN PLACE — no WiFi reconnect.
+        idIns[i].changed(() => { persist(); if (ready) reattach(i); });
+    });
 
     // Torque — free a joint to pose it by hand, re-hold to keep the pose
     r = row(main, 'Torque');
@@ -92,27 +111,6 @@ function setup() {
         + 'position, red ticks = the servo’s firmware limits. Free a servo (button or [1]/[2]) to '
         + 'pose it by hand; while free the dial is feedback-only (no target, clicks do nothing).')
         .class('hint').parent(main);
-
-    // --- wiring, under the display (house rule) ---
-    r = row(main, 'Servos');
-    JOINTS.forEach((j, i) => {
-        createSpan(`${j.label} ID`).parent(r);
-        idIns[i] = createInput(String(saved.ids[i]), 'number').parent(r);
-        idIns[i].style('width', '56px');
-        // Re-bind this joint to the new bus id IN PLACE — no WiFi reconnect.
-        idIns[i].changed(() => { persist(); if (ready) reattach(i); });
-    });
-
-    // Servo-bus UART pins. Used on ESP32; locked to 1/2 (Serial1 = D0/D1) when a
-    // UNO R4 connects. Default 18/19; change to match your wiring.
-    r = row(main, 'bus');
-    createSpan('RX').parent(r);
-    rxIn = createInput(String(saved.rx), 'number').parent(r);  rxIn.style('width', '62px');
-    createSpan('TX').parent(r);
-    txIn = createInput(String(saved.tx), 'number').parent(r);  txIn.style('width', '62px');
-    const applyPins = () => { persist(); if (ready) applyBusPins(); };
-    rxIn.changed(applyPins);
-    txIn.changed(applyPins);
 
     arduino = new Arduino();
     JOINTS.forEach(j => arduino.add(j.name, new BusServo()));
@@ -144,9 +142,8 @@ function setup() {
 // WiFi mode shows the IP field; USB mode hides it (the browser's port picker
 // does the choosing). The sketch side of USB is Pardalote.begin(PARDALOTE_SERIAL).
 function applyTransport() {
-    const usb = (saved.transport === 'usb');
+    const usb = (saved.transport === 'usb');   // WiFi shows the IP field; USB hides it
     ipIn.style('display', usb ? 'none' : '');
-    if (connectLbl) connectLbl.textContent = usb ? 'Board USB' : 'Board IP';
 }
 
 async function doConnect() {

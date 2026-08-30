@@ -2,7 +2,8 @@
 """Generate the AI-coding docs, both stdlib-only (no build deps):
 
   llms-full.txt  — the hand-written preamble + the whole reference concatenated
-                   and decluttered, for pasting into an assistant in one go.
+                   and decluttered, then the per-example READMEs appended, for
+                   pasting into an assistant in one go.
   llms.txt       — the small linked index (llmstxt.org convention) an AI tool
                    auto-discovers at the site root; points at llms-full.txt and
                    each reference page.
@@ -13,9 +14,11 @@ stays in sync automatically. Run:  python3 build_llms.py
 """
 import re
 from pathlib import Path
+from examples_data import EXAMPLES   # shared with build_examples.py; stdlib-only, no build deps
 
 HERE     = Path(__file__).parent
 SRC      = HERE / "reference"
+EX_SRC   = HERE.parent / "examples"   # example folders (README per example)
 PREAMBLE = HERE / "llms-preamble.md"
 REPO     = HERE.parent
 
@@ -33,7 +36,7 @@ SUMMARY = ("Pardalote is a JavaScript ↔ Arduino library: browser JavaScript "
 GROUPS = [
     ("Getting started",   ["index", "installation", "wifi"]),
     ("Core",              ["connecting", "pins", "arduino", "messaging"]),
-    ("Actuators",         ["extensions", "servo", "stepper", "bus-servo", "groups"]),
+    ("Actuators",         ["extensions", "servo", "stepper", "bus-servo", "groups", "gesture"]),
     ("Sensors & output",  ["neopixel", "ultrasonic", "encoder", "imu", "camera"]),
     ("Under the hood",    ["protocol", "pin-capabilities", "troubleshooting"]),
 ]
@@ -70,6 +73,21 @@ def declutter(body):
     return body
 
 
+def strip_local_links_prose(md):
+    """Flatten local markdown links (../foo/, bar.html, ../../README.md#x) to
+    their text — they don't resolve in one flat file — while preserving http(s)
+    links. Only touches prose: lines inside ``` code fences are left untouched,
+    so a JS `handlers[type](arg)` is never mistaken for a link."""
+    out, in_fence = [], False
+    for line in md.splitlines():
+        if line.lstrip().startswith("```"):
+            in_fence = not in_fence
+        elif not in_fence:
+            line = re.sub(r"\[([^\]]+)\]\((?!https?:)[^)]*\)", r"\1", line)
+        out.append(line)
+    return "\n".join(out)
+
+
 def write_both(name, text):
     for out in (REPO / name, REPO / "docs" / name):
         out.write_text(text, encoding="utf-8")
@@ -102,6 +120,23 @@ for stem in ORDER + extra:
         section += f"> {meta['lede']}\n"
     section += "\n" + declutter(body_of[stem]).rstrip()
     parts.append(section)
+
+# Worked examples, README-level — complete projects that show the API in use.
+# (The full source lives on GitHub; the READMEs carry the idiomatic snippets.)
+parts.append("# Examples\n> Complete, working Pardalote projects — each has an "
+             "Arduino sketch, a web page, and a wiring note. The sections below are "
+             "the per-example READMEs (what each does and how it works); full source "
+             f"for every example is on GitHub: {GH_URL}/tree/main/examples.")
+ex_missing = []
+for slug in EXAMPLES:
+    readme = EX_SRC / slug / "README.md"
+    if not readme.exists():
+        ex_missing.append(slug)
+        continue
+    parts.append(strip_local_links_prose(readme.read_text(encoding="utf-8")).rstrip())
+if ex_missing:
+    print("WARNING: examples missing a README (skipped):", ex_missing)
+
 full = "\n\n---\n\n".join(parts) + "\n"
 write_both("llms-full.txt", full)
 
@@ -119,9 +154,17 @@ for title, slugs in GROUPS:
         url   = f"{BASE_URL}reference/{stem}.html"
         lines.append(f"- [{label}]({url})" + (f": {lede}." if lede else ""))
     lines.append("")
+lines.append("## Examples")
+lines.append("Complete, working projects (Arduino sketch + web page). Full source: "
+             f"{GH_URL}/tree/main/examples.")
+for slug, (title, blurb, *_rest) in EXAMPLES.items():
+    url = f"{BASE_URL}examples/{slug}.html"
+    lines.append(f"- [{title}]({url}): {blurb.rstrip('.')}.")
+lines.append("")
 lines += ["## Source",
           f"- [GitHub repository]({GH_URL}): source code, examples, and the Arduino library.",
           ""]
 write_both("llms.txt", "\n".join(lines))
 
-print(f"{len(ORDER)} sections indexed, ~{len(full.split())} words in llms-full.txt")
+print(f"{len(ORDER)} sections + {len(EXAMPLES)} examples indexed, "
+      f"~{len(full.split())} words in llms-full.txt")

@@ -51,7 +51,14 @@ The `IMU` extension supports multiple sensor families. Pass the model name to th
 | `'LSM6DS3'`  | STMicro LSM6DS3  | 6 | 0x6A |
 | `'LSM6DSOX'` | STMicro LSM6DSOX | 6 | 0x6A |
 
-The I2C address can be changed with the AD0 (MPU) or SA0 (LSM6) pin — attach HIGH to shift it up by 1.
+The I²C **address** is set by the sensor's `AD0` (MPU) / `SA0` (LSM6) pin: tie
+it to GND for the default (`0x68`), or to 3V3 to shift it up by one (`0x69`) —
+handy for two sensors on one bus. Set the address on the page.
+
+The **SDA/SCL pins** are software-definable **on ESP32** (Pardalote passes them
+to `Wire.begin(sda, scl)`), so the page's SDA/SCL fields let you pick any pair.
+On **UNO R4** the I²C pins are fixed hardware, so those fields lock automatically
+when an R4 connects.
 
 ## Quick Start
 
@@ -90,34 +97,24 @@ The I2C address can be changed with the AD0 (MPU) or SA0 (LSM6) pin — attach H
    - **UNO R4 WiFi:** scrolls across the LED matrix
    - **ESP32:** printed in the Serial Monitor
 
-### 2. Configure sketch.js
+### 2. Open the example and connect
 
-```javascript
-const ARDUINO_IP = '192.168.1.42';  // your Arduino's IP
-```
+Open `index.html` in a browser. In the **Board** row, enter the Arduino's IP
+(or switch to **USB**) and press **Connect**. In the **Wiring** row under the
+view, set the **address** (`0x68` with AD0 → GND, `0x69` with AD0 → 3V3) and,
+on ESP32, the **SDA/SCL** pins (locked on UNO R4). All settings are remembered
+per browser. Tilt the sensor — the 3D model should follow.
 
-To use a different sensor model, change the constructor argument:
-
-```javascript
-arduino.add('imu', new IMU('LSM6DS3'));
-```
-
-And update the attach address if needed:
-
-```javascript
-arduino.imu.attach(0x6A);  // LSM6 default; 0x6B if SA0 is HIGH
-```
-
-### 3. Open the example
-
-Open `index.html` in a browser. Tilt the sensor — the 3D model should follow.
+(This page targets the MPU-6050. To use a different sensor model in your own
+copy, change the constructor argument in `sketch.js`, e.g.
+`new IMU('LSM6DS3')`, and set the matching address in the Wiring field.)
 
 ## How It Works
 
 ```javascript
 arduino = new Arduino();
 arduino.add('imu', new IMU('6050'));
-arduino.connect(ARDUINO_IP);
+arduino.connect(ip);   // ip comes from the Board field on the page
 
 arduino.on('ready', () => {
     arduino.imu.attach(0x68);        // I2C address (0x69 if AD0 is HIGH)

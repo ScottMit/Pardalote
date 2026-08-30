@@ -20,7 +20,7 @@ An interactive p5.js colour mixer that drives a NeoPixel LED strip in real time.
 |---|---|
 | VCC (red) | 5 V |
 | GND (black) | GND |
-| Data (white/yellow) | Pin 11 (configurable in sketch.js) |
+| Data (white/yellow) | data pin (set on the page) |
 
 For strips longer than ~30 LEDs use an external 5 V supply. Connect all grounds (Arduino, strip, supply) together. The data line still goes to the Arduino pin.
 
@@ -70,22 +70,14 @@ Install Pardalote itself by copying `pardalote-arduino/library/Pardalote/` into 
    - **UNO R4 WiFi:** scrolls across the LED matrix
    - **ESP32:** printed in the Serial Monitor
 
-### 2. Configure sketch.js
+### 2. Open the example and connect
 
-```javascript
-let ArduinoIP = '192.168.1.42';   // your Arduino's IP
-```
-
-To change the pin or number of LEDs, edit the two variables near the top:
-
-```javascript
-let pixelPin  = 11;   // data pin the strip is wired to
-let numPixels = 8;    // how many LEDs on the strip
-```
-
-### 3. Open the example
-
-Open `index.html` in a browser. Move the mouse across the colour field — the LEDs follow the colour under the cursor, and the circle in the middle previews it. Hover the centre for white.
+Open `index.html` in a browser. In the **Board** row, enter the Arduino's IP
+(or switch to **USB**) and press **Connect**. Set the strip's **pixel pin** and
+**count** in the **Wiring** row under the colour field. All settings are
+remembered per browser — no code editing needed. Move the mouse across the
+colour field — the LEDs follow the colour under the cursor, and the circle in
+the middle previews it. Hover the centre for white.
 
 ## How It Works
 
@@ -101,7 +93,7 @@ arduino.on('ready', () => {
     arduino.strip.show();
 });
 
-arduino.connect(ArduinoIP);
+arduino.connect(ip);   // ip comes from the Board field on the page
 ```
 
 In `draw()`, the colour under the mouse is sampled from the canvas and sent to the strip (or white when the cursor is over the centre circle):

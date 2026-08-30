@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gesture — Pardalote reference</title>
+<meta name="description" content="Author a timed motion — a segment schedule the board runs on its own clock. One channel, or many together in a single message.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../css/site.css">
+</head>
+<body data-nav="reference">
+
+<nav class="site-nav">
+  <a class="logo" href="../index.html">
+    <img src="../assets/logo.svg" width="26" height="26" alt="">
+    Pardalote
+  </a>
+  <div class="links">
+    <a data-nav="home" href="../index.html">Home</a>
+    <a data-nav="download" href="../download.html">Download</a>
+    <a data-nav="examples" href="../examples/index.html">Examples</a>
+    <a data-nav="reference" href="index.html">Reference</a>
+    <a href="https://github.com/ScottMit/Pardalote">GitHub</a>
+  </div>
+</nav>
+
+<div class="wrap">
+  <div class="ref-layout">
+<aside class="ref-nav">
+  <button class="ref-nav-toggle" aria-expanded="false" aria-controls="ref-nav-links">Contents</button>
+  <div class="ref-nav-links" id="ref-nav-links">
+  <h4><a href="index.html">Getting started</a></h4>
+  <a href="index.html">Overview</a>
+  <a href="installation.html">Installation</a>
+  <a href="wifi.html">WiFi configuration</a>
+  <a href="ai-coding.html">Coding with AI</a>
+  <h4><a href="connecting.html">Core — JavaScript</a></h4>
+  <a href="connecting.html#connect">connect()</a>
+  <a href="connecting.html#on">on()</a>
+  <a href="connecting.html#disconnect">disconnect()</a>
+  <a href="connecting.html#getstatus">getStatus()</a>
+  <a href="pins.html#pinmode">pinMode()</a>
+  <a href="pins.html#digitalwrite">digitalWrite()</a>
+  <a href="pins.html#analogwrite">analogWrite()</a>
+  <a href="pins.html#setwritethrottle--setwritethreshold">setWriteThrottle() / setWriteThreshold()</a>
+  <a href="pins.html#analogread">analogRead()</a>
+  <a href="pins.html#digitalread">digitalRead()</a>
+  <a href="pins.html#setreadinterval--setreadthreshold">setReadInterval() / setReadThreshold()</a>
+  <a href="pins.html#pin--the-listening-handle">pin() — the listening handle</a>
+  <a href="pins.html#end--endall">end() / endAll()</a>
+  <a href="pins.html#pin-aliases">Pin aliases</a>
+  <h4><a href="arduino.html">Core — Arduino</a></h4>
+  <a href="arduino.html#pardalotebegin">Pardalote.begin()</a>
+  <a href="arduino.html#pardaloterun">Pardalote.run()</a>
+  <a href="arduino.html#pardaloteshare">Pardalote.share()</a>
+  <a href="arduino.html#pardalotesend">Pardalote.send()</a>
+  <a href="arduino.html#when-not-to-share">When not to share</a>
+  <h4><a href="messaging.html">Core — Messaging</a></h4>
+  <a href="messaging.html#javascript-to-arduino">JavaScript to Arduino</a>
+  <a href="messaging.html#arduino-to-javascript">Arduino to JavaScript</a>
+  <a href="messaging.html#retain-and-broadcast">Retain and broadcast</a>
+  <a href="messaging.html#inspecting-all-traffic">Inspecting all traffic</a>
+  <h4><a href="extensions.html">Extensions</a></h4>
+  <a href="extensions.html">Overview</a>
+  <a href="extensions.html#creating-extension-objects-in-the-firmware">Creating extension objects in the firmware</a>
+  <a href="extensions.html#reading-and-writing-actuators-from-the-sketch">Reading and writing actuators from the sketch</a>
+  <a href="servo.html">Servo</a>
+  <a href="stepper.html">Stepper</a>
+  <a href="bus-servo.html">Bus servo</a>
+  <a href="groups.html">Groups</a>
+  <a href="gesture.html">Gesture</a>
+  <a href="neopixel.html">NeoPixel</a>
+  <a href="ultrasonic.html">Ultrasonic</a>
+  <a href="encoder.html">Rotary encoder</a>
+  <a href="imu.html">IMU</a>
+  <a href="camera.html">Camera</a>
+  <h4><a href="protocol.html">Under the hood</a></h4>
+  <a href="protocol.html">Protocol</a>
+  <a href="pin-capabilities.html">Pin capabilities</a>
+  <a href="troubleshooting.html">Troubleshooting</a>
+  </div>
+</aside>
+    <main class="ref-main">
+      <h1>Gesture</h1>
+      <p class="lede">Author a timed motion — a segment schedule the board runs on its own clock. One channel, or many together in a single message.</p>
+<p>A <strong>gesture</strong> is a <strong>segment schedule</strong>: a list of timed moves — each a target, a duration, and an easing curve — that the board plays on its <strong>own clock</strong> after one message. You send it once; the board sequences the segments locally and fires a real <code>done</code> when the last one finishes. Author it for <strong>one</strong> actuator with its own <code>gesture()</code>, or for <strong>many at once</strong> with <code>arduino.gesture()</code> — same segment format either way.</p>
+<h2 id="segments">Segments</h2>
+<p>Every gesture is an array of segments. Each segment is one leg of the motion:</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>to</code> / <code>by</code></td>
+<td>number</td>
+<td>Absolute target (<code>to</code>) or relative delta (<code>by</code>), in the actuator's native unit — servo counts, stepper steps, or degrees.</td>
+</tr>
+<tr>
+<td><code>dur</code></td>
+<td>number</td>
+<td>Segment duration in ms. This <strong>sizes the move's speed</strong>; if the authored duration is faster than the actuator can go, the segment simply takes longer and the next still fires on true arrival.</td>
+</tr>
+<tr>
+<td><code>curve</code></td>
+<td>string</td>
+<td>Easing shape: <code>linear</code>, <code>easeIn</code>, <code>easeOut</code>, <code>easeInOut</code>, or <code>back</code> (a slight overshoot).</td>
+</tr>
+</tbody>
+</table>
+<p>A gesture is <strong>relative</strong> by default — each <code>by</code> segment chains from wherever the actuator is when it starts, so the same gesture replays from any pose. Use <code>to</code> for absolute targets, or force it for a whole gesture with <code>{ absolute: true }</code>. Absolute targets are clamped to the actuator's <a href="bus-servo.html#setlimits--clearlimits">soft limits</a>.</p>
+<h2 id="one-actuator--gesture">One actuator — <code>gesture()</code></h2>
+<p>Play a schedule on a single actuator. The segment shape and any on-hardware notes are per actuator — see <a href="servo.html#gesture">servo</a>, <a href="bus-servo.html#gesture">bus servo</a>, and <a href="stepper.html#gesture">stepper</a>.</p>
+<div class="sig sig-js">servo.<span class="fn">gesture</span>(segments, [opts])</div>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><div class="bar">Example — one actuator</div><pre><code><span class="nx">grip</span><span class="p">.</span><span class="nx">gesture</span><span class="p">([</span>
+<span class="w">    </span><span class="p">{</span><span class="w"> </span><span class="nx">by</span><span class="o">:</span><span class="w">  </span><span class="mf">600</span><span class="p">,</span><span class="w"> </span><span class="nx">dur</span><span class="o">:</span><span class="w"> </span><span class="mf">400</span><span class="p">,</span><span class="w"> </span><span class="nx">curve</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;easeOut&#39;</span><span class="w">   </span><span class="p">},</span>
+<span class="w">    </span><span class="p">{</span><span class="w"> </span><span class="nx">by</span><span class="o">:</span><span class="w"> </span><span class="o">-</span><span class="mf">600</span><span class="p">,</span><span class="w"> </span><span class="nx">dur</span><span class="o">:</span><span class="w"> </span><span class="mf">600</span><span class="p">,</span><span class="w"> </span><span class="nx">curve</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;easeInOut&#39;</span><span class="w"> </span><span class="p">},</span>
+<span class="p">]);</span>
+<span class="k">await</span><span class="w"> </span><span class="nx">grip</span><span class="p">.</span><span class="nx">gesture</span><span class="p">([</span><span class="w"> </span><span class="cm">/* … */</span><span class="w"> </span><span class="p">]).</span><span class="nx">whenDone</span><span class="p">();</span>
+</code></pre></div>
+<h2 id="many-at-once--arduinogesture">Many at once — <code>arduino.gesture()</code></h2>
+<p>Play a <strong>multi-channel</strong> gesture in <strong>one batched message</strong> — every channel starts together, and shorter lanes are padded with a trailing hold so they all <strong>arrive together</strong>. Lanes are per-channel, so overlapping timings give coordination and follow-through. This is the expressive counterpart of <a href="groups.html#writetimed"><code>writeTimed()</code></a>, and the multi-actuator counterpart of a single <code>gesture()</code>.</p>
+<div class="sig sig-js">arduino.<span class="fn">gesture</span>(lanes, [opts])</div>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>lanes</code></td>
+<td>object</td>
+<td>Actuator names (the names you passed to <a href="extensions.html"><code>add()</code></a>) mapped to segment arrays — each the same shape a single actuator's <code>gesture()</code> takes.</td>
+</tr>
+<tr>
+<td><code>opts</code></td>
+<td>object</td>
+<td>Optional. <code>{ absolute }</code> forces the reference frame for <strong>all</strong> lanes.</td>
+</tr>
+</tbody>
+</table>
+<p>It runs through a <strong>transient, anonymous group</strong> — nothing is stored on the <code>arduino</code> — and <strong>returns that group</strong>, so <code>whenDone()</code> and <code>stop()</code> chain. A lane naming an actuator that doesn't support <code>gesture()</code>, an unknown name, or an empty array is skipped with a warning; the rest still play. <strong>Mixed types work</strong>: servos, steppers, and bus servos in one call each play via their own on-board mechanism, all coordinated on the board clock.</p>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><div class="bar">Example — a coordinated reach with follow-through</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;shoulder&#39;</span><span class="p">,</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">BusServo</span><span class="p">());</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;wrist&#39;</span><span class="p">,</span><span class="w">    </span><span class="ow">new</span><span class="w"> </span><span class="nx">Servo</span><span class="p">());</span>
+<span class="kd">const</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">shoulder</span><span class="p">,</span><span class="w"> </span><span class="nx">wrist</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">arduino</span><span class="p">;</span>
+
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;ready&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">shoulder</span><span class="p">.</span><span class="nx">attach</span><span class="p">(</span><span class="mf">1</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;ST&#39;</span><span class="p">);</span>
+<span class="w">    </span><span class="nx">wrist</span><span class="p">.</span><span class="nx">attach</span><span class="p">(</span><span class="mf">9</span><span class="p">);</span>
+
+<span class="w">    </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">gesture</span><span class="p">({</span>
+<span class="w">        </span><span class="nx">shoulder</span><span class="o">:</span><span class="w"> </span><span class="p">[{</span><span class="w"> </span><span class="nx">by</span><span class="o">:</span><span class="w"> </span><span class="mf">300</span><span class="p">,</span><span class="w"> </span><span class="nx">dur</span><span class="o">:</span><span class="w"> </span><span class="mf">400</span><span class="p">,</span><span class="w"> </span><span class="nx">curve</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;easeOut&#39;</span><span class="w">   </span><span class="p">},</span>
+<span class="w">                   </span><span class="p">{</span><span class="w"> </span><span class="nx">by</span><span class="o">:-</span><span class="mf">300</span><span class="p">,</span><span class="w"> </span><span class="nx">dur</span><span class="o">:</span><span class="w"> </span><span class="mf">600</span><span class="p">,</span><span class="w"> </span><span class="nx">curve</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;easeInOut&#39;</span><span class="w"> </span><span class="p">}],</span><span class="w">   </span><span class="c1">// 1000 ms</span>
+<span class="w">        </span><span class="nx">wrist</span><span class="o">:</span><span class="w">    </span><span class="p">[{</span><span class="w"> </span><span class="nx">to</span><span class="o">:</span><span class="w"> </span><span class="mf">120</span><span class="p">,</span><span class="w"> </span><span class="nx">dur</span><span class="o">:</span><span class="w"> </span><span class="mf">250</span><span class="p">,</span><span class="w"> </span><span class="nx">curve</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;back&#39;</span><span class="w">       </span><span class="p">}],</span><span class="w">   </span><span class="c1">// 250 ms → padded to 1000</span>
+<span class="w">    </span><span class="p">});</span>
+<span class="p">});</span>
+<span class="k">await</span><span class="w"> </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">gesture</span><span class="p">({</span><span class="w"> </span><span class="cm">/* … */</span><span class="w"> </span><span class="p">}).</span><span class="nx">whenDone</span><span class="p">();</span>
+</code></pre></div>
+<p>For a <strong>single</strong> actuator, prefer its own <code>gesture([ … ])</code> — there's nothing to coordinate.</p>
+<h2 id="on-a-held-group--groupgesture">On a held group — <code>group.gesture()</code></h2>
+<p>If you're already holding a <a href="groups.html">group</a> to drive a set of actuators live — <code>write()</code>, <code>writeTimed()</code>, <code>read()</code>, <code>stop()</code> — then <a href="groups.html#gesture"><code>group.gesture(lanes)</code></a> does exactly the same thing on its members. Reach for <code>arduino.gesture()</code> when you just want to fire a gesture once; reach for a named group when you also need the live-control methods on the same set.</p>
+<h2 id="awaiting-completion--whendone">Awaiting completion — <code>whenDone()</code></h2>
+<p>Every form returns something you can await. <code>whenDone()</code> resolves <code>true</code> when <strong>every</strong> channel reports it actually <strong>arrived</strong> (each actuator's feedback-confirmed <code>done</code>, not a timer), or <code>false</code> on a safety timeout if a channel never reports (dead servo, lost link).</p>
+<div class="sig sig-js">await arduino.gesture({ … }).<span class="fn">whenDone</span>([{ timeout }])</div>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><div class="bar">Example — play, then continue</div><pre><code><span class="k">await</span><span class="w"> </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">gesture</span><span class="p">({</span><span class="w"> </span><span class="nx">shoulder</span><span class="o">:</span><span class="w"> </span><span class="nx">reachSegs</span><span class="p">,</span><span class="w"> </span><span class="nx">wrist</span><span class="o">:</span><span class="w"> </span><span class="nx">flickSegs</span><span class="w"> </span><span class="p">}).</span><span class="nx">whenDone</span><span class="p">();</span>
+<span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s1">&#39;pose reached&#39;</span><span class="p">);</span>
+</code></pre></div>
+<h2 id="from-the-sketch--the-board-authors-gestures-too">From the sketch — the board authors gestures too</h2>
+<p>Gestures aren't only a browser thing. Because a gesture plays entirely <strong>on the board</strong>, the <strong>sketch</strong> can compose and fire one with no browser present — the same segment model, the same on-board player. <code>PardaloteServo.gesture(id, segs, count)</code> plays one actuator; <code>Pardalote.gesture().add(…).play()</code> coordinates several; <code>onGestureDone(id, cb)</code> chains one into the next for a headless sequence. A board-authored gesture broadcasts its <strong>existence</strong> to connected browsers — each sees the actuator's <code>isGesturing</code> flag and a <code>gesturestart</code> / <code>gestureend</code> event — so a browser can show &quot;busy&quot; without ever receiving the schedule. See <a href="extensions.html#board-authored-gestures">Board-authored gestures</a>.</p>
+<h2 id="under-the-hood">Under the hood</h2>
+<p>On the wire a gesture is already <strong>multi-channel</strong>: one <code>CMD_*_GESTURE</code> frame carries a block per channel, and the board runs each block on its own clock. <code>arduino.gesture()</code> and <code>group.gesture()</code> produce byte-identical frames — &quot;group&quot; is purely a JavaScript convenience for coordinating and naming a set. A running gesture also broadcasts a lightweight <code>CMD_*_GESTURE_STATE [id, active]</code> (existence, never the schedule), which drives the <code>isGesturing</code> flag and is replayed on reconnect. See the <a href="protocol.html">Protocol</a> page for the frame layout.</p>
+<p>See also: <a href="servo.html">Servo</a> · <a href="bus-servo.html">Bus servo</a> · <a href="stepper.html">Stepper</a> · <a href="groups.html">Groups</a> · <a href="../examples/coordinated-motion.html">Coordinated motion example</a></p>
+
+    </main>
+  </div>
+</div>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <span>Pardalote — created by Scott Mitchell for design education and creative technology.</span>
+    <span><a href="index.html">Reference</a> · <a href="https://github.com/ScottMit/Pardalote">GitHub</a> · GPL-3.0-or-later</span>
+  </div>
+</footer>
+
+<script src="../js/site.js"></script>
+</body>
+</html>

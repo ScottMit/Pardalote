@@ -169,3 +169,6 @@ canvas {
     margin: -14px 0 16px;   /* tucks under the canvas card */
     max-width: 62ch;
 }
+
+/* uniform control height — buttons, selects and text inputs line up in the setup rows */
+.row button, .row select, .row input[type=text], .row input[type=number] { height: 32px; }

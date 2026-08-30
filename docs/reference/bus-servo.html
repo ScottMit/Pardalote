@@ -68,6 +68,7 @@
   <a href="stepper.html">Stepper</a>
   <a href="bus-servo.html">Bus servo</a>
   <a href="groups.html">Groups</a>
+  <a href="gesture.html">Gesture</a>
   <a href="neopixel.html">NeoPixel</a>
   <a href="ultrasonic.html">Ultrasonic</a>
   <a href="encoder.html">Rotary encoder</a>
@@ -436,6 +437,10 @@
 <td><code>arduino.shoulder.present</code></td>
 <td>Is the servo answering? <code>true</code> = found, <code>false</code> = no response (check wiring / ID / baud), <code>null</code> = not yet attached. Seeded by the attach-time ping (the browser equivalent of the serial monitor's <code>[found]</code> / <code>[NO RESPONSE]</code> line), then kept <strong>live from <code>read()</code> feedback</strong> — a servo powered up or unplugged mid-session updates it. See the <code>'presence'</code> event.</td>
 </tr>
+<tr>
+<td><code>arduino.shoulder.isGesturing</code></td>
+<td><code>true</code> while the board is playing a segment schedule on this servo (any origin).</td>
+</tr>
 </tbody>
 </table>
 <p><code>target</code> vs <code>position</code>: <code>write(n)</code> sets <code>target</code> immediately (where you told it to go); <code>position</code> is real encoder feedback and only tracks toward <code>target</code> while you're polling. Unlike the stepper, bus-servo <code>target</code> is browser-side only — the servo has no board-replayed goal, so it isn't restored after a board reset.</p>
@@ -475,9 +480,14 @@
 <td><code>{ servoId, present }</code></td>
 <td>The servo's answering state changed. Fires on the attach-time ping, on reconnect, and whenever <code>read()</code> feedback shows the servo appearing or disappearing (<code>present: false</code> = no answer — wrong ID, wiring, baud, or unpowered). Needs <code>read()</code> polling active to track mid-session changes.</td>
 </tr>
+<tr>
+<td><code>'gesturestart'</code> / <code>'gestureend'</code></td>
+<td><code>{}</code></td>
+<td>The board starts / ends playing a schedule on this servo — <strong>any</strong> origin (this browser, another, or the sketch). End = the last segment settles or a superseding write.</td>
+</tr>
 </tbody>
 </table>
-<p>Shorthand: <code>onChange(fn)</code>, <code>onWrite(fn)</code>, <code>onDone(fn)</code>, <code>onPresence(fn)</code>.</p>
+<p>Shorthand: <code>onChange(fn)</code>, <code>onWrite(fn)</code>, <code>onDone(fn)</code>, <code>onPresence(fn)</code>, <code>onGestureStart(fn)</code>, <code>onGestureEnd(fn)</code>. The <code>isGesturing</code> property tracks whether a schedule is playing (any origin).</p>
 <div class="sig sig-js">arduino.shoulder.<span class="fn">getState</span>()</div>
 <p><strong>Returns</strong> <code>{ logicalId, servoId, series, attached, present, mode, torque, resolution, target, hasTarget, position, velocity, load, voltage, temperature, current, limits, firmwareLimits, home, interval }</code>.</p>
 <p>See also: <a href="groups.html">Groups</a> · <a href="../examples/bus-servos.html">Bus servo example</a> · <a href="troubleshooting.html">Troubleshooting</a></p>

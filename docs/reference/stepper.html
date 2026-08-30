@@ -68,6 +68,7 @@
   <a href="stepper.html">Stepper</a>
   <a href="bus-servo.html">Bus servo</a>
   <a href="groups.html">Groups</a>
+  <a href="gesture.html">Gesture</a>
   <a href="neopixel.html">NeoPixel</a>
   <a href="ultrasonic.html">Ultrasonic</a>
   <a href="encoder.html">Rotary encoder</a>
@@ -455,9 +456,14 @@
 <td><code>{ position }</code></td>
 <td>Homing gave up (seek/back-off timeout) — the switch never responded.</td>
 </tr>
+<tr>
+<td><code>'gesturestart'</code> / <code>'gestureend'</code></td>
+<td><code>{}</code></td>
+<td>The board starts / ends playing a schedule on this stepper — <strong>any</strong> origin (this browser, another, or the sketch). End = completion or a superseding move.</td>
+</tr>
 </tbody>
 </table>
-<p>Shorthand: <code>onChange(fn)</code>, <code>onDone(fn)</code>, <code>onMove(fn)</code>, <code>onLimit(fn)</code>, <code>onHomeFail(fn)</code>.</p>
+<p>Shorthand: <code>onChange(fn)</code>, <code>onDone(fn)</code>, <code>onMove(fn)</code>, <code>onLimit(fn)</code>, <code>onHomeFail(fn)</code>, <code>onGestureStart(fn)</code>, <code>onGestureEnd(fn)</code>. The <code>isGesturing</code> property tracks whether a schedule is playing (any origin).</p>
 <h2 id="properties-and-state">Properties and state</h2>
 <table>
 <thead>
@@ -486,6 +492,10 @@
 <tr>
 <td><code>arduino.x.isRunning</code></td>
 <td>Boolean.</td>
+</tr>
+<tr>
+<td><code>arduino.x.isGesturing</code></td>
+<td><code>true</code> while the board is playing a segment schedule on this stepper (any origin).</td>
 </tr>
 </tbody>
 </table>

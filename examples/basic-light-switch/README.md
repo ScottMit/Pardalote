@@ -45,31 +45,27 @@ The simplest possible Pardalote sketch. A web page with two buttons that turn th
    - **UNO R4 WiFi:** scrolls across the LED matrix
    - **ESP32:** printed in the Serial Monitor
 
-### 2. Set the IP address
+### 2. Open the example and connect
 
-Open `sketch.js` and update this line:
-
-```javascript
-let ArduinoIP = '192.168.1.42';
-```
-
-### 3. Open the example
-
-Open `index.html` in a browser. Click **Turn LED ON** and **Turn LED OFF**.
+Open `index.html` in a browser. In the **Board** row, enter the Arduino's IP
+(or switch to **USB**) and press **Connect** — the button turns green when it's
+up. Set the **LED pin** in the **Wiring** row (13 is the built-in LED). Both
+settings are remembered per browser, so a return visit reconnects with one
+click. Click **Turn LED ON** and **Turn LED OFF**.
 
 ## How It Works
 
 ```javascript
 const arduino = new Arduino();
-arduino.connect(ArduinoIP);
+arduino.connect(ip);   // ip comes from the Board field on the page
 
 arduino.on('ready', function() {
-    arduino.pinMode(13, OUTPUT);  // set up pin after connection is ready
+    arduino.pinMode(ledPin, OUTPUT);  // set up pin after connection is ready
 });
 
 // Button handlers
-arduino.digitalWrite(13, HIGH);  // ON
-arduino.digitalWrite(13, LOW);   // OFF
+arduino.digitalWrite(ledPin, HIGH);  // ON
+arduino.digitalWrite(ledPin, LOW);   // OFF
 ```
 
 `pinMode` is called inside the `ready` handler — this ensures the WebSocket is open before the frame is sent. Calls made before `ready` would be silently dropped.
@@ -79,7 +75,7 @@ Reconnection is automatic. If the Arduino resets or the connection drops, Pardal
 ## Troubleshooting
 
 **"Buttons don't work"**
-- Check the IP address in `sketch.js` matches the Arduino's IP
+- Check the IP in the **Board** field matches the Arduino's IP, and that you pressed **Connect**
 - Arduino and browser must be on the same WiFi network
 - Open the browser console (F12) for connection messages
 

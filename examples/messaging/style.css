@@ -38,7 +38,7 @@ body {
 }
 
 main {
-    max-width: 680px;
+    max-width: 1000px;
     margin: 0 auto;
     padding: 26px clamp(16px, 4vw, 40px) 44px;
     display: flex;
@@ -139,6 +139,7 @@ input[type=checkbox] { accent-color: var(--teal); }
 
 .panel {
     width: 100%;
+    max-width: 680px;   /* keep the panels a comfortable column, left-aligned */
     background: var(--paper);
     border: 1.5px solid var(--line);
     padding: 16px 18px;
@@ -199,3 +200,6 @@ ul { list-style: none; margin: 0; padding: 0; max-height: 240px; overflow-y: aut
     overflow-x: auto;
     white-space: pre;
 }
+
+/* uniform control height — buttons, selects and text inputs line up in the setup rows */
+.row button, .row select, .row input[type=text], .row input[type=number] { height: 32px; }

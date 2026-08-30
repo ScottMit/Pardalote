@@ -4,45 +4,63 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Motion sensor (IMU) — Pardalote</title>
+    <script src="https://cdn.jsdelivr.net/npm/p5@1.11.10/lib/p5.js"></script>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-
-    <div id="hud">
+<main>
+    <div id="top">
         <div class="brand"><a href="https://scottmit.github.io/Pardalote/examples/IMU.html">Pardalote</a></div>
         <div class="heading">Motion sensor (IMU)</div>
-        <div id="status" class="disconnected">status: waiting for connection…</div>
-
-        <div class="section">
-            <div class="label">ORIENTATION</div>
-            <div id="angles">
-                <span class="axis-x">ROLL</span>  <span id="roll-val" class="angle-val">—</span><span class="deg">°</span>
-                <span class="axis-y">PITCH</span> <span id="pitch-val" class="angle-val">—</span><span class="deg">°</span>
-                <span class="axis-z">YAW</span>   <span id="yaw-val" class="angle-val">—</span><span class="deg">°</span>
-            </div>
-        </div>
-
-        <div class="section">
-            <div class="label">ACCEL (g)</div>
-            <div id="accel">X — &nbsp; Y — &nbsp; Z —</div>
-        </div>
-
-        <div class="section">
-            <div class="label">GYRO (°/s)</div>
-            <div id="gyro">X — &nbsp; Y — &nbsp; Z —</div>
-        </div>
-
-        <div class="section">
-            <div id="temp">TEMP —</div>
-        </div>
-
-        <button id="cal-btn" onclick="doCalibrate()">CALIBRATE &nbsp;[C]</button>
-        <div id="cal-msg"></div>
+        <div id="status">Upload the Pardalote - imu example to your Arduino and wire the MPU-6050. Then connect below (WiFi IP or USB) — tilt the sensor and the model follows.</div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/p5@1.11.10/lib/p5.js"></script>
-    <script src="../../lib/pardalote.js"></script>
-    <!-- <script src="3DBenchy.stl"></script> -->
-    <script src="sketch.js"></script>
+    <div class="row">
+        <span class="lbl">Board</span>
+        <select id="transport"><option>WiFi</option><option>USB</option></select>
+        <input id="ip" type="text" style="width:130px">
+        <button id="connect" class="primary">Connect</button>
+        <button id="disconnect">Disconnect</button>
+    </div>
+
+    <div class="row">
+        <span class="lbl">Wiring</span>
+        <span>SDA</span>
+        <input id="sda" type="number" style="width:56px">
+        <span>SCL</span>
+        <input id="scl" type="number" style="width:56px">
+        <span>address</span>
+        <input id="addr" type="text" style="width:56px">
+    </div>
+
+    <!-- the 3D view, with the live readouts in a box on top of it -->
+    <div id="stage">
+        <div id="readout">
+            <div class="section">
+                <div class="label">ORIENTATION</div>
+                <div id="angles">
+                    <span class="axis-x">ROLL</span>  <span id="roll-val" class="angle-val">—</span><span class="deg">°</span>
+                    <span class="axis-y">PITCH</span> <span id="pitch-val" class="angle-val">—</span><span class="deg">°</span>
+                    <span class="axis-z">YAW</span>   <span id="yaw-val" class="angle-val">—</span><span class="deg">°</span>
+                </div>
+            </div>
+            <div class="section">
+                <div class="label">ACCEL (g)</div>
+                <div id="accel">X — &nbsp; Y — &nbsp; Z —</div>
+            </div>
+            <div class="section">
+                <div class="label">GYRO (°/s)</div>
+                <div id="gyro">X — &nbsp; Y — &nbsp; Z —</div>
+            </div>
+            <div class="section">
+                <div id="temp">TEMP —</div>
+            </div>
+            <button id="cal-btn" onclick="doCalibrate()">CALIBRATE &nbsp;[C]</button>
+            <div id="cal-msg"></div>
+        </div>
+    </div>
+</main>
+<script src="../../lib/pardalote.js"></script>
+<script src="sketch.js"></script>
 </body>
 </html>
