@@ -97,7 +97,7 @@ Reaches a position in about a set time — the speed is picked from the move dis
 
 ## gesture()
 
-Plays an authored **segment schedule** — an ordered list of moves the board runs back-to-back, advancing to the next when the servo reports it has arrived (its own `Moving` flag, not a timer). Values are in **counts**. Because a bus servo runs its own motion, each segment is one move at a distance/duration-matched speed, so the `curve` is accepted (for schema parity across actuators) but **not rendered inside a segment** — unlike a PWM servo. Expression comes from how you break the move into segments, and from lane overlap in a [group](groups.html#gesture). Fires `done` when the last segment lands.
+Plays an authored **segment schedule** — an ordered list of moves the board runs back-to-back on its own clock. Values are in **counts**. A bus servo takes a *(position, speed)* target and runs its own move, so the board renders each segment's easing `curve` with a **streaming interpolator**: it samples the curve on a fixed clock and streams look-ahead setpoints (batched across a group into one phase-locked write), so the shape you author — overshoot included — is the shape the servo runs. Fires `done` when the last segment lands. Coordinate several lanes with a [group](groups.html#gesture).
 
 <div class="sig">arduino.shoulder.<span class="fn">gesture</span>(segments, [opts])</div>
 

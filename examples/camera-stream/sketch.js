@@ -1,75 +1,43 @@
 // ==============================================================
-// Camera Example
-// Streams MJPEG video from an ESP32-S3 camera into a p5.js canvas.
-// Connection is set on the page (and remembered by this browser) — no code
-// editing needed. There's no pin to set: the camera's stream port is fixed
-// by the firmware.
-// House style: see style.css — shared by every Pardalote example.
-// by Scott Mitchell
-// GPL-3.0-or-later License
+// Camera stream — p5.js + Pardalote
+// Streams MJPEG video from an ESP32-S3 camera into a p5.js canvas. There's no
+// pin to set — the camera's stream port is fixed by the firmware.
+//
+// The on-page Board controls (WiFi / USB, remembered IP, Connect) live in
+// connect.js — this file is just the lesson. The video is served straight from
+// the board's IP over HTTP, so the stream needs a WiFi connection.
+// by Scott Mitchell — GPL-3.0-or-later License
 // ==============================================================
 
-// --- Saved settings (browser localStorage) -----------------------------
-const STORE = 'pardalote-camera-stream';
-const DEFAULTS = { ip: '192.168.x.x', transport: 'wifi' };
-const saved = { ...DEFAULTS, ...(JSON.parse(localStorage.getItem(STORE) || '{}')) };
-function persist() {
-    saved.ip = ipIn.value().trim();
-    saved.transport = (transportSelect.value() === 'USB') ? 'usb' : 'wifi';
-    localStorage.setItem(STORE, JSON.stringify(saved));
-}
-
 const CAMERA_PORT = 82;
-const W = 640, H = 480;
 
-let arduino, ready = false, statusEl, camEl = null;   // <img> for the MJPEG stream
-let ipIn, transportSelect, connectBtn, disconnectBtn;
-let manualDisconnect = false, usbBusy = false;
+// Camera frame size — bigger is sharper but slower and uses more bandwidth.
+// Options: FRAMESIZE_QVGA 320×240 · FRAMESIZE_HVGA 480×320 · FRAMESIZE_VGA 640×480
+//          · FRAMESIZE_SVGA 800×600 · FRAMESIZE_HD 1280×720 (needs PSRAM)
+const FRAME_SIZE = FRAMESIZE_VGA;   // 640×480 — matches the canvas
+
+let arduino, camEl = null;   // <img> pointed at the MJPEG stream
 
 function setup() {
-    const main = select('main');
-    statusEl = select('#status');
-
-    // Board — WiFi (IP) or USB (Web Serial), connect/disconnect
-    let r = row(main, 'Board');
-    transportSelect = createSelect().parent(r);
-    transportSelect.option('WiFi'); transportSelect.option('USB');
-    transportSelect.elt.value = (saved.transport === 'usb') ? 'USB' : 'WiFi';
-    transportSelect.changed(switchTransport);
-    ipIn = createInput(saved.ip, 'text').parent(r); ipIn.style('width', '130px');
-    connectBtn = createButton('Connect').parent(r).mousePressed(doConnect).addClass('primary');
-    disconnectBtn = createButton('Disconnect').parent(r).mousePressed(doDisconnect);
-    applyTransport();
-
-    // --- the display ---
-    createCanvas(W, H).parent(main);
-    textFont('Poppins');
+    createCanvas(640, 480);
 
     arduino = new Arduino();
     arduino.add('cam', new Camera());
-    arduino.on('ready', () => { setConnected(true); onReady(); });
-    arduino.on('disconnect', () => {
-        ready = false; setConnected(false);
-        if (camEl) { camEl.remove(); camEl = null; }
-        if (usbBusy) { usbBusy = false; setStatus('board is on WiFi — press Connect to switch it to USB'); }
-        else if (!manualDisconnect) setStatus('reconnecting…');
+    setupConnection(arduino, { store: 'pardalote-camera-stream' });
+
+    // Start the camera once the board is ready (device state resets on reconnect).
+    arduino.on('ready', () => {
+        arduino.cam.setResolution(FRAME_SIZE);
+        arduino.cam.attach(CAMERA_PORT);
     });
-    arduino.on('usbBusy', () => { usbBusy = true; });
+
+    // The stream URL arrives here — point a hidden <img> at it for image().
     arduino.cam.on('stream', ({ url }) => {
         if (camEl) camEl.remove();
         camEl = createImg(url, '');
         camEl.hide();
     });
-
-    // Returning visit: reconnect with the remembered settings.
-    if (localStorage.getItem(STORE)) doConnect();
-    else setStatus("enter your board's IP and press Connect");
-}
-
-function onReady() {
-    arduino.cam.attach(CAMERA_PORT);
-    ready = true;
-    setStatus('ready — starting camera…');
+    arduino.on('disconnect', () => { if (camEl) { camEl.remove(); camEl = null; } });
 }
 
 function draw() {
@@ -97,57 +65,4 @@ function draw() {
     noStroke();
     fill(arduino.connected ? '#3FA9A0' : '#D3542B');
     circle(width - 16, 16, 12);
-}
-
-// -------------------------------------------------------------------
-// Connection standard (see PROJECT-STATUS; duplicated per example)
-// -------------------------------------------------------------------
-async function doConnect() {
-    persist();
-    manualDisconnect = false; ready = false;
-    if (saved.transport === 'usb') {
-        setStatus('connecting over USB…');
-        await arduino.connectSerial(PROMPT);   // always show the port picker
-        if (!arduino.socket) setStatus('press Connect and choose the USB port');
-        return;
-    }
-    const ip = ipIn.value().trim();
-    if (!ip || ip.includes('x')) { setStatus("enter your board's IP and press Connect"); return; }
-    arduino.connect(ip); setStatus('connecting…');
-}
-function doDisconnect() {
-    manualDisconnect = true; ready = false;
-    if (disconnectBtn) { disconnectBtn.html('Disconnecting…'); disconnectBtn.attribute('disabled', ''); }
-    if (connectBtn) { connectBtn.html('Connect'); connectBtn.removeClass('connected').addClass('primary'); }
-    arduino.disconnect();
-    setTimeout(() => setConnected(false), 3000);
-    setStatus('disconnected — press Connect to resume');
-}
-// WiFi shows the IP field; USB hides it (the browser's port picker chooses).
-function applyTransport() {
-    const usb = (transportSelect.value() === 'USB');
-    ipIn.style('display', usb ? 'none' : '');
-}
-// Green "Connected" when live, plain "Connect" otherwise; restore Disconnect.
-function setConnected(on) {
-    if (connectBtn) {
-        connectBtn.html(on ? 'Connected' : 'Connect');
-        connectBtn.removeClass(on ? 'primary' : 'connected').addClass(on ? 'connected' : 'primary');
-    }
-    if (!on && disconnectBtn) { disconnectBtn.html('Disconnect'); disconnectBtn.removeAttribute('disabled'); }
-}
-// Flipping WiFi/USB drops the current connection — a browser holds ONE link.
-function switchTransport() {
-    manualDisconnect = true; ready = false;
-    arduino.disconnect(); setConnected(false);
-    if (camEl) { camEl.remove(); camEl = null; }
-    persist(); applyTransport();
-    setStatus('channel switched — press Connect');
-}
-
-function setStatus(s) { if (statusEl) statusEl.html('status: ' + s); }
-function row(parent, label) {
-    const r = createDiv().class('row').parent(parent);
-    createSpan(label).class('lbl').parent(r);
-    return r;
 }

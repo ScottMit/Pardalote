@@ -110,6 +110,11 @@ nav.site-nav .links a.active { opacity: 1; border-bottom-color: var(--orange); }
 .btn-yellow:hover { background: var(--orange); border-color: var(--orange); color: #fff; }
 .btn-ghost { background: transparent; color: var(--ink); }
 .btn-ghost:hover { background: var(--ink); color: #fff; }
+.btn-try { background: var(--teal); color: #fff; border-color: var(--teal); }
+.btn-try:hover { background: #5fc3ba; border-color: #5fc3ba; color: #fff; }
+/* keep button labels white (outrank .md-body a) and drop the link underline on hover */
+.md-body .ex-meta-row a.btn { color: #fff; }
+.md-body .ex-meta-row a.btn:hover { text-decoration: none; }
 
 /* ---- hero (home) -------------------------------------------------------- */
 header.hero {
@@ -385,6 +390,11 @@ body[data-nav="examples"] .page-head { padding-top: clamp(1rem, 2vw, 1.333rem); 
   margin: 2.2rem 0; aspect-ratio: 16/9; max-width: 780px;
   border: 1.5px dashed var(--ink); display: flex; align-items: center; justify-content: center;
   color: var(--grey); font-size: .9rem; background: var(--paper);
+}
+/* Filled screenshot (simulated run of the example). */
+.screenshot {
+  display: block; margin: 2.2rem 0; max-width: 780px; width: 100%; height: auto;
+  border: 1.5px solid var(--line); border-radius: 6px; background: var(--paper);
 }
 
 /* ---- responsive --------------------------------------------------------- */

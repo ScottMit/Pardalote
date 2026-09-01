@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Generate the Pardalote examples gallery + detail pages from example READMEs."""
-import re, html
+import re, html, shutil
 from pathlib import Path
 from markdown_it import MarkdownIt
 from mdit_py_plugins.anchors import anchors_plugin
@@ -135,6 +135,7 @@ ICONS = {
     "ultrasonic-sensor":          (24, G_SONAR),
     "IMU":                        (24, G_AXES),
     "camera-stream":              (24, G_CAMERA),
+    "camera-posenet":             (24, G_CAMERA),
 }
 ICON_DEFAULT = (24, '<circle cx="12" cy="12" r="7"/>')
 ICON_COLOURS = ["ic-teal", "ic-amber", "ic-orange"]
@@ -193,6 +194,7 @@ ARDUINO = {
     "ultrasonic-sensor":          IDE + "/ultrasonic-sensor/ultrasonic-sensor.ino",
     "IMU":                        IDE + "/IMU/IMU.ino",
     "camera-stream":              IDE + "/camera-stream/camera-stream.ino",
+    "camera-posenet":             IDE + "/camera-stream/camera-stream.ino",   # shares the camera-stream firmware
 }
 
 
@@ -228,6 +230,11 @@ def code_card(label, code, lang):
 
 NO_CODE = {"control-panel", "messaging", "servo-control", "stepper-motor", "bus-servos", "coordinated-motion", "leader-follower", "gesture-builder"}   # tool pages — don't show source
 
+# Examples with no "Try now" button + no runnable mirror: the camera examples
+# stream MJPEG over http:// from the board, which a hosted https page can't
+# reach (mixed content) — and they need real camera hardware regardless.
+NO_TRY = {"camera-stream", "camera-posenet"}
+
 def code_cols(slug):
     if slug in NO_CODE:
         return ""
@@ -247,6 +254,21 @@ for slug, (title, blurb, emoji, grad, tags, level) in EXAMPLES.items():
     intro_md, sep, rest_md = md_text.partition("\n## ")
     intro = _md.render(intro_md)
     rest = _md.render("## " + rest_md) if sep else ""
+
+    # Screenshot: a real image if one has been captured (see
+    # tools/screenshot-examples), otherwise the "coming soon" placeholder.
+    shot_png = REPO / "docs" / "assets" / "examples" / (slug + ".png")
+    if shot_png.exists():
+        shot = ('<img class="screenshot" src="../assets/examples/{slug}.png" '
+                'alt="{title} — the example running" loading="lazy">').format(
+                    slug=slug, title=html.escape(title))
+    else:
+        shot = '<div class="screenshot-slot">Screenshot / video of this example — coming soon</div>'
+
+    # "Try now" opens the hosted runnable copy (USB only — see NO_TRY note).
+    try_btn = ('' if slug in NO_TRY else
+               '<a class="btn btn-try" href="{slug}/index.html" target="_blank" '
+               'rel="noopener">Try now over USB ↗</a>\n      '.format(slug=slug))
 
     page = """<!DOCTYPE html>
 <html lang="en">
@@ -274,9 +296,9 @@ for slug, (title, blurb, emoji, grad, tags, level) in EXAMPLES.items():
   <div class="md-body">
     <div class="tags" style="margin-bottom:.5rem;">{tags}</div>
     <div class="ex-meta-row">
-      <a class="btn btn-dark" href="{gh}/tree/main/examples/{slug}">View the code on GitHub</a>
+      {try_btn}<a class="btn btn-dark" href="{gh}/tree/main/examples/{slug}">View the code on GitHub</a>
     </div>
-    <div class="screenshot-slot">Screenshot / video of this example — coming soon</div>
+    {shot}
 {intro}
   </div>
 {code_cols}
@@ -292,9 +314,34 @@ for slug, (title, blurb, emoji, grad, tags, level) in EXAMPLES.items():
 </html>
 """.format(title=html.escape(title), blurb=html.escape(blurb), nav=NAV,
            tags=tags_html(tags, level), gh=GH, slug=slug, intro=intro, rest=rest, footer=FOOTER,
-           code_cols=code_cols(slug))
+           code_cols=code_cols(slug), shot=shot, try_btn=try_btn)
     (OUT / (slug + ".html")).write_text(page, encoding="utf-8")
     print("wrote", slug + ".html")
+
+# ---------- runnable copies (so "Try now" works on the hosted docs) ----------
+# The site is served from docs/, so the repo-root examples/ aren't reachable
+# there. Mirror each runnable example into docs/examples/<slug>/ and drop the
+# one shared dependency (lib/pardalote.js) at docs/lib/ — the copied pages load
+# it via ../../lib/pardalote.js. These are GENERATED mirrors: edit the originals
+# in examples/ (and lib/), never these copies; a rebuild overwrites them.
+LIB_OUT = REPO / "docs" / "lib"
+LIB_OUT.mkdir(parents=True, exist_ok=True)
+shutil.copy2(REPO / "lib" / "pardalote.js", LIB_OUT / "pardalote.js")
+CONNECT_USB = (Path(__file__).parent / "connect-usb.js").read_text(encoding="utf-8")
+for slug in EXAMPLES:
+    if slug in NO_TRY:            # no runnable mirror for the camera examples
+        continue
+    src_dir = SRC / slug
+    if not src_dir.is_dir():
+        continue
+    shutil.copytree(src_dir, OUT / slug, dirs_exist_ok=True)
+    # Hosted pages are HTTPS → USB only. Swap in the USB-only connect UI for
+    # examples that use connect.js (coordinated-motion / leader-follower build
+    # their own transport UI in sketch.js and are unaffected).
+    conn = OUT / slug / "connect.js"
+    if conn.exists():
+        conn.write_text(CONNECT_USB, encoding="utf-8")
+print("copied runnable examples + lib into docs/ (USB-only connect UI)")
 
 # ---------- gallery ----------
 cards = []

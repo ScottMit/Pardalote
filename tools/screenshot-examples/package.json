@@ -1,0 +1,12 @@
+{
+  "name": "pardalote-screenshot-examples",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Generate simulated 'working' screenshots of the Pardalote examples (virtual board, no hardware).",
+  "scripts": {
+    "shot": "node run.js"
+  },
+  "dependencies": {
+    "puppeteer-core": "^23.0.0"
+  }
+}

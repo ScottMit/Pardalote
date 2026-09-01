@@ -36,9 +36,10 @@
   <div class="md-body">
     <div class="tags" style="margin-bottom:.5rem;"><span class="tag lvl-adv">Advanced</span><span class="tag">Motion</span><span class="tag">Tool</span></div>
     <div class="ex-meta-row">
+      <a class="btn btn-try" href="gesture-builder/index.html" target="_blank" rel="noopener">Try now over USB ↗</a>
       <a class="btn btn-dark" href="https://github.com/ScottMit/Pardalote/tree/main/examples/gesture-builder">View the code on GitHub</a>
     </div>
-    <div class="screenshot-slot">Screenshot / video of this example — coming soon</div>
+    <img class="screenshot" src="../assets/examples/gesture-builder.png" alt="Gesture Builder — the example running" loading="lazy">
 <h1 id="gesture-builder">Gesture Builder</h1>
 <p>Author expressive motion on a timeline, then play it back through Pardalote's
 <code>gesture()</code> — an on-board <strong>segment schedule</strong> each output runs on its own clock.
@@ -196,15 +197,13 @@ shape you draw on screen is the shape the schedule encodes.</p>
 <li><strong>Board limits:</strong> up to <strong>12 segments per servo</strong> and (here) <strong>10 keyframes
 per row</strong> — plenty for a gesture, and it keeps room for the group's arrive-
 together padding.</li>
-<li><strong>Bus servos run their own motion.</strong> Unlike a PWM <code>Servo</code> (where the board
-renders the easing <em>inside</em> each segment), a Feetech bus servo executes each
-segment as a single speed-matched move — so the easing <strong>curve</strong> you pick is
-faithfully drawn in the preview and encoded on the wire, but a bus servo won't
-visibly render an ease <em>within</em> one segment. To make a shape read on real
-bus-servo hardware, <strong>decompose</strong> the move into more, shorter segments (more
-keyframes) — the tool's per-segment timing then does the shaping. This is the
-authoring front-end; deeper on-hardware curve rendering for bus servos is a
-natural next step.</li>
+<li><strong>Bus servos render the curve on the board.</strong> A Feetech bus servo takes a
+<em>(position, speed)</em> target and runs its own move, so — unlike a PWM <code>Servo</code>,
+whose controller takes a raw angle — Pardalote renders the easing with a
+board-side <strong>streaming interpolator</strong>: it samples the curve on a fixed clock and
+streams look-ahead setpoints (batched across a group into one phase-locked
+write). The shape you draw, overshoot included, is the shape the servo runs — no
+need to hand-decompose a move into extra keyframes to fake it.</li>
 </ul>
 
   </div>

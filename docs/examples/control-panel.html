@@ -36,9 +36,10 @@
   <div class="md-body">
     <div class="tags" style="margin-bottom:.5rem;"><span class="tag lvl-start">Beginner</span><span class="tag">Multi-user</span><span class="tag">Tool</span></div>
     <div class="ex-meta-row">
+      <a class="btn btn-try" href="control-panel/index.html" target="_blank" rel="noopener">Try now over USB ↗</a>
       <a class="btn btn-dark" href="https://github.com/ScottMit/Pardalote/tree/main/examples/control-panel">View the code on GitHub</a>
     </div>
-    <div class="screenshot-slot">Screenshot / video of this example — coming soon</div>
+    <img class="screenshot" src="../assets/examples/control-panel.png" alt="Control panel — the example running" loading="lazy">
 <h1 id="control-panel">Control Panel</h1>
 <p>A browser-based control panel for interacting with Arduino pins in real time. Each pin is displayed as a row aligned to a photo of the board. Select a mode from the dropdown and the controls appear. Use the control panel to test your Arduino and circuit.</p>
 <hr />
@@ -204,7 +205,8 @@ last board shown) — a returning visit reconnects automatically.</p>
 <h2 id="file-structure">File Structure</h2>
 <pre><code>control-panel/
 ├── index.html        # Page shell
-├── sketch.js         # Connection, board selector, status indicator
+├── sketch.js         # Board selector + status (connection is connect.js)
+├── connect.js        # Board connection UI (WiFi / USB, remembered per browser)
 ├── control-panel.js  # Panel layout and pin mode logic
 ├── boards.js         # Board definitions (pins, positions, modes)
 ├── style.css         # Panel styling

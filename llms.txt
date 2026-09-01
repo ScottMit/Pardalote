@@ -54,6 +54,7 @@ Complete, working projects (Arduino sketch + web page). Full source: https://git
 - [Ultrasonic sensor](https://scottmit.github.io/Pardalote/examples/ultrasonic-sensor.html): A distance sensor paints a colour bar that responds as you move your hand closer and further away.
 - [Motion sensor (IMU)](https://scottmit.github.io/Pardalote/examples/IMU.html): Tilt the sensor and watch a 3D model rotate with it, live, in all three axes.
 - [Camera stream](https://scottmit.github.io/Pardalote/examples/camera-stream.html): Live video from an ESP32 camera lands on a p5.js canvas, pixels and all — ready for creative coding.
+- [Camera PoseNet](https://scottmit.github.io/Pardalote/examples/camera-posenet.html): Run ml5.js PoseNet on live ESP32 camera video — green keypoints and a skeleton track a person moving in front of the lens.
 
 ## Source
 - [GitHub repository](https://github.com/ScottMit/Pardalote): source code, examples, and the Arduino library.

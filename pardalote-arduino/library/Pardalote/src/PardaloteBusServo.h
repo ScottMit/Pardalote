@@ -138,26 +138,31 @@ private:
     inline static ExtReadPoll _polls[MAX_BUS_SERVOS] = {};
     static constexpr uint16_t DEFAULT_THRESHOLD = 2;
 
-    // Gesture segment schedule (CMD_BUSSERVO_GESTURE). A bus servo runs its
-    // OWN motion, so there is no per-tick curve to render: each segment is one
-    // position write at a distance/duration-matched speed, and the sequencer
-    // advances to the next segment when the servo's Moving flag SETTLES (the
-    // same feedback the DONE poller uses) — not on a timer, so a saturated
-    // segment just takes longer and the next still fires on true arrival. The
-    // per-segment `curve` byte is accepted but NOT rendered inside a segment
-    // (bus-servo expression comes from segment decomposition + lane overlap);
-    // `from` is captured live at gesture start, then chained from each target.
+    // Gesture segment schedule (CMD_BUSSERVO_GESTURE), rendered by a board-side
+    // STREAMING INTERPOLATOR. Unlike a PWM Servo (whose controller takes a raw
+    // angle), a bus servo takes (position, speed, accel) and runs its own move —
+    // so to render an authored easing curve the board samples it on a fixed clock
+    // (BUS_STEP_MS) and streams a LOOK-AHEAD setpoint each tick, with a feed-
+    // forward speed sized to cover exactly one tick, batched into ONE SyncWrite so
+    // every lane steps in phase. This faithfully renders ease/overshoot (CURVE_BACK)
+    // on real hardware, and — being time-clocked off the group's shared startMs —
+    // makes bus lanes arrive together. `from` is captured live at gesture start,
+    // then chained from each segment's commanded end. See serviceGestureStreaming().
     static const uint8_t MAX_BUS_SERVO_SEGMENTS = 12;
-    static const int     BUS_SEG_MAX_SPEED      = 4095;   // hardware/lib ceiling (authored dur wins)
+    static const int      BUS_SEG_MAX_SPEED     = 4095;   // hardware/lib ceiling (counts/sec)
+    static const uint32_t BUS_STEP_MS           = 20;     // interpolation tick — 50 Hz (bench knob)
+    static const uint8_t  BUS_STREAM_ACC        = 50;     // per-tick accel (bench knob)
     struct BSeg { uint8_t curve; uint16_t dur; int32_t value; };
     inline static BSeg     _bsegs[MAX_BUS_SERVOS][MAX_BUS_SERVO_SEGMENTS] = {};
     inline static uint8_t  _bsegCount[MAX_BUS_SERVOS]  = {};   // 0 = no gesture running
     inline static bool     _gestureActive[MAX_BUS_SERVOS] = {};   // last-broadcast gesturing state
     inline static uint8_t  _bsegIndex[MAX_BUS_SERVOS]  = {};
     inline static uint8_t  _bsegFlags[MAX_BUS_SERVOS]  = {};   // GESTURE_FLAG_*
-    inline static int32_t  _bsegFrom[MAX_BUS_SERVOS]   = {};   // start of the current segment
-    inline static int32_t  _bsegTarget[MAX_BUS_SERVOS] = {};   // end of the current segment (chained)
-    inline static uint16_t _bsegDurMs[MAX_BUS_SERVOS]  = {};   // authored duration — segment's time floor
+    inline static int32_t  _bsegFrom[MAX_BUS_SERVOS]   = {};   // start value of the current segment
+    inline static int32_t  _bsegTarget[MAX_BUS_SERVOS] = {};   // end value of the current segment (chained)
+    inline static uint16_t _bsegDurMs[MAX_BUS_SERVOS]  = {};   // current segment duration (ms)
+    inline static uint32_t _bsegStartMs[MAX_BUS_SERVOS]= {};   // board-clock start of the current segment
+    inline static uint32_t _lastBusStepMs              = 0;    // last interpolation tick (shared clock)
     inline static PardaloteGestureDone _onDone[MAX_BUS_SERVOS] = {};   // sketch whenDone() callback
 
     static bool validId(int id) { return id >= 0 && id < MAX_BUS_SERVOS; }
@@ -205,6 +210,15 @@ private:
         pos = constrain(pos, 0, isSC(id) ? 1023 : 4095);
         if (isSC(id)) _sc.WritePos(sid, pos, 0, speed);
         else          _st.WritePosEx(sid, pos, speed, acc);
+    }
+
+    // Clamp a target to this id's soft limits (if set) else the series' physical
+    // range. Shared by segment loading and the streaming tick's SyncWrite batch
+    // (which bypasses writePos()'s own clamp), so an out-of-range value never
+    // reaches the wire and mod-wraps the servo. CURVE_BACK overshoot lands here.
+    static int32_t clampToRange(int id, int32_t v) {
+        if (_limitSet[id]) return constrain(v, (int32_t)_minPos[id], (int32_t)_maxPos[id]);
+        return constrain(v, (int32_t)0, (int32_t)(isSC(id) ? 1023 : 4095));
     }
 
     static void writeSpeed(int id, int speed, int acc) {
@@ -255,29 +269,118 @@ private:
         _lastMovePollMs[id] = 0;
     }
 
-    // Issue segment `idx` as one position write at a distance/duration-matched
-    // speed, then arm the settle poller. `from` is _bsegFrom[id] (captured at
-    // gesture start, chained from each target); target = from+delta (relative)
-    // or the value itself (absolute), clamped to soft limits / series range.
-    static void loadBusSegment(int id, uint8_t idx) {
-        const BSeg& seg = _bsegs[id][idx];
-        int32_t from    = _bsegFrom[id];
-        int32_t target  = (_bsegFlags[id] & GESTURE_FLAG_ABSOLUTE) ? seg.value : from + seg.value;
-        if (_limitSet[id]) target = constrain(target, (int32_t)_minPos[id], (int32_t)_maxPos[id]);
-        else               target = constrain(target, (int32_t)0, (int32_t)(isSC(id) ? 1023 : 4095));
+    // Arm segment `idx` for the streaming interpolator: resolve its absolute
+    // target (clamped) and record from / target / duration / start-time. The
+    // curve is NOT rendered here — serviceGestureStreaming() samples it every
+    // tick and streams setpoints. `from` is _bsegFrom[id] (the live position for
+    // idx 0, then chained from each commanded end). `startMs` anchors the segment
+    // on the shared board clock, so grouped lanes stay phase-locked and the
+    // timeline never drifts (each next segment starts at prev start + prev dur).
+    static void loadBusSegment(int id, uint8_t idx, uint32_t startMs) {
+        const BSeg& seg  = _bsegs[id][idx];
+        int32_t target   = (_bsegFlags[id] & GESTURE_FLAG_ABSOLUTE) ? seg.value
+                                                                     : _bsegFrom[id] + seg.value;
+        _bsegIndex[id]   = idx;
+        _bsegTarget[id]  = clampToRange(id, target);
+        _bsegDurMs[id]   = seg.dur ? seg.dur : 1;
+        _bsegStartMs[id] = startMs;
+    }
 
-        uint16_t dur    = seg.dur ? seg.dur : 1;
-        float    durSec = dur / 1000.0f;
-        long     dist   = labs((long)target - (long)from);
-        int      speed  = (int)lroundf((float)dist / durSec);
-        if (speed < 1)               speed = 1;                 // Feetech: 0 = full speed
+    // Land + retire a finished gesture: report DONE (commanded landing — no bus
+    // read on the hot path; the periodic reads correct the marker), fire the
+    // sketch whenDone(), and clear the lane. The gesture-active edge scan in
+    // loop() broadcasts the inactive state off _bsegCount hitting 0.
+    static void finishGesture(int id) {
+        int32_t landed = _bsegTarget[id];
+        _bsegCount[id] = 0;
+        FrameBuilder fb;
+        fb.begin(CMD_BUSSERVO_DONE, DEVICE_BUSSERVO);
+        fb.addInt(id);
+        fb.addInt(landed);
+        Pardalote.broadcastFrame(fb);
+        if (_onDone[id]) _onDone[id](id);   // sketch whenDone() hook
+    }
+
+    // Collect one streamed setpoint. ST lanes batch into the SyncWrite arrays
+    // (one phase-locked frame per tick); SC/SCS lanes (no SyncWritePosEx) are
+    // written individually here. `pos` is pre-clamped by the caller.
+    static void pushSetpoint(int id, int32_t pos, int speed,
+                             uint8_t* ids, int16_t* positions, uint16_t* speeds,
+                             uint8_t* accs, int& n) {
+        if (speed < 1)                 speed = 1;
         if (speed > BUS_SEG_MAX_SPEED) speed = BUS_SEG_MAX_SPEED;
+        if (isSC(id)) {
+            _sc.WritePos(_servoId[id], (int)pos, 0, speed);   // SC: no acc / no SyncWrite
+        } else {
+            ids[n]       = _servoId[id];
+            positions[n] = (int16_t)pos;
+            speeds[n]    = (uint16_t)speed;
+            accs[n]      = BUS_STREAM_ACC;
+            n++;
+        }
+    }
 
-        _bsegIndex[id]  = idx;
-        _bsegTarget[id] = target;
-        _bsegDurMs[id]  = dur;
-        writePos(id, target, speed, 50);
-        beginAwaitDone(id);   // loop() polls the Moving flag → advance or DONE
+    // Streaming interpolator tick (~50 Hz). For every lane with a running
+    // gesture: advance past any elapsed segments (a short pad/hold may span < a
+    // tick), then sample the eased curve NOW and one tick AHEAD and command the
+    // look-ahead point at the feed-forward speed that covers the gap in one tick
+    // — so the servo cruises smoothly rather than jump-and-wait, and CURVE_BACK
+    // overshoots then returns. ST lanes are batched into a single SyncWrite; SC
+    // lanes stream individually. Time-clocked, so a group's lanes (padded to a
+    // shared duration) arrive together. Runs beside the plain-write done poller,
+    // which owns non-gesture writes (mutually exclusive: every write path cancels
+    // the gesture before arming that poller).
+    static void serviceGestureStreaming(uint32_t now) {
+        if (now - _lastBusStepMs < BUS_STEP_MS) return;
+        _lastBusStepMs = now;
+
+        static uint8_t  ids[MAX_BUS_SERVOS];
+        static int16_t  positions[MAX_BUS_SERVOS];
+        static uint16_t speeds[MAX_BUS_SERVOS];
+        static uint8_t  accs[MAX_BUS_SERVOS];
+        int n = 0;   // ST SyncWrite batch size
+
+        for (int id = 0; id < MAX_BUS_SERVOS; id++) {
+            if (_bsegCount[id] == 0) continue;              // no gesture on this lane
+            if (!_attached[id]) { _bsegCount[id] = 0; continue; }
+
+            // Advance through any segments that have fully elapsed. Each next
+            // segment is anchored at prev start + prev dur (no drift); a lane
+            // whose final segment has elapsed lands on target and finishes.
+            bool finished = false;
+            while (now - _bsegStartMs[id] >= _bsegDurMs[id]) {
+                if (_bsegIndex[id] + 1 < _bsegCount[id]) {
+                    _bsegFrom[id] = _bsegTarget[id];        // chain from the commanded end
+                    loadBusSegment(id, _bsegIndex[id] + 1, _bsegStartMs[id] + _bsegDurMs[id]);
+                } else {
+                    pushSetpoint(id, clampToRange(id, _bsegTarget[id]), 1000,
+                                 ids, positions, speeds, accs, n);   // land exactly on target
+                    finishGesture(id);
+                    finished = true;
+                    break;
+                }
+            }
+            if (finished || _bsegCount[id] == 0) continue;
+
+            // Sample the eased curve at `now` and at `now + tick`; command the
+            // look-ahead position with a feed-forward speed (counts/sec).
+            uint16_t dur   = _bsegDurMs[id];
+            int32_t  from  = _bsegFrom[id];
+            int32_t  d     = _bsegTarget[id] - from;
+            uint8_t  curve = _bsegs[id][_bsegIndex[id]].curve;
+            uint32_t el    = now - _bsegStartMs[id];
+            uint32_t elN   = el + BUS_STEP_MS;
+            if (elN > dur) elN = dur;
+            float shNow    = pardaloteEase(curve, (float)el  / (float)dur);
+            float shNext   = pardaloteEase(curve, (float)elN / (float)dur);
+            int32_t posNow  = clampToRange(id, from + (int32_t)lroundf((float)d * shNow));
+            int32_t posNext = clampToRange(id, from + (int32_t)lroundf((float)d * shNext));
+            long step  = labs((long)posNext - (long)posNow);
+            int  speed = (int)lroundf((float)step / (BUS_STEP_MS / 1000.0f));
+            pushSetpoint(id, posNext, speed, ids, positions, speeds, accs, n);
+        }
+
+        if (n > 0) _st.SyncWritePosEx(ids, n, positions, speeds, accs);
     }
 
     // Drop any running gesture (a direct write / mode change / detach
@@ -308,12 +411,12 @@ public:
     // Compose-and-play a segment schedule from the sketch — the board-side
     // gesture() (see internal/gesture.h). The same code the CMD_BUSSERVO_GESTURE
     // wire path runs, minus the byte unpack. Registered as the DEVICE_BUSSERVO
-    // starter for the coordinated PardaloteGesture builder. A bus servo is
-    // arrival-clocked (advances on the Moving-flag settle, not a timer), so the
-    // shared startMs is unused; padToMs appends a trailing hold so short lanes
-    // arrive with the longest (approximate for bus servos — see the class note).
+    // starter for the coordinated PardaloteGesture builder. The bus servo is now
+    // time-clocked (the streaming interpolator samples the curve off the shared
+    // startMs), so grouped lanes are phase-locked; padToMs appends a trailing
+    // hold so short lanes arrive with the longest.
     static void startGesture(int id, const PardaloteSeg* segs, uint8_t count,
-                             uint8_t flags, uint32_t /*startMs*/, uint32_t padToMs = 0) {
+                             uint8_t flags, uint32_t startMs, uint32_t padToMs = 0) {
         if (!validId(id) || !_attached[id] || !segs || count == 0) return;
         ensureBus();
         uint8_t  n     = count > MAX_BUS_SERVO_SEGMENTS ? MAX_BUS_SERVO_SEGMENTS : count;
@@ -333,10 +436,10 @@ public:
         }
         _bsegCount[id] = n;
         _bsegFlags[id] = flags;
-        int32_t from = readPos(_servoId[id]);   // live start (relative anchor)
+        int32_t from = readPos(_servoId[id]);   // live start (lead-in anchor)
         if (from < 0) from = 0;
         _bsegFrom[id] = from;
-        loadBusSegment(id, 0);
+        loadBusSegment(id, 0, startMs ? startMs : millis());
     }
 
     // Register a whenDone() callback (nullptr clears it).
@@ -668,6 +771,7 @@ public:
         // schedule the board sequences locally (see defs.h layout).
         if (cmd == CMD_BUSSERVO_GESTURE) {
             ensureBus();
+            uint32_t startMs = millis();   // one shared clock → all channels phase-locked
             uint16_t off = 0;
             while (off + 3 <= payloadLen) {
                 int     sid   = payload[off];
@@ -689,7 +793,7 @@ public:
                     int32_t from = readPos(_servoId[sid]);       // live start (relative anchor)
                     if (from < 0) from = 0;
                     _bsegFrom[sid] = from;
-                    loadBusSegment(sid, 0);
+                    loadBusSegment(sid, 0, startMs);
                 }
                 off += (uint16_t)count * 7;                       // skip the whole declared block
             }
@@ -947,13 +1051,20 @@ public:
     }
 
     // -------------------------------------------------------------------
-    // Loop hook — polls the Moving flag of any servo awaiting arrival (after
-    // a position write) at ~30 Hz, and broadcasts CMD_BUSSERVO_DONE when it
-    // settles (or after a timeout). Reading doesn't interrupt the servo's
-    // motion — it's a status query, run concurrently with its control loop.
+    // Loop hook. Three concerns: (1) render running gestures via the streaming
+    // interpolator; (2) poll the Moving flag of any servo awaiting arrival after
+    // a PLAIN write and broadcast CMD_BUSSERVO_DONE when it settles (or times
+    // out); (3) periodic position reads for the browser. Reads are status
+    // queries — they run concurrently with the servo's own motion.
     // -------------------------------------------------------------------
     static void loop() {
         uint32_t now = millis();
+
+        // (1) Time-clocked gesture rendering — samples each running lane's curve
+        // and streams look-ahead setpoints (batched SyncWrite for ST lanes).
+        serviceGestureStreaming(now);
+
+        // (2) Arrival poller for plain (non-gesture) writes → CMD_BUSSERVO_DONE.
         for (int id = 0; id < MAX_BUS_SERVOS; id++) {
             if (!_attached[id] || !_awaitDone[id]) continue;
             if (now - _awaitStartMs[id]   < MOVE_STARTUP_MS) continue;   // let it start moving
@@ -968,35 +1079,17 @@ public:
             bool tooLong = (now - _awaitStartMs[id] > MOVE_MAX_MS);       // absolute ceiling
             if (!arrived && !lost && !tooLong) continue;
 
-            // Gesture segment that settled EARLY: hold the lane until its
-            // authored duration elapses. Keeps group lanes phase-locked and
-            // makes a zero-distance pad/hold actually wait (it would otherwise
-            // settle instantly). Error paths (lost/tooLong) skip the floor.
-            if (_bsegCount[id] > 0 && arrived && !lost && !tooLong &&
-                (now - _awaitStartMs[id] < _bsegDurMs[id])) continue;
-
             _awaitDone[id] = false;
 
-            // Gesture sequencing — a segment just settled. On real arrival with
-            // more segments, chain to the next (no DONE). On the last segment,
-            // or if the move was lost/timed out, finish and emit DONE below.
-            bool wasGesture = _bsegCount[id] > 0;   // vs a plain awaited write
-            if (_bsegCount[id] > 0) {
-                if (arrived && _bsegIndex[id] + 1 < _bsegCount[id]) {
-                    _bsegFrom[id] = _bsegTarget[id];        // chain from the commanded target
-                    loadBusSegment(id, _bsegIndex[id] + 1); // re-arms _awaitDone
-                    continue;
-                }
-                _bsegCount[id] = 0;                          // gesture complete (or aborted)
-            }
-
+            // A plain awaited write settled (or was lost / timed out) — report
+            // the landing position. Gestures no longer use this poller; they run
+            // and finish time-clocked in serviceGestureStreaming().
             int pos = readPos(_servoId[id]);
             FrameBuilder fb;
             fb.begin(CMD_BUSSERVO_DONE, DEVICE_BUSSERVO);
             fb.addInt(id);
             fb.addInt(pos);
             Pardalote.broadcastFrame(fb);
-            if (wasGesture && _onDone[id]) _onDone[id](id);   // sketch whenDone() hook
         }
 
         // Board-side periodic reads — ONE FeedBack() transaction per due
@@ -1174,9 +1267,9 @@ public:
 
     // gesture(id, segs, count, flags?) — play a SEGMENT SCHEDULE on the board,
     // the sketch-side twin of JS busServo.gesture(). segs is a PardaloteSeg[]
-    // (counts; absolute by default, flags = 0 for relative). Segments advance on
-    // true arrival (Moving-flag settle), not a timer; the per-segment curve is
-    // stored but not rendered intra-segment. Coordinate via Pardalote.gesture().
+    // (counts; absolute by default, flags = 0 for relative). A board-side
+    // streaming interpolator renders each segment's easing curve on its own
+    // clock (including CURVE_BACK overshoot). Coordinate via Pardalote.gesture().
     void gesture(int id, const PardaloteSeg* segs, uint8_t count,
                  uint8_t flags = GESTURE_FLAG_ABSOLUTE) const {
         BusServoExt::startGesture(id, segs, count, flags, millis());

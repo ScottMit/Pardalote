@@ -61,4 +61,7 @@ EXAMPLES = {
     "camera-stream": ("Camera stream",
         "Live video from an ESP32 camera lands on a p5.js canvas, pixels and all — ready for creative coding.",
         "📷", "linear-gradient(135deg,#e8ddd2,#c4a284)", ["Vision", "p5.js"], "Advanced"),
+    "camera-posenet": ("Camera PoseNet",
+        "Run ml5.js PoseNet on live ESP32 camera video — green keypoints and a skeleton track a person moving in front of the lens.",
+        "🕺", "linear-gradient(135deg,#dfeee2,#79bf94)", ["Vision", "p5.js"], "Advanced"),
 }

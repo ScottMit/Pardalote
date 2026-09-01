@@ -1,0 +1,336 @@
+/* ==========================================================================
+   Pardalote example — house style
+   Matches the website ("Graph Line / Bauhaus"): white paper, graph-paper
+   wash, Poppins, 1.5px ink outlines, teal / amber / orange accents.
+   Base rules are shared with every Pardalote example (canonical copy:
+   examples/stepper-motor/style.css); this example adds the pin-card rules.
+   ========================================================================== */
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
+
+:root {
+    --ink:      #2B2420;
+    --ink-soft: #4a463f;
+    --grey:     #6d6a5f;
+    --paper:    #FFFFFF;
+    --cream:    #F2E9D8;
+    --orange:   #D3542B;   /* primary accent / warnings   */
+    --teal:     #3FA9A0;   /* live / active               */
+    --green:    #3E9C54;   /* connected                   */
+    --amber:    #E8A33D;   /* highlights / secondary      */
+    --line:     #2B2420;   /* structural outlines         */
+    --hair:     #d9d2c2;   /* soft dividers               */
+    --grid:     #ededed;   /* graph-paper lines           */
+    --mono: "SF Mono", "Fira Code", ui-monospace, Consolas, monospace;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+    font-family: 'Poppins', -apple-system, system-ui, sans-serif;
+    color: var(--ink);
+    background: var(--paper);
+    line-height: 1.5;
+}
+
+/* graph-paper lives in the header band only — the boards sit on plain paper */
+.page-head {
+    background-color: var(--paper);
+    background-image:
+        linear-gradient(var(--grid) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 40px 40px;
+    border-bottom: 1px solid var(--hair);
+}
+#head {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 26px clamp(16px, 4vw, 40px) 18px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+main {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 30px clamp(16px, 4vw, 40px) 44px;   /* clear air below the graph */
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+/* ---- header ---- */
+.brand {
+    font-family: 'Poppins', -apple-system, system-ui, sans-serif;
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    color: #f2b705;          /* pardalote yellow — matches "working together" on the home page */
+    margin-bottom: 2px;
+}
+.brand a { color: inherit; text-decoration: none; }
+.brand a:hover { text-decoration: underline; }
+.heading {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    margin-bottom: 2px;
+}
+.heading::after {
+    content: "";
+    display: block;
+    width: 44px;
+    height: 3px;
+    background: var(--amber);
+    margin-top: 6px;
+}
+#status {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--grey);
+    margin: 8px 0 14px;
+}
+
+/* ---- control rows ---- */
+.row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    font-size: 13px;
+    color: var(--ink-soft);
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+}
+.lbl {
+    width: 74px;
+    flex: none;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: var(--ink);
+}
+
+/* ---- controls ---- */
+button, select {
+    font-family: 'Poppins', system-ui, sans-serif;
+    font-size: 12.5px;
+    font-weight: 600;
+    padding: 5px 12px;
+    background: var(--paper);
+    color: var(--ink);
+    border: 1.5px solid var(--line);
+    border-radius: 0;
+    cursor: pointer;
+    transition: background .15s, color .15s, border-color .15s;
+}
+button:hover { background: var(--ink); color: #fff; }
+button.primary { background: var(--ink); color: #fff; }
+button.primary:hover { background: var(--green); border-color: var(--green); color: #fff; }
+/* connected state (Connect button, WiFi or USB) */
+button.connected { background: var(--green); border-color: var(--green); color: #fff; }
+button.connected:hover { background: var(--green); border-color: var(--green); color: #fff; }
+
+input[type=text], input[type=number] {
+    font-family: var(--mono);
+    font-size: 13px;
+    padding: 4px 7px;
+    background: var(--paper);
+    color: var(--ink);
+    border: 1.5px solid var(--line);
+    border-radius: 0;
+}
+input[type=range] { accent-color: var(--teal); }
+
+/* ==========================================================================
+   This example: the pinout panel — cards laid out over the board photo
+   ========================================================================== */
+
+.pinout-container {
+    /* dimensions set by JS */
+}
+
+/* ── Horizontal pin card ── */
+
+.h-card {
+    position: absolute;        /* set by JS */
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 0 7px;
+    background: var(--paper);
+    border: 1px solid var(--hair);
+}
+
+/* Left cards: controls on far-left, name flush against board */
+.left-card {
+    border-right: none;
+    padding-right: 5px;
+}
+
+/* Right cards: name flush against board, controls on far-right */
+.right-card {
+    border-left: none;
+    padding-left: 5px;
+}
+
+/* ── Label-only cards (GND, 3.3V, AREF, etc.) ── */
+
+.label-card {
+    background: transparent;
+    border-color: transparent;
+}
+
+.label-card .h-pin-name {
+    flex: 1;        /* fill card so text-align has room to work */
+}
+
+/* ── Pin name label ── */
+
+.h-pin-name {
+    font-family: var(--mono);
+    color: var(--ink);
+    font-size: 12px;
+    font-weight: bold;
+    white-space: nowrap;
+    min-width: 30px;
+    flex-shrink: 1;            /* long names (Xiao) give way to the slider… */
+    overflow: hidden;
+    text-overflow: ellipsis;   /* …and ellipsise rather than overflow */
+}
+
+/* For left cards the name is last in DOM → it sits at the right (board) edge.
+   Align it right so it feels flush against the board. */
+.left-card .h-pin-name {
+    text-align: right;
+}
+
+/* ── Pin number badge (IO09 etc.) ── */
+
+.h-pin-num {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--grey);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+/* ── Mode selector ── */
+
+.h-mode-select {
+    background: var(--paper);
+    color: var(--grey);
+    border: 1px solid var(--hair);
+    border-radius: 0;
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 400;
+    padding: 1px 2px;
+    height: 20px;
+    width: 76px;
+    flex-shrink: 0;
+    cursor: pointer;
+}
+
+.h-mode-select:focus { outline: none; border-color: var(--ink); }
+.h-mode-select.active { color: var(--ink); border-color: var(--ink); }
+
+/* ── Controls area — fills remaining space ── */
+
+.h-controls {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+}
+
+/* Left card: controls fill leftward → push content to the right */
+.left-card .h-controls {
+    justify-content: flex-end;
+}
+
+/* ── Input mode indicator ── */
+
+.h-indicator {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: bold;
+    padding: 1px 7px;
+    background: var(--grid);
+    color: var(--grey);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.h-high { background: #e0f0ee; color: var(--teal); }
+.h-low  { background: #f7e4dc; color: var(--orange); }
+
+/* ── Output mode ── */
+
+.h-btn {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 600;
+    border: none;
+    border-radius: 0;
+    padding: 0 6px;
+    height: 18px;
+    cursor: pointer;
+    flex-shrink: 0;
+    line-height: 18px;
+}
+
+.h-btn:active { filter: brightness(1.15); }
+
+.h-btn-hi { background: var(--teal); color: #fff; }
+.h-btn-hi:hover { background: #35948c; color: #fff; }
+.h-btn-lo { background: var(--orange); color: #fff; }
+.h-btn-lo:hover { background: #b8481f; color: #fff; }
+
+.h-state        { font-family: var(--mono); font-size: 10px; color: var(--hair); flex-shrink: 0; }
+.h-st-hi        { color: var(--teal); }
+.h-st-lo        { color: var(--orange); }
+
+/* ── PWM slider ── */
+
+.h-slider {
+    flex: 1;
+    min-width: 90px;   /* guaranteed usable length even beside long pin names */
+    max-width: 140px;
+    accent-color: var(--amber);
+    cursor: pointer;
+    height: 14px;
+}
+
+.h-val {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--ink-soft);
+    min-width: 26px;
+    text-align: right;
+    flex-shrink: 0;
+}
+
+/* ── Analog bar ── */
+
+.h-bar {
+    flex: 1;
+    min-width: 60px;
+    max-width: 150px;
+    height: 9px;
+    background: var(--grid);
+    border: 1px solid var(--hair);
+    overflow: hidden;
+}
+
+.h-fill {
+    height: 100%;
+    background: var(--teal);
+    width: 0%;
+    transition: width 0.08s linear;
+}
+
+/* uniform control height — buttons, selects and text inputs line up in the setup rows */
+.row button, .row select, .row input[type=text], .row input[type=number] { height: 32px; }

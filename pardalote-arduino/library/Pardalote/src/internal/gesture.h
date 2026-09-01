@@ -117,8 +117,9 @@ void writeImmediateFor(uint16_t deviceId, int id, int32_t target);
 //       .add(DEVICE_SERVO, wrist,    wristG,    1)    // shorter → padded
 //       .play();
 //
-// Note: bus-servo lanes are arrival-clocked, so "arrive together" is
-// approximate for them (already true of the JS group).
+// Note: every actuator type is now time-clocked (bus servos render their
+// segments with a board-side streaming interpolator), so lanes stay phase-
+// locked and arrive together.
 // -------------------------------------------------------------------
 class PardaloteGesture {
     static const uint8_t MAX_LANES = 12;

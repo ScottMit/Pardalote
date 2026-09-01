@@ -211,7 +211,7 @@
 </tbody>
 </table>
 <h2 id="gesture">gesture()</h2>
-<p>Plays an authored <strong>segment schedule</strong> — an ordered list of moves the board runs back-to-back, advancing to the next when the servo reports it has arrived (its own <code>Moving</code> flag, not a timer). Values are in <strong>counts</strong>. Because a bus servo runs its own motion, each segment is one move at a distance/duration-matched speed, so the <code>curve</code> is accepted (for schema parity across actuators) but <strong>not rendered inside a segment</strong> — unlike a PWM servo. Expression comes from how you break the move into segments, and from lane overlap in a <a href="groups.html#gesture">group</a>. Fires <code>done</code> when the last segment lands.</p>
+<p>Plays an authored <strong>segment schedule</strong> — an ordered list of moves the board runs back-to-back on its own clock. Values are in <strong>counts</strong>. A bus servo takes a <em>(position, speed)</em> target and runs its own move, so the board renders each segment's easing <code>curve</code> with a <strong>streaming interpolator</strong>: it samples the curve on a fixed clock and streams look-ahead setpoints (batched across a group into one phase-locked write), so the shape you author — overshoot included — is the shape the servo runs. Fires <code>done</code> when the last segment lands. Coordinate several lanes with a <a href="groups.html#gesture">group</a>.</p>
 <div class="sig sig-js">arduino.shoulder.<span class="fn">gesture</span>(segments, [opts])</div>
 <p>Each segment carries a duration and a displacement expressed <strong>either</strong> relatively (<code>by</code>) <strong>or</strong> absolutely (<code>to</code>):</p>
 <table>

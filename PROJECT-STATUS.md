@@ -51,8 +51,9 @@ structurally verified unless a bench entry says otherwise.
 
 ## What's built this session
 
-> **Note:** this file spans several sessions. The **Gesture Builder multi-output
-> entry immediately below** is the most recent work, then the `arduino.gesture()`
+> **Note:** this file spans several sessions. The **bus-servo streaming
+> interpolator entry immediately below** is the most recent work, then the
+> Gesture Builder multi-output entry, then the `arduino.gesture()`
 > entry, then the Gesture Builder entry, then the bare-pins entry, then
 > the tool-example connection
 > standard, the leader-follower example, the bus-servo firmware-limits entry,
@@ -62,6 +63,49 @@ structurally verified unless a bench entry says otherwise.
 > them (starting with the stepper homing rework) is from earlier sessions,
 > regardless of the "(this session)" labels still on those older bullets.
 > (The heading predates the multi-session history.)
+
+- **Bus-servo GESTURE now streamed: true on-hardware curve shaping (NEWEST, NOT bench-tested).**
+  Retires the old caveat "to make a shape read on real bus-servo hardware, decompose into
+  more segments." The bus gesture engine in `PardaloteBusServo.h` was **arrival-clocked**
+  (each segment = one `WritePosEx(target, speed)`, advance when the Moving flag settles), so
+  the servo drew a straight velocity ramp per segment and the authored easing/overshoot was
+  never rendered. Replaced with a **board-side streaming interpolator**, mirroring how the PWM
+  `ServoExt::loop()` already renders curves — reusing the shared `pardaloteEase()` (defs.h) so
+  the shape matches the browser's `curveShape()` exactly.
+  - **How:** new `serviceGestureStreaming(now)` runs a fixed tick (`BUS_STEP_MS = 20` → 50 Hz,
+    a bench knob). Each tick, for every lane with a running gesture, it samples the eased curve
+    at `now` and one tick ahead and commands the **look-ahead position with a feed-forward
+    speed** sized to cover one tick (counts/sec) — so the servo cruises smoothly instead of
+    jump-and-wait, and `CURVE_BACK` overshoots then returns (clamped to soft/series range via
+    new `clampToRange()`). ST lanes batch into **one `SyncWritePosEx`** per tick (phase-locked);
+    SC/SCS lanes (no SyncWrite) stream individually.
+  - **Time-clocked now**, so `startGesture()` honors the group's shared `startMs` (the wire
+    handler captures one `millis()` for all channel blocks). Bus lanes in a group therefore
+    **arrive together** — the old "approximate for bus" note in `internal/gesture.h` is gone.
+  - `loadBusSegment(id, idx, startMs)` now just *stores* the segment (from/target/dur/curve/
+    start) — no bus write, no `beginAwaitDone`. `finishGesture()` emits DONE (commanded landing,
+    no bus read on the hot path) + fires the sketch `whenDone()`. Segment advance is a no-drift
+    while-loop (next start = prev start + prev dur; consumes short pads spanning < a tick).
+  - **Plain writes unchanged:** `write()` / `writeTimed`-immediate / browser WRITE / SYNC_WRITE
+    still one-shot `WritePosEx` + the Moving-flag DONE poller. Safe because every write path
+    calls `cancelBusGesture()` before `beginAwaitDone()`, so a channel is never both streaming
+    (`_bsegCount>0`) and await-done. Feedback: the existing periodic reads still feed the
+    browser marker + LOST back-off — reads are OUT of the control loop now.
+  - **No wire-format / dependency change.** Reuses SCServo's `SyncWritePosEx` + `pardaloteEase`.
+    Browser, `arduino.gesture({…})`, and C++ `Pardalote.gesture()` untouched. Older firmware
+    renders piecewise from the same schedule (graceful).
+  - **Structurally verified only** — `tools/stub-compile/run.sh` clean on ESP32 / UNO R4 WiFi /
+    Minima, and the header force-parses clean on all three (harness sketch plays a bus gesture).
+    **ZERO hardware bench.** Bench checklist:
+    (1) one servo, ease-in-out + `CURVE_BACK` — confirm the shape renders and overshoot is
+        visible and clamps at limits;
+    (2) tune `BUS_STEP_MS` (try 10 ms) and `BUS_STREAM_ACC` if motion is coarse or buzzes;
+    (3) a multi-servo group — confirm phase-lock / arrive-together and bus headroom;
+    (4) SC/SCS series (individual streamed writes) if an SC servo is on the bench;
+    (5) supersede mid-gesture with a `write()`; (6) brownout mid-stream → LOST + recovery;
+    (7) confirm no WiFi/USB transport stutter at the tick rate (the reason reads were decoupled).
+  - Optional next: **linear-passthrough** (a single `CURVE_LINEAR` segment = the servo's own
+    constant-speed move; skip streaming for it) to cut packets on plain timed moves.
 
 - **Gesture Builder — multi-output support: bus servo / PWM servo / stepper (current
   session, Scott's direction).** The example is no longer bus-servo-only; every row is a
@@ -284,7 +328,62 @@ structurally verified unless a bench entry says otherwise.
   `PLAN-listen-and-switch.md`, now **deleted** (plan executed); shipped behaviour is
   documented in the CHANGELOG 1.0.0 entry.
 
-- **Tool-example CONNECTION STANDARD — canonical, DUPLICATED per example
+- **Tool-example CONNECTION STANDARD — now a per-folder `connect.js`
+  (2026-09-01, Scott's direction). SUPERSEDES the "duplicated verbatim" standard
+  documented in the bullet after this one.** The connection UI (WiFi/USB
+  transport, IP field, Connect/Disconnect, button state, `usbBusy`, status,
+  auto-reconnect-on-return) now lives in a single **`connect.js`** file **copied
+  identically into each example folder**. A sketch calls
+  `setupConnection(arduino, { store })` once and keeps only its own
+  `arduino.on('ready', …)` / `on('disconnect', …)` for device config. Key points:
+  - **Still copy-one-folder, zero *external* deps.** `connect.js` travels WITH the
+    example (it's in the folder), so the old "shared `_lib/connect.js` breaks
+    copy-paste" objection (see the **Rejected** bullet below, now reversed) does
+    NOT apply — this is a per-folder duplicate of ONE file, not a cross-folder
+    dependency. That distinction is what reverses the earlier rejection.
+  - **Builds its controls with plain DOM** (`document.createElement`), so the
+    identical file works in BOTH p5 sketches and DOM-only examples (no p5
+    dependency). Inserts the Board row right after `#top`, into **`#top`'s parent**
+    (usually `<main>`; control-panel's is a `#head` band — hence the
+    parent-relative insert rather than a hardcoded `<main>`).
+  - **API:** `setupConnection(arduino, { store, defaults? })` returns
+    `{ setStatus, connect, disconnect }`. Pin/device config uses the library's own
+    `arduino.on('ready', …)` (NOT an example-only callback). Events stack, so
+    connect.js's ready/disconnect handlers and the sketch's both fire.
+  - **Separate store keys.** connect.js remembers IP/transport under `store`; a
+    tool with its own settings (pins, bus RX/TX, servo IDs, gestures) keeps a
+    SEPARATE `-cfg`/`-conn` key so the two don't clobber (connect.js's persist
+    writes only `{ip, transport}`). For gesture-builder the tool store holds the
+    user's GESTURE DATA, so connect.js got a `-conn` key specifically to leave that
+    key untouched.
+  - **Tool-specific bits stay in the sketch:** bus RX/TX fields + the UNO R4
+    pin-lock (`applyR4Pins`/`lockField`), servo-ID re-bind, etc. connect.js owns
+    only the Board row + connection. (bus-servos & gesture-builder keep RX/TX as
+    live fields — on their own row; the IMU's SDA/SCL and every simple sensor's pin
+    became top-of-file `const`s instead.)
+  - **`free` buttons — green convention** (from gesture-builder's `.rl-free`): a
+    released/limp actuator (torque off) shows a solid-green button
+    (`button.freed` → `--green` `#3E9C54`), lighter green on hover (`#4CB165`);
+    text stays the actuator's name. Applied to bus-servos (single green toggle) and
+    stepper-motor (`disable (free)` goes green when active, `enable (hold)` stays
+    teal).
+  - **Rollout DONE (2026-09-01):** 16 examples — potentiometer, neopixel,
+    ultrasonic-sensor, shared-servo, basic-light-switch, shared-light-switch,
+    shared-potentiometer, IMU, camera-stream, camera-posenet, bus-servos,
+    servo-control, stepper-motor, control-panel, messaging, gesture-builder. Simple
+    examples dropped on-page pin fields for top-of-file `const`s; tools kept their
+    live config fields. **Left inline (don't fit the single-stable-arduino
+    model):** coordinated-motion (creates a NEW `Arduino` per rig when motor types
+    change) and leader-follower (two boards + a combined `updateStatus()`; already
+    cleanly factored via `boardCtx`). All 16 verified in-browser (no console
+    errors); **zero hardware bench** — JS-only changes.
+  - Everything below is the PRIOR "duplicated verbatim" standard, kept for history.
+    Its behaviours (transport, button state, R4 lock, `usbBusy`, green CSS) are all
+    still accurate — they now live in `connect.js` instead of being pasted into
+    each sketch.
+
+- **[PRIOR / SUPERSEDED by the `connect.js` bullet above] Tool-example CONNECTION
+  STANDARD — canonical, DUPLICATED per example
   (current session, Scott's direction).** All "tool" examples (control-panel,
   servo-control, stepper-motor, coordinated-motion, messaging, bus-servos,
   leader-follower) should share one connection UI *pattern* — but **NOT shared
@@ -349,10 +448,13 @@ structurally verified unless a bench entry says otherwise.
     ```
     Rolled into all seven tools (leader-follower uses per-board `leaderUsbBusy`/
     `followerUsbBusy`). See the listen-and-switch transport entry above.
-  - **Rejected**: a shared `examples/_lib/connect.js` — DRYer but adds a
-    dependency that breaks copy-paste; duplication + this canonical note is the
-    deliberate trade. Supersedes the [[deferred-modernise-shared-example-uis]]
-    batch's approach.
+  - **Rejected (2026-08) — then REVERSED (2026-09-01):** a shared
+    `examples/_lib/connect.js` was rejected because a CROSS-folder shared file
+    breaks copy-one-folder. The 2026-09-01 `connect.js` standard (bullet above)
+    sidesteps that: it's a per-folder copy of ONE file, so each example still
+    copies-one-folder with zero external deps. The DRY-vs-copy-paste trade was
+    resolved by duplicating the *file* (not the code inline). Supersedes the
+    [[deferred-modernise-shared-example-uis]] batch's approach.
   - **Rollout DONE (2026-08):** duplicated into all seven tools — leader-follower,
     control-panel, bus-servos, servo-control, stepper-motor, coordinated-motion,
     and messaging (the last is HTML-button based → `classList` toggling instead

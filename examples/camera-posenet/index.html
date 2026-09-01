@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Camera PoseNet — Pardalote</title>
+    <script src="https://cdn.jsdelivr.net/npm/p5@1.11.10/lib/p5.js"></script>
+    <!-- ml5 0.12.x — poseNet lives here (it was removed in ml5 1.0). -->
+    <script src="https://unpkg.com/ml5@0.12.2/dist/ml5.min.js"></script>
+    <link rel="stylesheet" type="text/css" href="style.css">
+</head>
+<body>
+<main>
+    <div id="top">
+        <div class="brand"><a href="https://scottmit.github.io/Pardalote/examples/camera-stream.html">Pardalote</a></div>
+        <div class="heading">Camera PoseNet</div>
+        <div id="status">Upload the Pardalote camera-stream example to your ESP32-S3 camera module. Then connect below (WiFi IP) to run ml5 PoseNet on the live MJPEG video.</div>
+    </div>
+</main>
+<script src="../../lib/pardalote.js"></script>
+<script src="connect.js"></script>
+<script src="sketch.js"></script>
+</body>
+</html>

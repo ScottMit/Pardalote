@@ -1035,7 +1035,7 @@ arduino.shoulder.stop();                    // halt — hold the last-read posit
 
 #### Gestures
 
-`gesture(segments)` plays an authored **segment schedule** — the board runs the segments back-to-back, advancing to the next when the servo reports it has arrived (its own `Moving` flag, not a timer). Values are in **counts**. Because a bus servo runs its own motion, each segment is one move at a distance/duration-matched speed, so the `curve` is accepted (for parity with the other actuators) but **not rendered inside a segment** — expression comes from how you decompose the move, and from lane overlap in a group.
+`gesture(segments)` plays an authored **segment schedule** — the board runs the segments back-to-back on its own clock. Values are in **counts**. A bus servo takes a *(position, speed)* target and runs its own move, so the board renders each segment's easing `curve` with a **streaming interpolator** (it samples the curve on a fixed clock and streams look-ahead setpoints, batched across a group into one phase-locked write) — the shape you author, overshoot included, is the shape the servo runs.
 
 ```javascript
 // Reach out, ease back, small settle — relative by default

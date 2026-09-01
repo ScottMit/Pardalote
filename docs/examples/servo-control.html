@@ -36,9 +36,10 @@
   <div class="md-body">
     <div class="tags" style="margin-bottom:.5rem;"><span class="tag lvl-mid">Intermediate</span><span class="tag">Motion</span><span class="tag">Tool</span></div>
     <div class="ex-meta-row">
+      <a class="btn btn-try" href="servo-control/index.html" target="_blank" rel="noopener">Try now over USB ↗</a>
       <a class="btn btn-dark" href="https://github.com/ScottMit/Pardalote/tree/main/examples/servo-control">View the code on GitHub</a>
     </div>
-    <div class="screenshot-slot">Screenshot / video of this example — coming soon</div>
+    <img class="screenshot" src="../assets/examples/servo-control.png" alt="Servo control — the example running" loading="lazy">
 <h1 id="servo-control">Servo control</h1>
 <p>A p5.js sketch that lets you control a servo with the mouse or keyboard. Visualises the servo arm angle on screen in real time.</p>
 
@@ -146,12 +147,14 @@ clamp appear in the log and on the gauge), and set-home / go-home — with a
 live gauge and call log underneath.</p>
 <h2 id="how-it-works">How It Works</h2>
 <div class="code-ex"><span class="lang-badge lang-js">JS</span><pre><code><span class="nx">arduino</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">Arduino</span><span class="p">();</span>
-<span class="nx">arduino</span><span class="p">.</span><span class="nx">connect</span><span class="p">(</span><span class="nx">ArduinoIP</span><span class="p">);</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;myServo&#39;</span><span class="p">,</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">Servo</span><span class="p">());</span><span class="w">   </span><span class="c1">// register the extension</span>
+<span class="nx">setupConnection</span><span class="p">(</span><span class="nx">arduino</span><span class="p">,</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">store</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;pardalote-servo-control&#39;</span><span class="w"> </span><span class="p">});</span><span class="w">   </span><span class="c1">// Board row + connection (connect.js)</span>
 
-<span class="c1">// Register the servo extension</span>
-<span class="nx">arduino</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;myServo&#39;</span><span class="p">,</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">Servo</span><span class="p">());</span>
-<span class="nx">arduino</span><span class="p">.</span><span class="nx">myServo</span><span class="p">.</span><span class="nx">attach</span><span class="p">(</span><span class="mf">7</span><span class="p">);</span><span class="w">    </span><span class="c1">// attach to pin 7</span>
-<span class="nx">arduino</span><span class="p">.</span><span class="nx">myServo</span><span class="p">.</span><span class="nx">center</span><span class="p">();</span><span class="w">     </span><span class="c1">// move to 90° on startup</span>
+<span class="c1">// attach + centre once the board is ready (the servo pin is the Wiring row&#39;s field)</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;ready&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">myServo</span><span class="p">.</span><span class="nx">attach</span><span class="p">(</span><span class="mf">11</span><span class="p">);</span><span class="w">   </span><span class="c1">// servo pin</span>
+<span class="w">    </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">myServo</span><span class="p">.</span><span class="nx">center</span><span class="p">();</span><span class="w">     </span><span class="c1">// 90°</span>
+<span class="p">});</span>
 </code></pre></div>
 <p>A timed move with awaited arrival:</p>
 <div class="code-ex"><span class="lang-badge lang-js">JS</span><pre><code><span class="kd">const</span><span class="w"> </span><span class="nx">move</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">myServo</span><span class="p">.</span><span class="nx">writeTimed</span><span class="p">(</span><span class="nx">target</span><span class="p">,</span><span class="w"> </span><span class="nx">duration</span><span class="p">);</span><span class="w">  </span><span class="c1">// interpolated on-board</span>
@@ -186,6 +189,7 @@ on screen (and noted in the log). A PWM servo has no position feedback:
 <pre><code>servo-control/
 ├── index.html      # Canvas page (loads p5.js and the pardalote.js bundle)
 ├── sketch.js       # Servo control and visualisation
+├── connect.js      # Board connection UI (WiFi / USB, remembered per browser)
 └── README.md       # This file
 
 dist/

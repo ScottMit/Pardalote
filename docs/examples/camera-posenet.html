@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Camera PoseNet — Pardalote examples</title>
+<meta name="description" content="Run ml5.js PoseNet on live ESP32 camera video — green keypoints and a skeleton track a person moving in front of the lens.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../css/site.css">
+</head>
+<body data-nav="examples">
+
+<nav class="site-nav">
+  <a class="logo" href="../index.html">
+    <img src="../assets/logo.svg" width="26" height="26" alt="">
+    Pardalote
+  </a>
+  <div class="links">
+    <a data-nav="home" href="../index.html">Home</a>
+    <a data-nav="download" href="../download.html">Download</a>
+    <a data-nav="examples" href="index.html">Examples</a>
+    <a data-nav="reference" href="../reference/index.html">Reference</a>
+    <a href="https://github.com/ScottMit/Pardalote">GitHub</a>
+  </div>
+</nav>
+
+<div class="page-head">
+  <div class="wrap">
+    <div class="crumb"><a href="index.html">Examples</a> / Camera PoseNet</div>
+    <h1>Camera PoseNet</h1>
+    <p>Run ml5.js PoseNet on live ESP32 camera video — green keypoints and a skeleton track a person moving in front of the lens.</p>
+  </div>
+</div>
+
+<div class="wrap md-layout">
+  <div class="md-body">
+    <div class="tags" style="margin-bottom:.5rem;"><span class="tag lvl-adv">Advanced</span><span class="tag">Vision</span><span class="tag">p5.js</span></div>
+    <div class="ex-meta-row">
+      <a class="btn btn-dark" href="https://github.com/ScottMit/Pardalote/tree/main/examples/camera-posenet">View the code on GitHub</a>
+    </div>
+    <div class="screenshot-slot">Screenshot / video of this example — coming soon</div>
+<h1 id="camera-posenet">Camera PoseNet</h1>
+<p>Runs <a href="https://ml5js.org/">ml5.js</a> <strong>PoseNet</strong> on the live MJPEG video from an
+ESP32 camera — green dots track a person's joints and white lines connect them
+into a skeleton, all in a p5.js canvas.</p>
+<p>It's the <a href="camera-stream.html">camera-stream</a> example with pose detection layered
+on top: instead of pointing PoseNet at a webcam (<code>createCapture(VIDEO)</code>), it
+points it at the board's video stream.</p>
+<hr />
+
+  </div>
+    <div class="ex-code-cols">
+      <div class="code-ex scroll">
+        <span class="lang-badge lang-arduino">Arduino</span>
+        <div class="bar">camera-stream.ino — the Arduino side</div>
+        <pre><code><span class="cp">#define CAMERA_MODEL_WROVER_KIT</span>
+<span class="c1">// #define CAMERA_MODEL_ESP_EYE</span>
+<span class="c1">// #define CAMERA_MODEL_M5STACK_PSRAM</span>
+<span class="c1">// #define CAMERA_MODEL_M5STACK_V2_PSRAM</span>
+<span class="c1">// #define CAMERA_MODEL_M5STACK_WIDE</span>
+<span class="c1">// #define CAMERA_MODEL_M5STACK_ESP32CAM</span>
+<span class="c1">// #define CAMERA_MODEL_M5STACK_UNITCAM</span>
+<span class="c1">// #define CAMERA_MODEL_M5STACK_CAMS3_UNIT</span>
+<span class="c1">// #define CAMERA_MODEL_AI_THINKER</span>
+<span class="c1">// #define CAMERA_MODEL_TTGO_T_JOURNAL</span>
+<span class="c1">// #define CAMERA_MODEL_XIAO_ESP32S3</span>
+<span class="c1">// #define CAMERA_MODEL_ESP32_CAM_BOARD</span>
+<span class="c1">// #define CAMERA_MODEL_ESP32S3_CAM_LCD</span>
+<span class="c1">// #define CAMERA_MODEL_ESP32S2_CAM_BOARD</span>
+<span class="c1">// #define CAMERA_MODEL_ESP32S3_EYE</span>
+<span class="c1">// #define CAMERA_MODEL_DFRobot_FireBeetle2_ESP32S3</span>
+<span class="c1">// #define CAMERA_MODEL_DFRobot_Romeo_ESP32S3</span>
+
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;Pardalote.h&gt;</span>
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;PardaloteCamera.h&gt;</span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">setup</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">begin</span><span class="p">();</span>
+<span class="p">}</span>
+
+<span class="kt">void</span><span class="w"> </span><span class="nf">loop</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">run</span><span class="p">();</span>
+<span class="p">}</span>
+</code></pre>
+      </div>
+      <div class="code-ex scroll">
+        <span class="lang-badge lang-js">JS</span>
+        <div class="bar">sketch.js — the browser side</div>
+        <pre><code><span class="kd">const</span><span class="w"> </span><span class="nx">CAMERA_PORT</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">82</span><span class="p">;</span>
+
+<span class="c1">// Camera frame size — bigger is sharper but slower to stream and detect.</span>
+<span class="c1">// Options: FRAMESIZE_QVGA 320×240 · FRAMESIZE_HVGA 480×320 · FRAMESIZE_VGA 640×480</span>
+<span class="c1">//          · FRAMESIZE_SVGA 800×600 · FRAMESIZE_HD 1280×720 (needs PSRAM)</span>
+<span class="kd">const</span><span class="w"> </span><span class="nx">FRAME_SIZE</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">FRAMESIZE_VGA</span><span class="p">;</span><span class="w">   </span><span class="c1">// 640×480 — matches the canvas</span>
+
+<span class="c1">// Flip the image left-to-right. A webcam selfie is usually mirrored.</span>
+<span class="kd">const</span><span class="w"> </span><span class="nx">MIRROR</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span><span class="p">;</span>
+
+<span class="kd">let</span><span class="w"> </span><span class="nx">arduino</span><span class="p">;</span>
+<span class="kd">let</span><span class="w"> </span><span class="nx">imgEl</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">null</span><span class="p">;</span><span class="w">                 </span><span class="c1">// raw &lt;img&gt; holding the live MJPEG stream</span>
+
+<span class="c1">// --- ml5 PoseNet --------------------------------------------------------</span>
+<span class="kd">let</span><span class="w"> </span><span class="nx">poseNet</span><span class="p">,</span><span class="w"> </span><span class="nx">poseReady</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span><span class="w"> </span><span class="nx">detecting</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">false</span><span class="p">;</span>
+<span class="kd">let</span><span class="w"> </span><span class="nx">poses</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[];</span>
+
+<span class="kd">function</span><span class="w"> </span><span class="nx">setup</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">createCanvas</span><span class="p">(</span><span class="mf">640</span><span class="p">,</span><span class="w"> </span><span class="mf">480</span><span class="p">);</span>
+
+<span class="w">    </span><span class="c1">// Load the PoseNet model up front so it&#39;s warm by the time video arrives.</span>
+<span class="w">    </span><span class="c1">// No video is passed here: the stream isn&#39;t a &lt;video&gt;, so we drive</span>
+<span class="w">    </span><span class="c1">// detection ourselves with singlePose() once frames start arriving.</span>
+<span class="w">    </span><span class="nx">poseNet</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">ml5</span><span class="p">.</span><span class="nx">poseNet</span><span class="p">(()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">poseReady</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span><span class="p">;</span><span class="w"> </span><span class="p">});</span>
+<span class="w">    </span><span class="nx">poseNet</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;pose&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">gotPoses</span><span class="p">);</span>
+
+<span class="w">    </span><span class="nx">arduino</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">Arduino</span><span class="p">();</span>
+<span class="w">    </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;cam&#39;</span><span class="p">,</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">Camera</span><span class="p">());</span>
+<span class="w">    </span><span class="nx">setupConnection</span><span class="p">(</span><span class="nx">arduino</span><span class="p">,</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">store</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;pardalote-camera-posenet&#39;</span><span class="w"> </span><span class="p">});</span>
+
+<span class="w">    </span><span class="c1">// Start the camera once the board is ready (device state resets on reconnect).</span>
+<span class="w">    </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;ready&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">cam</span><span class="p">.</span><span class="nx">setResolution</span><span class="p">(</span><span class="nx">FRAME_SIZE</span><span class="p">);</span>
+<span class="w">        </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">cam</span><span class="p">.</span><span class="nx">attach</span><span class="p">(</span><span class="nx">CAMERA_PORT</span><span class="p">);</span>
+<span class="w">    </span><span class="p">});</span>
+<span class="w">    </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">cam</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;stream&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">({</span><span class="w"> </span><span class="nx">url</span><span class="w"> </span><span class="p">})</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">attachStream</span><span class="p">(</span><span class="nx">url</span><span class="p">));</span>
+<span class="w">    </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;disconnect&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">clearStream</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="c1">// Build a fresh cross-origin &lt;img&gt; for the MJPEG stream. crossOrigin MUST be</span>
+<span class="c1">// set BEFORE src, or the browser fetches without CORS and PoseNet&#39;s pixel read</span>
+<span class="c1">// throws a tainted-canvas SecurityError.</span>
+<span class="kd">function</span><span class="w"> </span><span class="nx">attachStream</span><span class="p">(</span><span class="nx">url</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">clearStream</span><span class="p">();</span>
+<span class="w">    </span><span class="nx">imgEl</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">Image</span><span class="p">();</span>
+<span class="w">    </span><span class="nx">imgEl</span><span class="p">.</span><span class="nx">crossOrigin</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;anonymous&#39;</span><span class="p">;</span>
+<span class="w">    </span><span class="nx">imgEl</span><span class="p">.</span><span class="nx">src</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">url</span><span class="p">;</span>
+<span class="p">}</span>
+<span class="kd">function</span><span class="w"> </span><span class="nx">clearStream</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nx">imgEl</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">imgEl</span><span class="p">.</span><span class="nx">src</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;&#39;</span><span class="p">;</span><span class="w"> </span><span class="nx">imgEl</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">null</span><span class="p">;</span><span class="w"> </span><span class="p">}</span>
+<span class="w">    </span><span class="nx">poses</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[];</span>
+<span class="p">}</span>
+
+<span class="c1">// PoseNet &#39;pose&#39; event — same payload as the webcam path: [{ pose, skeleton }].</span>
+<span class="kd">function</span><span class="w"> </span><span class="nx">gotPoses</span><span class="p">(</span><span class="nx">results</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">poses</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">results</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="kd">function</span><span class="w"> </span><span class="nx">draw</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">background</span><span class="p">(</span><span class="mf">0</span><span class="p">);</span>
+
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nx">imgEl</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nx">imgEl</span><span class="p">.</span><span class="nx">naturalWidth</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mf">0</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="kd">const</span><span class="w"> </span><span class="nx">srcW</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">imgEl</span><span class="p">.</span><span class="nx">naturalWidth</span><span class="p">,</span><span class="w"> </span><span class="nx">srcH</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">imgEl</span><span class="p">.</span><span class="nx">naturalHeight</span><span class="p">;</span>
+<span class="w">        </span><span class="kd">const</span><span class="w"> </span><span class="nx">sx</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">width</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="nx">srcW</span><span class="p">,</span><span class="w"> </span><span class="nx">sy</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">height</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="nx">srcH</span><span class="p">;</span><span class="w">   </span><span class="c1">// stream → canvas scale</span>
+
+<span class="w">        </span><span class="c1">// Kick off a detection when the previous one has resolved. singlePose</span>
+<span class="w">        </span><span class="c1">// runs on the raw &lt;img&gt;; the &#39;pose&#39; event updates poses[].</span>
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nx">poseReady</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="o">!</span><span class="nx">detecting</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="nx">detecting</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span><span class="p">;</span>
+<span class="w">            </span><span class="nx">poseNet</span><span class="p">.</span><span class="nx">singlePose</span><span class="p">(</span><span class="nx">imgEl</span><span class="p">)</span>
+<span class="w">                </span><span class="p">.</span><span class="nx">then</span><span class="p">(()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">detecting</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">false</span><span class="p">;</span><span class="w"> </span><span class="p">})</span>
+<span class="w">                </span><span class="p">.</span><span class="k">catch</span><span class="p">(()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">detecting</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">false</span><span class="p">;</span><span class="w"> </span><span class="p">});</span>
+<span class="w">        </span><span class="p">}</span>
+
+<span class="w">        </span><span class="nx">push</span><span class="p">();</span>
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nx">MIRROR</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">translate</span><span class="p">(</span><span class="nx">width</span><span class="p">,</span><span class="w"> </span><span class="mf">0</span><span class="p">);</span><span class="w"> </span><span class="nx">scale</span><span class="p">(</span><span class="o">-</span><span class="mf">1</span><span class="p">,</span><span class="w"> </span><span class="mf">1</span><span class="p">);</span><span class="w"> </span><span class="p">}</span>
+<span class="w">        </span><span class="nx">scale</span><span class="p">(</span><span class="nx">sx</span><span class="p">,</span><span class="w"> </span><span class="nx">sy</span><span class="p">);</span>
+<span class="w">        </span><span class="nx">drawingContext</span><span class="p">.</span><span class="nx">drawImage</span><span class="p">(</span><span class="nx">imgEl</span><span class="p">,</span><span class="w"> </span><span class="mf">0</span><span class="p">,</span><span class="w"> </span><span class="mf">0</span><span class="p">);</span><span class="w">   </span><span class="c1">// native size; scale() fits it to the canvas</span>
+
+<span class="w">        </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kd">let</span><span class="w"> </span><span class="nx">p</span><span class="w"> </span><span class="k">of</span><span class="w"> </span><span class="nx">poses</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="nx">fill</span><span class="p">(</span><span class="mf">0</span><span class="p">,</span><span class="w"> </span><span class="mf">255</span><span class="p">,</span><span class="w"> </span><span class="mf">0</span><span class="p">);</span>
+<span class="w">            </span><span class="nx">noStroke</span><span class="p">();</span>
+<span class="w">            </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kd">let</span><span class="w"> </span><span class="nx">kp</span><span class="w"> </span><span class="k">of</span><span class="w"> </span><span class="nx">p</span><span class="p">.</span><span class="nx">pose</span><span class="p">.</span><span class="nx">keypoints</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">                </span><span class="nx">circle</span><span class="p">(</span><span class="nx">kp</span><span class="p">.</span><span class="nx">position</span><span class="p">.</span><span class="nx">x</span><span class="p">,</span><span class="w"> </span><span class="nx">kp</span><span class="p">.</span><span class="nx">position</span><span class="p">.</span><span class="nx">y</span><span class="p">,</span><span class="w"> </span><span class="mf">15</span><span class="o">/</span><span class="nx">sx</span><span class="p">);</span>
+<span class="w">            </span><span class="p">}</span>
+
+<span class="w">            </span><span class="nx">noFill</span><span class="p">();</span>
+<span class="w">            </span><span class="nx">stroke</span><span class="p">(</span><span class="mf">255</span><span class="p">);</span>
+<span class="w">            </span><span class="nx">strokeWeight</span><span class="p">(</span><span class="mf">3</span><span class="o">/</span><span class="nx">sx</span><span class="p">);</span>
+<span class="w">            </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kd">let</span><span class="w"> </span><span class="nx">bone</span><span class="w"> </span><span class="k">of</span><span class="w"> </span><span class="nx">p</span><span class="p">.</span><span class="nx">skeleton</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">                </span><span class="kd">const</span><span class="w"> </span><span class="nx">a</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">bone</span><span class="p">[</span><span class="mf">0</span><span class="p">].</span><span class="nx">position</span><span class="p">,</span><span class="w"> </span><span class="nx">b</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">bone</span><span class="p">[</span><span class="mf">1</span><span class="p">].</span><span class="nx">position</span><span class="p">;</span>
+<span class="w">                </span><span class="nx">line</span><span class="p">(</span><span class="nx">a</span><span class="p">.</span><span class="nx">x</span><span class="p">,</span><span class="w"> </span><span class="nx">a</span><span class="p">.</span><span class="nx">y</span><span class="p">,</span><span class="w"> </span><span class="nx">b</span><span class="p">.</span><span class="nx">x</span><span class="p">,</span><span class="w"> </span><span class="nx">b</span><span class="p">.</span><span class="nx">y</span><span class="p">);</span>
+<span class="w">            </span><span class="p">}</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">        </span><span class="nx">pop</span><span class="p">();</span>
+<span class="w">    </span><span class="p">}</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="c1">// Waiting for stream — placeholder message (house cream card).</span>
+<span class="w">        </span><span class="nx">fill</span><span class="p">(</span><span class="s1">&#39;#F2E9D8&#39;</span><span class="p">);</span><span class="w"> </span><span class="nx">noStroke</span><span class="p">();</span>
+<span class="w">        </span><span class="nx">rect</span><span class="p">(</span><span class="mf">0</span><span class="p">,</span><span class="w"> </span><span class="mf">0</span><span class="p">,</span><span class="w"> </span><span class="nx">width</span><span class="p">,</span><span class="w"> </span><span class="nx">height</span><span class="p">);</span>
+<span class="w">        </span><span class="nx">fill</span><span class="p">(</span><span class="s1">&#39;#6d6a5f&#39;</span><span class="p">);</span>
+<span class="w">        </span><span class="nx">textAlign</span><span class="p">(</span><span class="nx">CENTER</span><span class="p">,</span><span class="w"> </span><span class="nx">CENTER</span><span class="p">);</span><span class="w"> </span><span class="nx">textSize</span><span class="p">(</span><span class="mf">16</span><span class="p">);</span>
+<span class="w">        </span><span class="kd">const</span><span class="w"> </span><span class="nx">msg</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">!</span><span class="nx">arduino</span><span class="p">.</span><span class="nx">connected</span><span class="w"> </span><span class="o">?</span><span class="w"> </span><span class="s1">&#39;Connecting…&#39;</span>
+<span class="w">                  </span><span class="o">:</span><span class="w"> </span><span class="o">!</span><span class="nx">poseReady</span><span class="w">          </span><span class="o">?</span><span class="w"> </span><span class="s1">&#39;Loading PoseNet model…&#39;</span>
+<span class="w">                  </span><span class="o">:</span><span class="w">                       </span><span class="s1">&#39;Starting camera…&#39;</span><span class="p">;</span>
+<span class="w">        </span><span class="nx">text</span><span class="p">(</span><span class="nx">msg</span><span class="p">,</span><span class="w"> </span><span class="nx">width</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="mf">2</span><span class="p">,</span><span class="w"> </span><span class="nx">height</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="mf">2</span><span class="p">);</span>
+<span class="w">        </span><span class="nx">textAlign</span><span class="p">(</span><span class="nx">LEFT</span><span class="p">,</span><span class="w"> </span><span class="nx">BASELINE</span><span class="p">);</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="c1">// Connection status dot — top-right corner (teal = connected)</span>
+<span class="w">    </span><span class="nx">noStroke</span><span class="p">();</span>
+<span class="w">    </span><span class="nx">fill</span><span class="p">(</span><span class="nx">arduino</span><span class="p">.</span><span class="nx">connected</span><span class="w"> </span><span class="o">?</span><span class="w"> </span><span class="s1">&#39;#3FA9A0&#39;</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;#D3542B&#39;</span><span class="p">);</span>
+<span class="w">    </span><span class="nx">circle</span><span class="p">(</span><span class="nx">width</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mf">16</span><span class="p">,</span><span class="w"> </span><span class="mf">16</span><span class="p">,</span><span class="w"> </span><span class="mf">12</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre>
+      </div>
+    </div>
+  <div class="md-body">
+<h2 id="what-you-need">What you need</h2>
+<ul>
+<li>An ESP32 board with a camera module and PSRAM, flashed with the <strong>camera-stream</strong>
+firmware (see <a href="camera-stream.html">camera-stream</a> — the same <code>&lt;PardaloteCamera.h&gt;</code>
+sketch drives this example; there's nothing new to upload)</li>
+<li>A web browser on the same WiFi network, with internet access the first time
+(ml5.js and its model are loaded from a CDN)</li>
+</ul>
+<p>The stream is served over HTTP straight from the board's IP, so this example
+needs a <strong>WiFi</strong> connection — USB carries only the control link, not video.</p>
+<hr />
+<h2 id="files">Files</h2>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>index.html</code></td>
+<td>Loads p5.js, <strong>ml5.js</strong>, Pardalote, and the sketch</td>
+</tr>
+<tr>
+<td><code>sketch.js</code></td>
+<td>Connects, streams, runs PoseNet, draws keypoints + skeleton</td>
+</tr>
+<tr>
+<td><code>connect.js</code></td>
+<td>Board connection UI (WiFi / USB, remembered per browser)</td>
+</tr>
+<tr>
+<td><code>style.css</code></td>
+<td>Pardalote example house style</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="browser-setup">Browser setup</h2>
+<p>Open <code>index.html</code> from a local web server (browsers block some connections from
+<code>file://</code> pages — <code>npx serve .</code> works). In the <strong>Board</strong> row enter the board's
+IP and press <strong>Connect</strong> — the setting is remembered per browser. The model
+loads on its own; once video arrives, keypoints appear over it.</p>
+<p>Two settings live at the top of <code>sketch.js</code>:</p>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><pre><code><span class="kd">const</span><span class="w"> </span><span class="nx">FRAME_SIZE</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">FRAMESIZE_VGA</span><span class="p">;</span><span class="w">   </span><span class="c1">// 640×480 — matches the canvas</span>
+<span class="kd">const</span><span class="w"> </span><span class="nx">MIRROR</span><span class="w">     </span><span class="o">=</span><span class="w"> </span><span class="kc">false</span><span class="p">;</span><span class="w">           </span><span class="c1">// flip left-to-right (a webcam selfie is mirrored)</span>
+</code></pre></div>
+<p>An outward-facing ESP32 camera usually shouldn't be mirrored, so <code>MIRROR</code>
+defaults to <code>false</code>; set it <code>true</code> for a selfie-style flip.</p>
+<hr />
+<h2 id="how-it-works">How it works</h2>
+<p>The one real difference from a webcam is <strong>where the pixels come from and how
+PoseNet reads them</strong>.</p>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><pre><code><span class="c1">// A raw &lt;img&gt;, loaded cross-origin so PoseNet may READ its pixels. crossOrigin</span>
+<span class="c1">// MUST be set before src, or the pixel read throws a tainted-canvas error. This</span>
+<span class="c1">// works because PardaloteCamera.h serves Access-Control-Allow-Origin: *.</span>
+<span class="nx">imgEl</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">Image</span><span class="p">();</span>
+<span class="nx">imgEl</span><span class="p">.</span><span class="nx">crossOrigin</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;anonymous&#39;</span><span class="p">;</span>
+<span class="nx">imgEl</span><span class="p">.</span><span class="nx">src</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">url</span><span class="p">;</span><span class="w">                    </span><span class="c1">// the MJPEG stream URL, from cam.on(&#39;stream&#39;)</span>
+</code></pre></div>
+<p>The stream isn't a <code>&lt;video&gt;</code>, so detection is driven by hand: each finished
+detection kicks off the next, throttled by a one-in-flight flag.</p>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><pre><code><span class="nx">poseNet</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">ml5</span><span class="p">.</span><span class="nx">poseNet</span><span class="p">(()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">poseReady</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span><span class="p">;</span><span class="w"> </span><span class="p">});</span><span class="w">   </span><span class="c1">// no video arg — manual mode</span>
+<span class="nx">poseNet</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;pose&#39;</span><span class="p">,</span><span class="w"> </span><span class="nx">gotPoses</span><span class="p">);</span>
+
+<span class="c1">// in draw(), when the model is ready and a frame is available:</span>
+<span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nx">poseReady</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="o">!</span><span class="nx">detecting</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">detecting</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span><span class="p">;</span>
+<span class="w">    </span><span class="nx">poseNet</span><span class="p">.</span><span class="nx">singlePose</span><span class="p">(</span><span class="nx">imgEl</span><span class="p">)</span>
+<span class="w">        </span><span class="p">.</span><span class="nx">then</span><span class="p">(()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">detecting</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">false</span><span class="p">;</span><span class="w"> </span><span class="p">})</span><span class="w">    </span><span class="c1">// release the lock either way, so a</span>
+<span class="w">        </span><span class="p">.</span><span class="k">catch</span><span class="p">(()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">detecting</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">false</span><span class="p">;</span><span class="w"> </span><span class="p">});</span><span class="w">  </span><span class="c1">// failed detection just retries next frame</span>
+<span class="p">}</span>
+</code></pre></div>
+<p>Keypoints come back in the <strong>stream's</strong> pixel coordinates. The canvas scales the
+whole frame once so points draw at their native <code>x</code>/<code>y</code>, and the marker size /
+line weight are divided by <code>sx</code> so they stay a fixed on-screen size at any
+frame resolution:</p>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><pre><code><span class="kd">const</span><span class="w"> </span><span class="nx">sx</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">width</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="nx">imgEl</span><span class="p">.</span><span class="nx">naturalWidth</span><span class="p">,</span><span class="w"> </span><span class="nx">sy</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">height</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="nx">imgEl</span><span class="p">.</span><span class="nx">naturalHeight</span><span class="p">;</span>
+<span class="nx">push</span><span class="p">();</span>
+<span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nx">MIRROR</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">translate</span><span class="p">(</span><span class="nx">width</span><span class="p">,</span><span class="w"> </span><span class="mf">0</span><span class="p">);</span><span class="w"> </span><span class="nx">scale</span><span class="p">(</span><span class="o">-</span><span class="mf">1</span><span class="p">,</span><span class="w"> </span><span class="mf">1</span><span class="p">);</span><span class="w"> </span><span class="p">}</span>
+<span class="nx">scale</span><span class="p">(</span><span class="nx">sx</span><span class="p">,</span><span class="w"> </span><span class="nx">sy</span><span class="p">);</span>
+<span class="nx">drawingContext</span><span class="p">.</span><span class="nx">drawImage</span><span class="p">(</span><span class="nx">imgEl</span><span class="p">,</span><span class="w"> </span><span class="mf">0</span><span class="p">,</span><span class="w"> </span><span class="mf">0</span><span class="p">);</span><span class="w">          </span><span class="c1">// native size; scale() fits it</span>
+<span class="nx">circle</span><span class="p">(</span><span class="nx">kp</span><span class="p">.</span><span class="nx">position</span><span class="p">.</span><span class="nx">x</span><span class="p">,</span><span class="w"> </span><span class="nx">kp</span><span class="p">.</span><span class="nx">position</span><span class="p">.</span><span class="nx">y</span><span class="p">,</span><span class="w"> </span><span class="mf">15</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="nx">sx</span><span class="p">);</span><span class="w">  </span><span class="c1">// 15 px on screen, any resolution</span>
+<span class="nx">pop</span><span class="p">();</span>
+</code></pre></div>
+<p>Because <code>imgEl</code> is a raw <code>HTMLImageElement</code> (not a p5 image), it's drawn with the
+canvas's own <code>drawingContext.drawImage()</code> rather than p5's <code>image()</code> — p5's
+<code>image()</code> only accepts p5 image/element types.</p>
+<hr />
+<h2 id="adjusting-the-stream">Adjusting the stream</h2>
+<p><code>FRAME_SIZE</code> accepts any of the <code>FRAMESIZE_*</code> constants — bigger is sharper but
+slower to stream <em>and</em> to run PoseNet on. See
+<a href="camera-stream.html">camera-stream → Adjusting the stream</a> for the full table and
+the resolution/PSRAM notes. Keypoint positions and marker sizes are
+resolution-independent, so changing <code>FRAME_SIZE</code> doesn't need any other edits.</p>
+<hr />
+<h2 id="troubleshooting">Troubleshooting</h2>
+<p><strong>Video shows but no keypoints appear</strong></p>
+<ul>
+<li>Give it a moment on first load — the PoseNet model downloads from the CDN
+(the placeholder reads &quot;Loading PoseNet model…&quot; until it's ready)</li>
+<li>Make sure a whole person is in frame with reasonable lighting</li>
+<li>Open the browser console: a <em>tainted canvas / SecurityError</em> means the frame
+was fetched without CORS — confirm the board runs the current
+<code>PardaloteCamera.h</code> (it sends <code>Access-Control-Allow-Origin: *</code>)</li>
+</ul>
+<p><strong>Keypoints are offset from the body</strong></p>
+<ul>
+<li>The canvas and stream can be different sizes; positions scale by
+<code>width / naturalWidth</code>. If you changed the canvas dimensions, keep them the
+same aspect ratio (4:3) as the frame size, or the image (and points) stretch.</li>
+</ul>
+<p><strong>Stream itself won't appear / low frame rate / PSRAM errors</strong></p>
+<ul>
+<li>These are camera-side, not pose-side — see
+<a href="camera-stream.html">camera-stream → Troubleshooting</a>.</li>
+</ul>
+<p><strong>ml5 / PoseNet isn't defined</strong></p>
+<ul>
+<li>PoseNet lives in ml5 <strong>0.12.x</strong> (it was removed in ml5 1.0). <code>index.html</code>
+pins that version; if you swap the CDN link, keep it on the 0.12 line.</li>
+</ul>
+<hr />
+<h2 id="next-steps">Next steps</h2>
+<ul>
+<li>Start from the plain video feed: <a href="camera-stream.html">camera-stream</a></li>
+<li>Drive hardware from the pose data — feed a joint angle to
+<a href="servo-control.html">servo-control</a> or <a href="bus-servos.html">bus-servos</a></li>
+</ul>
+
+  </div>
+</div>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <span>Pardalote — created by Scott Mitchell for design education and creative technology.</span>
+    <span><a href="../reference/index.html">Reference</a> · <a href="https://github.com/ScottMit/Pardalote">GitHub</a> · GPL-3.0-or-later</span>
+  </div>
+</footer>
+
+<script src="../js/site.js"></script>
+</body>
+</html>
