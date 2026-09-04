@@ -63,6 +63,13 @@ OUT = Path(__file__).parent.parent / "docs" / "reference"
 GH = "https://github.com/ScottMit/Pardalote"
 OUT.mkdir(parents=True, exist_ok=True)
 
+# Hosted-site analytics (umami) — injected into every generated page's <head>.
+UMAMI = ('<!-- umami analytics -->\n'
+         '<script defer src="https://cloud.umami.is/script.js" '
+         'data-website-id="75a6fe7b-62be-44ca-8a17-65739311fed8"></script>')
+def with_umami(html):
+    return html.replace("</head>", UMAMI + "\n</head>", 1)
+
 SIDEBAR = """<aside class="ref-nav">
   <button class="ref-nav-toggle" aria-expanded="false" aria-controls="ref-nav-links">Contents</button>
   <div class="ref-nav-links" id="ref-nav-links">
@@ -180,5 +187,5 @@ for md_file in sorted(SRC.glob("*.md")):
         title=html.escape(meta["title"]),
         lede=html.escape(meta["lede"]),
         nav=NAV, sidebar=SIDEBAR, body=body, footer=FOOTER)
-    (OUT / (md_file.stem + ".html")).write_text(page, encoding="utf-8")
+    (OUT / (md_file.stem + ".html")).write_text(with_umami(page), encoding="utf-8")
     print("wrote", md_file.stem + ".html")

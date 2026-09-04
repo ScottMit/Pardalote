@@ -119,7 +119,7 @@ let arduino, ready = false, rxTxLocked = false;
 
 // --- DOM refs ----------------------------------------------------------
 const $ = (id) => document.getElementById(id);
-const statusEl = $('status');
+const statusEl = $('info');   // tool feedback lives in the bottom ribbon; connect.js owns the header #status
 const rxEl = $('rx'), txEl = $('tx');
 const gutter = $('gutter'), lanesScroll = $('lanesScroll'), svg = $('lanes'), menuEl = $('ctxmenu');
 const codeText = $('codeText'), copyCode = $('copyCode'), outputDialogEl = $('outputDialog');

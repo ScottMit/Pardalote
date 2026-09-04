@@ -55,6 +55,15 @@ OUT = REPO / "docs" / "examples"
 GH = "https://github.com/ScottMit/Pardalote"
 OUT.mkdir(parents=True, exist_ok=True)
 
+# Hosted-site analytics (umami) — injected into every hosted page's <head>
+# (generated detail/gallery pages AND the runnable mirrors). Kept OUT of the
+# distributable source examples/<slug>/ so copied/downloaded code doesn't phone home.
+UMAMI = ('<!-- umami analytics -->\n'
+         '<script defer src="https://cloud.umami.is/script.js" '
+         'data-website-id="75a6fe7b-62be-44ca-8a17-65739311fed8"></script>')
+def with_umami(html):
+    return html if "cloud.umami.is" in html else html.replace("</head>", UMAMI + "\n</head>", 1)
+
 # slug -> (title, blurb, emoji, gradient, [tags], level).
 # Shared with build_llms.py — the single source of truth lives in examples_data.py.
 from examples_data import EXAMPLES
@@ -315,7 +324,7 @@ for slug, (title, blurb, emoji, grad, tags, level) in EXAMPLES.items():
 """.format(title=html.escape(title), blurb=html.escape(blurb), nav=NAV,
            tags=tags_html(tags, level), gh=GH, slug=slug, intro=intro, rest=rest, footer=FOOTER,
            code_cols=code_cols(slug), shot=shot, try_btn=try_btn)
-    (OUT / (slug + ".html")).write_text(page, encoding="utf-8")
+    (OUT / (slug + ".html")).write_text(with_umami(page), encoding="utf-8")
     print("wrote", slug + ".html")
 
 # ---------- runnable copies (so "Try now" works on the hosted docs) ----------
@@ -341,6 +350,10 @@ for slug in EXAMPLES:
     conn = OUT / slug / "connect.js"
     if conn.exists():
         conn.write_text(CONNECT_USB, encoding="utf-8")
+    # Hosted page → add the analytics tag (the source example stays clean).
+    idx = OUT / slug / "index.html"
+    if idx.exists():
+        idx.write_text(with_umami(idx.read_text(encoding="utf-8")), encoding="utf-8")
 print("copied runnable examples + lib into docs/ (USB-only connect UI)")
 
 # ---------- gallery ----------
@@ -409,5 +422,5 @@ document.querySelectorAll('.filter').forEach(btn => {{
 </html>
 """.format(nav=NAV, filters="\n".join(filters), cards="\n".join(cards), footer=FOOTER)
 
-(OUT / "index.html").write_text(gallery, encoding="utf-8")
+(OUT / "index.html").write_text(with_umami(gallery), encoding="utf-8")
 print("wrote index.html")
