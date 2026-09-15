@@ -43,17 +43,19 @@
     </div>
     <img class="screenshot" src="../assets/examples/servo-control.png" alt="Servo control — the example running" loading="lazy">
 <h1 id="servo-control">Servo control</h1>
-<p>A p5.js sketch that lets you control a servo with the mouse or keyboard. Visualises the servo arm angle on screen in real time.</p>
+<p>A p5.js <strong>control panel</strong> for one servo — a Pardalote tool that works out of the box (the connection and servo pin are set on the page and remembered by the browser, no code editing). A live gauge draws the arm and every command updates it in real time. Use it to exercise the modern servo API, or to drive the servo directly by dragging the arm.</p>
 
   </div>
 
   <div class="md-body">
 <h2 id="what-this-example-does">What This Example Does</h2>
 <ul>
-<li><strong>Mouse mode (default):</strong> horizontal mouse position maps directly to servo angle (0–180°)</li>
-<li><strong>Auto sweep:</strong> presses <code>S</code> to continuously sweep the servo back and forth using <code>sweep()</code></li>
-<li><strong>Preset positions:</strong> <code>C</code> = centre (90°), <code>L</code> = min (0°), <code>R</code> = max (180°)</li>
-<li><strong>Angle display:</strong> a servo arm is drawn on the canvas, driven by a local <code>angle</code> variable updated each time the sketch commands a new position</li>
+<li><strong>Drag the arm:</strong> grab the arm on the gauge and drag to aim the servo — a direct <code>write()</code> by pointer. The arm tracks the <em>applied</em> angle, so a drag past a soft limit stops at the allowed band.</li>
+<li><strong>Immediate writes:</strong> the <code>0°</code>, <code>center 90°</code>, and <code>180°</code> buttons call <code>write()</code>.</li>
+<li><strong>Timed move + arrival:</strong> <code>writeTimed(target, duration)</code> interpolates on the board; an awaited <code>whenDone()</code> logs <code>arrived</code> / <code>TIMEOUT</code> with the elapsed time.</li>
+<li><strong>Soft limits:</strong> <code>setLimits(min, max)</code> clamps on the Arduino — the clamp shows on the gauge (teal band) and in the log; <code>clearLimits()</code> removes them.</li>
+<li><strong>Home:</strong> <code>setHome()</code> (here) or <code>setHome(value)</code>, then <code>home()</code> to snap back or <code>home(1000)</code> to glide.</li>
+<li><strong>Live gauge + call log:</strong> the arm shows <code>arduino.myServo.angle</code> — the value the library actually applied — alongside the current limits and home angle, with a rolling log of the last few calls underneath.</li>
 </ul>
 <h2 id="hardware-requirements">Hardware Requirements</h2>
 <ul>
@@ -80,7 +82,7 @@
 </tr>
 <tr>
 <td>Signal (orange/yellow)</td>
-<td>Pin 7 (configurable in sketch.js)</td>
+<td>Pin 11 (set on the page — the <strong>Wiring</strong> row)</td>
 </tr>
 </tbody>
 </table>
@@ -174,14 +176,14 @@ on screen (and noted in the log). A PWM servo has no position feedback:
 <h2 id="troubleshooting">Troubleshooting</h2>
 <p><strong>&quot;Servo doesn't move&quot;</strong></p>
 <ul>
-<li>Check wiring: signal to pin 7, power to 5 V, ground to GND</li>
-<li>Verify the sketch has <code>#include &lt;PardaloteServo.h&gt;</code></li>
+<li>Check wiring: signal to the pin set in the <strong>Wiring</strong> row (default 11), power to 5 V, ground to GND</li>
+<li>Verify the firmware sketch has <code>#include &lt;PardaloteServo.h&gt;</code></li>
 <li>Check the browser console for connection errors</li>
 </ul>
 <p><strong>&quot;Servo jitters&quot;</strong></p>
 <ul>
-<li><code>write()</code> is called every frame in mouse mode — the library has a built-in 20 ms throttle, but if the servo still jitters check its power supply</li>
-<li>Use <code>setThreshold(2)</code> to ignore small angle changes: <code>arduino.myServo.setThreshold(2)</code></li>
+<li>Dragging the arm calls <code>write()</code> rapidly — the library coalesces these with a built-in 20 ms throttle, but if the servo still jitters check its power supply (give it its own 5 V and a common ground)</li>
+<li>Raise the change threshold to ignore sub-degree wobble: <code>arduino.myServo.setWriteThreshold(2)</code></li>
 </ul>
 <p><strong>&quot;Servo moves to wrong position on startup&quot;</strong></p>
 <ul>

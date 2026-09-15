@@ -1,13 +1,15 @@
 # Servo control
 
-A p5.js sketch that lets you control a servo with the mouse or keyboard. Visualises the servo arm angle on screen in real time.
+A p5.js **control panel** for one servo — a Pardalote tool that works out of the box (the connection and servo pin are set on the page and remembered by the browser, no code editing). A live gauge draws the arm and every command updates it in real time. Use it to exercise the modern servo API, or to drive the servo directly by dragging the arm.
 
 ## What This Example Does
 
-- **Mouse mode (default):** horizontal mouse position maps directly to servo angle (0–180°)
-- **Auto sweep:** presses `S` to continuously sweep the servo back and forth using `sweep()`
-- **Preset positions:** `C` = centre (90°), `L` = min (0°), `R` = max (180°)
-- **Angle display:** a servo arm is drawn on the canvas, driven by a local `angle` variable updated each time the sketch commands a new position
+- **Drag the arm:** grab the arm on the gauge and drag to aim the servo — a direct `write()` by pointer. The arm tracks the *applied* angle, so a drag past a soft limit stops at the allowed band.
+- **Immediate writes:** the `0°`, `center 90°`, and `180°` buttons call `write()`.
+- **Timed move + arrival:** `writeTimed(target, duration)` interpolates on the board; an awaited `whenDone()` logs `arrived` / `TIMEOUT` with the elapsed time.
+- **Soft limits:** `setLimits(min, max)` clamps on the Arduino — the clamp shows on the gauge (teal band) and in the log; `clearLimits()` removes them.
+- **Home:** `setHome()` (here) or `setHome(value)`, then `home()` to snap back or `home(1000)` to glide.
+- **Live gauge + call log:** the arm shows `arduino.myServo.angle` — the value the library actually applied — alongside the current limits and home angle, with a rolling log of the last few calls underneath.
 
 ## Hardware Requirements
 
@@ -21,7 +23,7 @@ A p5.js sketch that lets you control a servo with the mouse or keyboard. Visuali
 |---|---|
 | Power (red) | 5 V |
 | Ground (brown/black) | GND |
-| Signal (orange/yellow) | Pin 7 (configurable in sketch.js) |
+| Signal (orange/yellow) | Pin 11 (set on the page — the **Wiring** row) |
 
 For more than one or two servos, power them from an external 5 V supply rather than the Arduino's 5 V pin.
 
@@ -124,13 +126,13 @@ Include the `pardalote.js` bundle (core + every extension) before your sketch:
 ## Troubleshooting
 
 **"Servo doesn't move"**
-- Check wiring: signal to pin 7, power to 5 V, ground to GND
-- Verify the sketch has `#include <PardaloteServo.h>`
+- Check wiring: signal to the pin set in the **Wiring** row (default 11), power to 5 V, ground to GND
+- Verify the firmware sketch has `#include <PardaloteServo.h>`
 - Check the browser console for connection errors
 
 **"Servo jitters"**
-- `write()` is called every frame in mouse mode — the library has a built-in 20 ms throttle, but if the servo still jitters check its power supply
-- Use `setThreshold(2)` to ignore small angle changes: `arduino.myServo.setThreshold(2)`
+- Dragging the arm calls `write()` rapidly — the library coalesces these with a built-in 20 ms throttle, but if the servo still jitters check its power supply (give it its own 5 V and a common ground)
+- Raise the change threshold to ignore sub-degree wobble: `arduino.myServo.setWriteThreshold(2)`
 
 **"Servo moves to wrong position on startup"**
 - `center()` moves to 90° — if the servo arm is mounted off-centre this is mechanical, not a code issue

@@ -9,9 +9,9 @@ summary to open a **settings dialog** — choose **Bus servo**, **PWM servo**, o
 **Stepper** and set its connection pins there; the value axis and units follow the
 type (counts / degrees / steps). Each **keyframe** is a time × a value; the line
 between two keyframes is a **segment** you can shape with an easing curve. **Play** sends every row as one lane of a single `arduino.gesture({…})`
-so they all start together and arrive together — starting from the **playhead** you
-position on the ruler. **Pause** freezes the playhead and lets you **scrub** the
-outputs through the sequence by hand.
+so they all start together and arrive together — playing forward from the **playhead**
+you position on the ruler. The playhead is a **remote control**: drag it any time and
+the outputs follow the sequence to that point, live.
 
 ## Hardware
 
@@ -58,10 +58,10 @@ This is a **tool** — no code editing. Open `index.html` and:
 | **drag the last keyframe** past the right edge | extend the timeline |
 | **drag a max / min value** (gutter) | set that output's soft limit (the value axis spans min–max, in the type's unit) |
 | **right-click a max / min value** | **reset** to the type's default range — or (bus servos only) **pose limits** by sweeping the range by hand |
-| **drag the playhead** (ruler) | set where **play** starts; while **paused**, scrub it to drive the outputs through the sequence |
-| **▶ play** | play from the playhead (one batched `arduino.gesture({…})`) |
-| **❙❙ pause** | freeze the playhead; scrub to move the outputs (a held `group.write()`) |
-| **■ stop** | cancel the gesture, hold, return the playhead to the start |
+| **drag the playhead** (ruler) | **drive the outputs** to that point in the sequence, live — a remote control (grabbing it during play takes over). Play resumes from wherever it rests |
+| **▶ play** | play the sequence forward from the playhead (one batched `arduino.gesture({…})`) |
+| **■ stop** | cancel the gesture and hold where it is — the playhead stays put (the robot doesn't rewind) |
+| **\|◀◀ start** / **end ▶▶\|** | send the playhead **and the outputs** to the start / end |
 | **free** / **free all** | release an output's torque to hand-pose it — bus servos and steppers-with-EN only (greyed otherwise) |
 
 The teal marker in each row's gutter is that output's **live position** (sensed for bus

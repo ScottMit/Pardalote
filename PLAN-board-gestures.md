@@ -229,5 +229,112 @@ already resolve last-speaker-wins. No new policy; just confirm on the bench.
 1. Reference-frame default: **absolute** (chosen). Relative via `flags = 0`.
 2. Scalars (durScale/amp/repeat) — NOT in this cut; parametric = "write a function
    that emits segments," symmetric on both sides. Add later as shared opt if wanted.
+   **See "Gesture manipulation (scale / speed / crop)" below** — the worked design
+   for exactly this, prompted by Plan-D (2026-09-10). Direction has firmed up:
+   play-time *parameters* (not a data-transform step), symmetric on both sides.
 3. Builder ergonomics: `add(deviceType, …)` (decoupled) vs typed `.servo()`
    (couples builder to Ext types). **Chosen: `add(deviceType, …)`.**
+
+## Gesture manipulation (scale / speed / crop) — parity analysis (2026-09-10)
+
+**Status:** DESIGN ONLY, nothing built board-side. Fleshes out Open decision #2.
+Prompted by **Plan-D** (the LLM robot controller): it builds gestures with an
+`intensity` and wanted to also vary amplitude/tempo and play a slice. A JS-only
+prototype exists there (NOT in this library yet) — see below — and the question
+that drove this note was: *does board-authored gesture construction change the
+approach, and should a gesture be a class with these as methods?*
+
+### The three transforms
+- **scale(k)** — amplitude: every relative delta × k (`target-from` for absolute).
+  Timing/curves untouched. Keeps a relative round-trip net-zero.
+- **speed(f)** — tempo: playback-rate multiplier, `dur /= f` (f=2 → twice as fast,
+  0.5 → half). Amplitude/curves untouched. Keeps net-zero.
+- **crop(from,to)** — play only a fractional window of the timeline. **Breaks the
+  round-trip** (relative gesture no longer net-zero → ends off-home; caller must
+  park/return). Needs mid-segment splitting.
+- (Deliberately NOT doing `speed(curve)` / non-linear tempo warp yet.)
+
+### Key finding: the board flips the natural implementation
+JS gestures are heap arrays, so pure `lanes → lanes` transforms are free (that's
+how the Plan-D prototype works). **None of that holds on the board:** gestures are
+`static const PardaloteSeg[]` in **flash (read-only)**, fixed `MAX_*_SEGMENTS`
+caps, no GC. "Return a new transformed gesture" would mean allocating a RAM
+`PardaloteSeg` buffer and managing its size — fighting the flash-const, ~0-RAM
+design.
+
+But the board already **samples the eased curve every interpolator tick**, and
+`startGesture(id, segs, count, flags, startMs, padToMs)` is already a parameter
+list. So the cheap, buffer-free path is to apply the transforms **at segment
+load / playback time**, as parameters — not as a data-transform step:
+
+```cpp
+struct PardaloteGestureMod {     // all defaults = identity
+    float scale    = 1.0f;       // amplitude ×
+    float speed    = 1.0f;       // tempo × (2 = twice as fast)
+    float cropFrom = 0.0f;       // window start, fraction of total
+    float cropTo   = 1.0f;       // window end
+};
+```
+- scale → multiply the delta as each segment loads (free).
+- speed → divide `dur` on load (free).
+- crop → start the load loop past `cropFrom·total`, clip the boundary segments,
+  stop after `cropTo·total`. **No buffer** — just where load starts/stops.
+- Float is fine: the board already does float easing (`pardaloteEase`), FPU on
+  R4/ESP32. No fixed-point needed.
+
+The board **must** own crop logic regardless — board gestures run without JS, so
+JS can't pre-crop for it.
+
+### Decision: parameter-based surface, symmetric, ONE shared formula
+Make the canonical API the parameters (opts/mods) applied at play time, mirrored
+both sides; the chainable object is sugar over it, not a JS-only pipeline.
+
+- JS: `gesture(lanes, { scale, speed, crop })` (+ optional chainable `Gesture`).
+- C++: `PardaloteGestureMod` applied in each actuator's `loadSegment`, e.g.
+  `Pardalote.gesture(pan, NOD, 3).scale(0.7).speed(0.5).play();`.
+
+**Hazard this avoids:** crop's "how much of a clipped segment's eased travel is
+inside the window" is new, subtle math. If JS crops by materializing and the board
+crops at load-time, that's TWO implementations of one formula to keep in sync —
+the exact `curveShape`↔`shapeCurve` drift trap. So define the crop window→segment
+math **once, next to `pardaloteEase` (defs.h), mirror in JS**, apply at play/load
+on both sides. The materialized JS version stays only as impl/preview derived from
+that formula.
+
+### Should a gesture be a class, with these as methods? Yes — a *lazy* handle
+Not a container that materializes transformed arrays. A lightweight object holding
+`{ segs*/lanes, count/flags, mods }`; methods set mods and return the object;
+`.play()` / acceptance by `gesture()` applies mods at load.
+- JS: immutable `Gesture` value object, but does NOT replace the plain-lanes path
+  (`gesture(lanes)` still works); may also materialize for the p5 face preview.
+- C++: stays lazy (pointer + count + a few float mods) → ~0 RAM, no buffer.
+- **Naming wrinkle:** `PardaloteGesture` already = the multi-lane *coordinator*
+  builder. Single-lane mods most naturally live on its `.add(...)` lanes or a
+  chained mod on the builder; needs a deliberate ownership pass, not a second
+  colliding class.
+
+### Coordination rule (bake into both APIs)
+Transforms must stay consistent across a coordinated gesture or phase-lock /
+arrive-together breaks:
+- **speed & crop are timing-affecting → group-global** (one factor, one window on
+  the shared timeline).
+- **scale is amplitude-only → MAY be per-lane** (e.g. scale just the antennas)
+  without breaking coordination. Per-lane amplitude that isn't a global intensity
+  is really authoring — put it in the segments.
+
+### Plan-D JS prototype (bench-truth for the shared crop formula)
+Lives in the **Plan-D** repo, not here: `app/transforms.js` (`GestureFX.scale/
+speed/crop/apply/duration`, pure `lanes → lanes`, non-mutating), played via a new
+`Robot.playLanes()` seam and a dev-tuning UI panel (scale/speed sliders + two-
+handle crop). Crop verified to leave the expected off-home delta; `park()` after.
+When promoting here: reuse its crop math as the JS side of the single shared
+formula; keep its pure functions as impl/preview, expose the parameter/method
+surface as public.
+
+### Build order when picked up
+1. Shared crop window→segment formula beside `pardaloteEase` (defs.h) + JS mirror.
+2. `PardaloteGestureMod` applied in each actuator `loadSegment` (scale/speed/crop),
+   `speed`/`crop` group-global, `scale` per-lane-allowed.
+3. Chainable sugar both sides; resolve the `PardaloteGesture` naming/ownership.
+4. Extend byte/played-target equivalence test (`tools/stub-compile/
+   gesture_equiv_test.cpp`) to cover modded playback. Then bench.

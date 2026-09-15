@@ -51,9 +51,9 @@ summary to open a <strong>settings dialog</strong> — choose <strong>Bus servo<
 <strong>Stepper</strong> and set its connection pins there; the value axis and units follow the
 type (counts / degrees / steps). Each <strong>keyframe</strong> is a time × a value; the line
 between two keyframes is a <strong>segment</strong> you can shape with an easing curve. <strong>Play</strong> sends every row as one lane of a single <code>arduino.gesture({…})</code>
-so they all start together and arrive together — starting from the <strong>playhead</strong> you
-position on the ruler. <strong>Pause</strong> freezes the playhead and lets you <strong>scrub</strong> the
-outputs through the sequence by hand.</p>
+so they all start together and arrive together — playing forward from the <strong>playhead</strong>
+you position on the ruler. The playhead is a <strong>remote control</strong>: drag it any time and
+the outputs follow the sequence to that point, live.</p>
 
   </div>
 
@@ -134,19 +134,19 @@ output type and set its pins (ID / Pin / STEP·DIR·EN). Add or remove rows with
 </tr>
 <tr>
 <td><strong>drag the playhead</strong> (ruler)</td>
-<td>set where <strong>play</strong> starts; while <strong>paused</strong>, scrub it to drive the outputs through the sequence</td>
+<td><strong>drive the outputs</strong> to that point in the sequence, live — a remote control (grabbing it during play takes over). Play resumes from wherever it rests</td>
 </tr>
 <tr>
 <td><strong>▶ play</strong></td>
-<td>play from the playhead (one batched <code>arduino.gesture({…})</code>)</td>
-</tr>
-<tr>
-<td><strong>❙❙ pause</strong></td>
-<td>freeze the playhead; scrub to move the outputs (a held <code>group.write()</code>)</td>
+<td>play the sequence forward from the playhead (one batched <code>arduino.gesture({…})</code>)</td>
 </tr>
 <tr>
 <td><strong>■ stop</strong></td>
-<td>cancel the gesture, hold, return the playhead to the start</td>
+<td>cancel the gesture and hold where it is — the playhead stays put (the robot doesn't rewind)</td>
+</tr>
+<tr>
+<td><strong>|◀◀ start</strong> / <strong>end ▶▶|</strong></td>
+<td>send the playhead <strong>and the outputs</strong> to the start / end</td>
 </tr>
 <tr>
 <td><strong>free</strong> / <strong>free all</strong></td>

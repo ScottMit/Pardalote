@@ -91,6 +91,9 @@
 <li>Arduino and browser must be on the same WiFi network</li>
 <li>Try refreshing — the Arduino may still be starting up</li>
 </ul>
+<h2 id="serial-monitor-is-blank-on-an-esp32-c5-c3-or-s3-no-w-menu-board-seems-dead">&quot;Serial Monitor is blank on an ESP32-C5, C3 or S3 (no <code>w</code> menu, board seems dead)&quot;</h2>
+<p>On chips with native USB (ESP32-<strong>C5</strong>, <strong>C3</strong>, <strong>S3</strong>), <strong>Tools → USB CDC On Boot</strong> decides whether your sketch's <code>Serial</code> is routed to the USB port or to hardware UART0. With it <strong>Disabled</strong>, <code>Serial.print</code> goes out the UART pins and never reaches the USB Serial Monitor — so the <a href="wifi.html#option-b-eeprom-serial-monitor">WiFi setup <code>w</code> menu</a> never appears and the board looks hung, even though Pardalote is booting and running fine. <strong>Set USB CDC On Boot → <code>Enabled</code></strong> and re-upload.</p>
+<p>An early <code>E (…) MSPI Timing: Failed to allocate dummy cacheline for PSRAM</code> line can still print — that's harmless ROM-bootloader noise emitted <em>before</em> the CDC setting takes effect, not a PSRAM fault. Leave <strong>PSRAM → Disabled</strong> unless you're driving a camera. (Confirmed on the FireBeetle 2 ESP32-C5.)</p>
 <h2 id="connection-drops-every-few-seconds-uno-r4">&quot;Connection drops every few seconds&quot; (UNO R4)</h2>
 <ul>
 <li>This is a known UNO R4 WiFi behaviour</li>

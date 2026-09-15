@@ -9,7 +9,7 @@
 // ==============================================================
 
 // The pin your potentiometer's wiper is connected to.
-//   UNO: 14 (A0)      ESP32: 36
+// eg.  UNO: 14 (A0)      ESP32: 36
 const PIN = 14;
 
 let arduino;

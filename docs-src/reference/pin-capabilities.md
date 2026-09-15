@@ -79,6 +79,8 @@ The **Alias** names below work by name in your sketch (`arduino.digitalWrite(D13
 
 The **Alias** names below work by name in your sketch (`arduino.analogRead(A1)`) — no include needed. `arduino.analogMax` = **4095**. Datasheet-derived — not yet bench-verified. A single 12-bit SAR ADC (no ADC2/WiFi split), and a 6-channel LED PWM controller (at most six PWM outputs at once).
 
+> **Native USB:** the C5 talks to the Serial Monitor over native USB, so set **Tools → USB CDC On Boot → `Enabled`** — without it the Serial Monitor stays blank and the WiFi `w` menu never shows (the board is fine, you just can't see it). Leave **PSRAM → Disabled**. See [Troubleshooting](troubleshooting.html#serial-monitor-is-blank-on-an-esp32-c5-c3-or-s3-no-w-menu-board-seems-dead).
+
 | GPIO | Alias | Analog in | Digital in | Digital out | PWM | Notes |
 |---|---|:---:|:---:|:---:|:---:|---|
 | 2  | A1  | ✓ | ✓ | ✓ | ✓ | ADC — readable on WiFi |

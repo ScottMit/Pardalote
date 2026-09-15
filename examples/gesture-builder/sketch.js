@@ -81,7 +81,7 @@ const TYPE = (rw) => OUTPUT_TYPES[rw.type] || OUTPUT_TYPES.busservo;
 const STORE = 'pardalote-gesture-builder';
 const DEFAULTS = {
     rx: 18, tx: 19,
-    total: DEFAULT_TOTAL, playFrom: 0,
+    total: DEFAULT_TOTAL, headTime: 0,
     rows: [
         { id: 1, points: [ { t: 0, v: 2048, curve: 'easeInOut' }, { t: 2200, v: 3300, curve: 'easeOut' }, { t: 4600, v: 900, curve: 'linear' } ] },
         { id: 2, points: [ { t: 0, v: 2048, curve: 'easeOut' }, { t: 1500, v: 1200, curve: 'easeIn' }, { t: 3400, v: 3000, curve: 'easeInOut' }, { t: 4600, v: 2048, curve: 'linear' } ] },
@@ -110,10 +110,12 @@ let dragPt = null;     // { row, i } while dragging a point
 let manualPt = null;   // { row, i } while hand-setting a point from the live servo
 let limitPose = null;  // { row, min, max } while capturing soft limits from hand movement
 let lastPointer = null;
-let playing = false, paused = false, playStart = 0, playDur = 0, playBase = 0;
+let playing = false, playStart = 0, playDur = 0, playBase = 0;
 let playedServos = [], gestureSeen = false;   // v1.1 gesture-active tracking (isGesturing)
-let playFrom = clamp(Math.round(+saved.playFrom || 0), 0, TMAX);   // start marker: where play begins from stop (ms)
-let headTime = playFrom;   // live playhead time (animates while playing, scrubbable while paused)
+// Remote-control model: the playhead IS the current position. It's where the robot
+// sits, where play resumes from, and dragging it drives the motors live. (No separate
+// "start marker" and no pause — grabbing the playhead takes manual control.)
+let headTime = clamp(Math.round(+(saved.headTime ?? saved.playFrom ?? 0)), 0, TMAX);
 
 let arduino, ready = false, rxTxLocked = false;
 
@@ -185,7 +187,7 @@ function normaliseRows(list) {
 }
 function persist() {
     if (!rxTxLocked) { saved.rx = int(rxEl.value); saved.tx = int(txEl.value); }
-    saved.total = TOTAL; saved.playFrom = playFrom;
+    saved.total = TOTAL; saved.headTime = headTime;
     saved.rows = rows.map(r => ({ type: r.type, id: r.id, pin: r.pin, step: r.step, dir: r.dir, en: r.en, name: r.name || '', on: r.on !== false, min: r.min, max: r.max, points: r.points.map(p => ({ t: p.t, v: p.v, curve: p.curve })) }));
     localStorage.setItem(STORE, JSON.stringify(saved));
     updateCode();
@@ -509,7 +511,7 @@ function resizeSvg() {
     svg.setAttribute('width', w); svg.setAttribute('height', h);
     laneGroups.forEach((lg) => { lg.rect.setAttribute('width', w); lg.guide.setAttribute('x2', w); if (lg.divider) lg.divider.setAttribute('x2', w); });
     buildRuler(w);
-    if (!playing) positionPlayhead(headTime);   // keep the resting/paused playhead spanning the new height
+    if (!playing) positionPlayhead(headTime);   // keep the resting playhead spanning the new height
 }
 function buildRuler(w) {
     rulerG.innerHTML = '';
@@ -917,9 +919,10 @@ function commitManualSet() {
     if (!manualPt) return;
     const { row: r, i } = manualPt; manualPt = null;
     const s = arduino[servoName(r)];
-    if (s) s.enableTorque();   // hold the pose you set
+    if (s) s.enableTorque();   // re-hold at the posed angle — motor active again, not freed
     rows[r].freed = false; updateFreeButtons();
-    renderRow(r);   // drop the green "posing" fill back to the normal selected look
+    clearSelection();   // drop the green "posing" fill AND deselect → the keyframe returns to white
+    renderRow(r);
     persist();
     setStatus(`${rowName(rows[r], r)} key set to ${rows[r].points[i].v} ${TYPE(rows[r]).unit}`);
 }
@@ -971,6 +974,18 @@ document.addEventListener('keydown', (e) => {
     else if (limitPose) { e.preventDefault(); cancelPoseLimits(); }
     else if (outputDialogRow != null) { e.preventDefault(); cancelOutputDialog(); }
 });
+// A click ANYWHERE exits an in-progress pose (not only one on the lanes): it
+// commits — re-holds the motor (active, not freed) and drops the keyframe's
+// green "posing" fill back to white. For an in-lane click the svg pointerdown
+// handler below fires first (it commits and swallows the timeline action);
+// this bubble-phase handler is the no-op-if-already-committed catch-all for
+// the transport buttons, gutter, and empty space. It runs on pointerdown, so a
+// button's own click still fires afterward on the same press — e.g. Play
+// commits the pose (motor re-held) and then plays from it, no jitter.
+document.addEventListener('pointerdown', () => {
+    if (manualPt) commitManualSet();
+    else if (limitPose) commitPoseLimits();
+});
 let lastDownT = 0, lastDownXY = null;
 svg.addEventListener('pointerdown', (e) => {
     if (e.button !== 0) return;   // left button starts drags / selection
@@ -989,23 +1004,24 @@ svg.addEventListener('pointerdown', (e) => {
     else if (t.classList.contains('seghit') || t.classList.contains('seg')) { const r = +t.dataset.row, i = +t.dataset.i; selectSeg(r, i); showSegStatus(r, i); }
     else clearSelection();
 });
-// Drag the playhead along the ruler. Stopped → sets the start marker. Paused →
-// scrubs: the playhead moves and the motors follow the sequence to that time.
+// Drag the playhead along the ruler — the robot follows the sequence to that time,
+// live (remote control). Grabbing it while playing takes manual control: playback
+// stops and the first scrub write supersedes the on-board gesture.
 function startPlayheadDrag(e) {
-    if (playing) return;   // pause first to scrub
-    const scrubbing = paused;
+    if (playing) { playing = false; updateTransport(); }   // grab = take over
+    if (ready) buildScrubGroup();   // one held group for this drag
     const move = (ev) => {
         headTime = clamp(Math.round(xToTime(svgXYc(ev.clientX, ev.clientY).x)), 0, TMAX);
         positionPlayhead(headTime);
-        if (scrubbing) scrubMotors(headTime); else playFrom = headTime;
+        scrubMotors(headTime);   // drive the motors to this time
     };
     move(e);   // jump to the click point
     const up = () => {
         window.removeEventListener('pointermove', move);
         window.removeEventListener('pointerup', up);
-        if (scrubbing) scrubMotors(headTime, true);   // ensure the final position is sent
+        scrubMotors(headTime, true);   // ensure the final position is sent
         persist();
-        setStatus(scrubbing ? `scrub ${Math.round(headTime)} ms` : `play starts at ${playFrom} ms`);
+        setStatus(`playhead ${Math.round(headTime)} ms`);
     };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
@@ -1064,28 +1080,15 @@ function startPlayback(fromTime) {
     });
     if (!active) { setStatus(fromTime > 0 ? 'no keys at/after the playhead' : 'add some keys first'); return; }
     updateFreeButtons();
-    scrubGroup = null;   // leaving pause — drop the held scrub group
+    scrubGroup = null;   // playing takes over from any manual scrub — drop the held group
     arduino.gesture(lanes, { absolute: true });   // one batched frame, channels start & arrive together
     playedServos = Object.keys(lanes).map(k => arduino[k]); gestureSeen = false;   // watch the board's isGesturing
-    playing = true; paused = false; playBase = fromTime; playStart = performance.now(); playDur = Math.max(1, maxDur);
+    playing = true; playBase = fromTime; playStart = performance.now(); playDur = Math.max(1, maxDur);
     updateTransport();
     setStatus(`playing ${active} servo${active === 1 ? '' : 's'} · ${playDur} ms`);
 }
-// ▶ play — from the start marker, or resume from a paused (scrubbed) position.
-function play() { if (playing) return; startPlayback(paused ? headTime : playFrom); }
-// ❙❙ pause — freeze the playhead (halt the on-board gesture, hold), enabling scrub.
-function pause() {
-    if (playing) {
-        playing = false; paused = true;
-        headTime = clamp(playBase + (performance.now() - playStart), 0, TMAX);
-        if (ready) rows.forEach((_, r) => holdHere(r));   // stop where it is
-        buildScrubGroup();   // hold one group for the scrub session
-        positionPlayhead(headTime); updateTransport();
-        setStatus(`paused at ${Math.round(headTime)} ms — scrub the playhead`);
-    } else if (paused) {
-        play();   // pause again while paused → resume
-    }
-}
+// ▶ play — run the sequence forward from wherever the playhead is now.
+function play() { if (playing) return; startPlayback(headTime); }
 // Build a row's segment schedule starting at time T (the playhead): lead-in from the
 // servo's live position to the first keyframe at/after T, then the remaining segments.
 function buildSegments(rw, T = 0) {
@@ -1097,28 +1100,31 @@ function buildSegments(rw, T = 0) {
     return segs.slice(0, 12);   // board cap (MAX_BUS_SERVO_SEGMENTS)
 }
 function stop() {
-    playing = false; paused = false; scrubGroup = null;
+    playing = false; scrubGroup = null;
     if (ready) rows.forEach((rw, r) => { holdHere(r); rw.freed = false; });   // hold where they are
     updateFreeButtons();
-    headTime = playFrom; positionPlayhead(headTime);   // snap back to the start marker
-    updateTransport();
+    positionPlayhead(headTime);   // stay put — the robot holds where it stopped, doesn't rewind
+    updateTransport(); persist();
     setStatus('stopped');
 }
-// |◀◀ start / end ▶▶| — jump the playhead. Stopped → moves the start marker; paused → scrubs.
+// |◀◀ start / end ▶▶| — jump the playhead (the motors are driven there by the caller,
+// goToStart / goToEnd). Stops playback first if it's running.
 function movePlayheadTo(t) {
-    if (playing) return;   // pause first
+    if (playing) { playing = false; scrubGroup = null; updateTransport(); }
     headTime = clamp(Math.round(t), 0, TMAX); positionPlayhead(headTime);
     followPlayhead(timeToX(headTime));   // scroll the timeline so the playhead is in view
-    if (paused) scrubMotors(headTime, true); else playFrom = headTime;
     persist();
-    setStatus(paused ? `scrub ${headTime} ms` : `play starts at ${headTime} ms`);
+    setStatus(`playhead ${headTime} ms`);
 }
-function goToStart() { movePlayheadTo(0); }
-function goToEnd() { let mx = 0; rows.forEach(rw => rw.points.forEach(p => { if (p.t > mx) mx = p.t; })); movePlayheadTo(mx); }
-// Highlight the pause button while paused; keep the ribbon reflecting state.
+function goToStart() { movePlayheadTo(0); driveMotorsTo(0); }
+function goToEnd() {
+    let mx = 0; rows.forEach(rw => rw.points.forEach(p => { if (p.t > mx) mx = p.t; }));
+    movePlayheadTo(mx); driveMotorsTo(mx);
+}
+// Highlight the play button while a sequence is running.
 function updateTransport() {
-    const pb = document.getElementById('pause');
-    if (pb) pb.classList.toggle('active', paused);
+    const pb = document.getElementById('play');
+    if (pb) pb.classList.toggle('active', playing);
 }
 // Interpolated servo value along the authored curve at time t (for scrubbing).
 function valueAtTime(rw, t) {
@@ -1135,7 +1141,7 @@ function valueAtTime(rw, t) {
     return clamp(Math.round(pts[pts.length - 1].v), rw.min, rw.max);
 }
 // Scrubbing writes the SAME set of servos repeatedly, so we hold ONE group for the
-// whole pause session (built on pause, reused per pointermove, dropped on resume/stop)
+// whole drag (rebuilt at drag start, reused per pointermove, dropped on play/stop)
 // — not a fresh group per frame.
 let scrubGroup = null, lastScrubSend = 0;
 function buildScrubGroup() {
@@ -1143,7 +1149,7 @@ function buildScrubGroup() {
     if (!ready) return;
     const members = {};
     rows.forEach((rw, r) => {
-        if (rw.on === false || !rw.points.length) return;
+        if (rw.on === false || rw.freed === true || !rw.points.length) return;   // don't scrub a freed (hand-posed) output
         const s = arduino[servoName(r)];
         if (s.present === false) return;
         members[servoName(r)] = s;
@@ -1164,6 +1170,22 @@ function scrubMotors(t, force) {
         if (v != null) values[key] = v;
     });
     if (Object.keys(values).length) scrubGroup.write(values);
+}
+// Send the physical motors to their positions at time t — one batched immediate
+// write (the |◀◀ start / end ▶▶| buttons). Skips outputs that are FREED
+// (hand-posed), switched off, empty, or not present — so a freed motor stays
+// where you posed it, per the "only if not free" rule.
+function driveMotorsTo(t) {
+    if (!ready) return;
+    const values = {};
+    rows.forEach((rw, r) => {
+        if (rw.on === false || rw.freed === true || !rw.points.length) return;
+        const s = arduino[servoName(r)];
+        if (!s || s.present === false) return;
+        const v = valueAtTime(rw, t);
+        if (v != null) values[servoName(r)] = v;
+    });
+    if (Object.keys(values).length) arduino.write(values);   // fire-once coordinated write
 }
 // "free" buttons are toggles — green when the servo is freed (torque off / hand-poseable).
 // `rw.freed` is live hardware state (not persisted); bindRow() frees on connect.
@@ -1193,7 +1215,7 @@ function freeAll() {
     const idx = rows.map((_, r) => r).filter(canFree);
     if (!idx.length) { setStatus('no freeable outputs (PWM servos hold; steppers need an EN pin)'); return; }
     const freeThem = idx.some(r => rows[r].freed !== true);
-    if (freeThem) { playing = false; paused = false; scrubGroup = null; updateTransport(); }
+    if (freeThem) { playing = false; scrubGroup = null; updateTransport(); }
     idx.forEach(r => setFreed(r, freeThem));
     updateFreeButtons();
     setStatus(freeThem ? 'outputs freed — hand-pose them' : 'outputs holding');
@@ -1250,7 +1272,7 @@ function ensureActuator(r) {
     return arduino[name];
 }
 function ensureAllActuators() { rows.forEach((_, r) => ensureActuator(r)); }
-// Command an output to hold at its current value (type-aware; used by pause/stop).
+// Command an output to hold at its current value (type-aware; used by stop).
 function holdHere(r) { const t = TYPE(rows[r]), s = arduino[servoName(r)]; if (s) t.write(s, t.cur(s)); }
 function bindRow(r) {
     const rw = rows[r], t = TYPE(rw), s = ensureActuator(r);
@@ -1310,7 +1332,12 @@ function tick() {
         if (anyGesturing) gestureSeen = true;
         const boardEnded = gestureSeen && !anyGesturing;
         if (boardEnded || (e >= playDur && !anyGesturing)) {
-            playing = false; setStatus('done'); headTime = playFrom; positionPlayhead(headTime); updateTransport();
+            // Leave the playhead at the END where playback finished — the robot stays at
+            // its final pose (it doesn't auto-return to the start), so the playhead reflects
+            // that. Use |◀◀ start to send both the playhead and the motors back, then play.
+            playing = false; setStatus('done');
+            headTime = clamp(playBase + playDur, 0, TMAX);
+            positionPlayhead(headTime); updateTransport(); persist();
         }
     }
     edgeScrollDuringDrag();
@@ -1347,7 +1374,6 @@ rxEl.onchange = applyPins; txEl.onchange = applyPins;
 
 $('toStart').onclick = goToStart;
 $('play').onclick = play;
-$('pause').onclick = pause;
 $('stop').onclick = stop;
 $('toEnd').onclick = goToEnd;
 $('freeAll').onclick = freeAll;

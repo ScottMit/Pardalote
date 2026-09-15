@@ -8,6 +8,7 @@
 //   • whenDone()       — await real arrival (logged with elapsed ms)
 //   • setLimits()      — soft limits clamped on the Arduino
 //   • setHome()/home() — declare a home angle and glide to it
+//   • drag the arm on the canvas — direct pointer control via write()
 // House style: see style.css — shared by every Pardalote example.
 // by Scott Mitchell
 // GPL-3.0-or-later License
@@ -40,6 +41,9 @@ let disp = 90, from = 90, to = 90, moveStart = 0, moveDur = 200;
 
 // Soft-limit + home state, mirrored locally just for the on-screen readout.
 let limMin = null, limMax = null, homeAngle = 90;
+
+// Direct manipulation: drag the gauge arm to write() the servo by pointer.
+let dragging = false;
 
 let statusEl, logEl, pinIn, targetSlider, durSlider, durVal,
     minInput, maxInput, homeInput;
@@ -232,6 +236,10 @@ const angleFor = deg => PI + (constrain(deg, 0, 180) / 180) * PI;
 function draw() {
     background(255);
 
+    // pointer affordance: the arm is grabbable when connected
+    if (ready && overGauge()) cursor(dragging ? 'grabbing' : 'grab');
+    else cursor(ARROW);
+
     const t = moveDur > 0 ? constrain((millis() - moveStart) / moveDur, 0, 1) : 1;
     disp = lerp(from, to, easeInOut(t));
 
@@ -260,6 +268,13 @@ function draw() {
     line(0, 0, cos(a) * R, sin(a) * R);
     fill(ready ? INK : GREY); noStroke(); circle(0, 0, 12);
 
+    // discoverability hint (fades out while dragging)
+    if (ready && !dragging) {
+        fill(GREY); noStroke(); textSize(11); textAlign(CENTER);
+        text('drag the arm to aim', 0, -R - 18);
+        textAlign(LEFT);
+    }
+
     // whenDone pulse: a ring that expands and fades (teal = arrived, orange = timeout)
     if (millis() < flashUntil) {
         const f = (flashUntil - millis()) / 700;          // 1 → 0
@@ -278,4 +293,48 @@ function draw() {
     text(`home: ${homeAngle}°`, 0, 80);
     textAlign(LEFT);
     pop();
+}
+
+// -------------------------------------------------------------------
+// Direct manipulation — drag the gauge arm to command the servo.
+// The pointer is mapped onto the top-semicircle sweep and written with
+// write(); the arm then tracks arduino.myServo.angle (the applied,
+// soft-limit-clamped value), so dragging past a limit stops at the band.
+// -------------------------------------------------------------------
+
+// Is the pointer over the gauge (inside the canvas, near the arc)?
+function overGauge() {
+    const dx = mouseX - cx, dy = mouseY - cy;
+    const rr = Math.hypot(dx, dy);
+    return mouseX >= 0 && mouseX <= W && mouseY >= 0 && mouseY <= H
+        && dy <= 12 && rr > R * 0.35 && rr < R * 1.35;
+}
+
+// Pointer → degrees, inverting angleFor() over the [PI, TWO_PI] sweep.
+function angleFromPointer() {
+    let a = atan2(mouseY - cy, mouseX - cx);   // [-PI, PI]
+    if (a > 0) a -= TWO_PI;                     // fold the left seam + lower half
+    a += TWO_PI;                                // → [PI, TWO_PI] across the top arc
+    return constrain((a - PI) / PI * 180, 0, 180);
+}
+
+function dragTo() {
+    arduino.myServo.write(round(angleFromPointer()));
+    startLeg(arduino.myServo.angle, 60);        // ease to the applied (clamped) value
+}
+
+function mousePressed() {
+    if (!ready || !overGauge()) return;
+    dragging = true;
+    dragTo();
+}
+
+function mouseDragged() {
+    if (dragging) dragTo();
+}
+
+function mouseReleased() {
+    if (!dragging) return;
+    dragging = false;
+    log(`drag → ${arduino.myServo.angle}°`);
 }

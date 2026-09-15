@@ -105,6 +105,9 @@ Saved: YourWiFiName
 &gt; x
 </code></pre></div>
 <p>Credentials survive re-uploads and power cycles. Up to <strong>5 networks</strong> can be stored — useful for moving between home, studio, and classroom. Press <code>w</code> within 5 seconds of any boot to update them.</p>
+<blockquote>
+<p><strong>Native-USB boards (ESP32-C5 / C3 / S3):</strong> if the Serial Monitor stays blank and this menu never appears, set <strong>Tools → USB CDC On Boot → <code>Enabled</code></strong> and re-upload — otherwise <code>Serial</code> isn't routed to the USB port. See <a href="troubleshooting.html#serial-monitor-is-blank-on-an-esp32-c5-c3-or-s3-no-w-menu-board-seems-dead">Troubleshooting</a>.</p>
+</blockquote>
 <h2 id="both-options-together">Both options together</h2>
 <p>If <code>SECRET_SSID</code> is defined and EEPROM networks are also stored, Pardalote tries <code>secrets.h</code> first, then falls back to the EEPROM networks in order.</p>
 <h2 id="after-connecting">After connecting</h2>

@@ -320,6 +320,20 @@ private:
         }
     }
 
+    // The curve's END velocity (counts/sec) — the speed the streamer would command
+    // on a FULL final tick (from ease(1-tick/dur) to ease(1)=1). Used to LAND a lane
+    // onto its target at the speed it's ACTUALLY moving as the segment ends, so any
+    // residual look-ahead lag closes as a seamless continuation of the motion. Unlike
+    // the average cruise speed this matches the curve at t=1: high for easeIn, ~0 for
+    // easeOut/easeInOut (where the residual is tiny too), = cruise for linear. Using a
+    // deterministic full-tick value also avoids the random speed of a partial final tick.
+    static int segEndSpeed(int32_t from, int32_t target, uint16_t durMs, uint8_t curve) {
+        if (durMs < 1) durMs = 1;
+        float tPrev = (durMs > BUS_STEP_MS) ? (float)(durMs - BUS_STEP_MS) / (float)durMs : 0.0f;
+        float step  = (float)labs((long)target - (long)from) * (1.0f - pardaloteEase(curve, tPrev));
+        return (int)lroundf(step / (BUS_STEP_MS / 1000.0f));
+    }
+
     // Streaming interpolator tick (~50 Hz). For every lane with a running
     // gesture: advance past any elapsed segments (a short pad/hold may span < a
     // tick), then sample the eased curve NOW and one tick AHEAD and command the
@@ -350,11 +364,29 @@ private:
             bool finished = false;
             while (now - _bsegStartMs[id] >= _bsegDurMs[id]) {
                 if (_bsegIndex[id] + 1 < _bsegCount[id]) {
+                    // Land speed = the FINISHING segment's own END velocity (captured before
+                    // the chain overwrites its from/target/dur/curve). See below.
+                    int landSpeed = segEndSpeed(_bsegFrom[id], _bsegTarget[id], _bsegDurMs[id],
+                                                _bsegs[id][_bsegIndex[id]].curve);
                     _bsegFrom[id] = _bsegTarget[id];        // chain from the commanded end
                     loadBusSegment(id, _bsegIndex[id] + 1, _bsegStartMs[id] + _bsegDurMs[id]);
+                    // Entering a HOLD (a trailing pad that keeps a short lane phase-locked,
+                    // or a same-value keyframe)? The moving segment's final tick is a PARTIAL
+                    // tick — elN is capped at the segment end — so its feed-forward speed is a
+                    // random slice of a full tick. Command the exact target ONCE at the curve's
+                    // deterministic END velocity, so a residual lag closes as a seamless
+                    // continuation of the motion — no random crawl, and (unlike the average
+                    // cruise speed) no jump on a curve. The per-tick d==0 skip below then holds it.
+                    if (_bsegTarget[id] == _bsegFrom[id])
+                        pushSetpoint(id, _bsegTarget[id], landSpeed, ids, positions, speeds, accs, n);
                 } else {
-                    pushSetpoint(id, clampToRange(id, _bsegTarget[id]), 1000,
-                                 ids, positions, speeds, accs, n);   // land exactly on target
+                    // Final segment done — land on target at the curve's END velocity
+                    // (seamless), not the average cruise (which jumps on a curve).
+                    // WritePosEx lands exactly regardless of speed.
+                    int landSpeed = segEndSpeed(_bsegFrom[id], _bsegTarget[id], _bsegDurMs[id],
+                                                _bsegs[id][_bsegIndex[id]].curve);
+                    pushSetpoint(id, clampToRange(id, _bsegTarget[id]), landSpeed,
+                                 ids, positions, speeds, accs, n);
                     finishGesture(id);
                     finished = true;
                     break;
@@ -367,6 +399,13 @@ private:
             uint16_t dur   = _bsegDurMs[id];
             int32_t  from  = _bsegFrom[id];
             int32_t  d     = _bsegTarget[id] - from;
+            // A pure hold (a trailing pad that keeps a short lane phase-locked, or a
+            // same-value keyframe) covers no distance: the servo was already commanded
+            // this target on the previous segment's final tick (the look-ahead caps at
+            // the segment end) and holds it on its own. Re-streaming a min-speed setpoint
+            // 50x/s would instead crawl it slowly onto the target across the whole hold —
+            // so skip it and let the lane sit still until it advances/finishes.
+            if (d == 0) continue;
             uint8_t  curve = _bsegs[id][_bsegIndex[id]].curve;
             uint32_t el    = now - _bsegStartMs[id];
             uint32_t elN   = el + BUS_STEP_MS;
@@ -377,7 +416,16 @@ private:
             int32_t posNext = clampToRange(id, from + (int32_t)lroundf((float)d * shNext));
             long step  = labs((long)posNext - (long)posNow);
             int  speed = (int)lroundf((float)step / (BUS_STEP_MS / 1000.0f));
-            pushSetpoint(id, posNext, speed, ids, positions, speeds, accs, n);
+            // Command the segment's TRUE ENDPOINT at the curve's instantaneous speed, NOT the
+            // one-tick look-ahead. A Feetech WritePosEx decelerates to a STOP at its target, so
+            // re-aiming one tick ahead every 20 ms makes the servo accel-decel-stop each tick,
+            // under-travel, and accumulate lag (worst on easeOut: fast early → falls far behind →
+            // then crawls the gap for ~2 s). Aiming at the far endpoint lets it CRUISE at the
+            // commanded speed (it only decelerates as it nears the real endpoint), so it tracks
+            // the curve and arrives on time. Exception: CURVE_BACK must travel PAST the endpoint,
+            // so it still streams the (overshooting) look-ahead point.
+            int32_t posCmd = (curve == CURVE_BACK) ? posNext : _bsegTarget[id];
+            pushSetpoint(id, posCmd, speed, ids, positions, speeds, accs, n);
         }
 
         if (n > 0) _st.SyncWritePosEx(ids, n, positions, speeds, accs);

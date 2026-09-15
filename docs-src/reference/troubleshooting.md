@@ -7,6 +7,12 @@ lede: Common issues and their usual fixes, roughly in the order people hit them.
 - Arduino and browser must be on the same WiFi network
 - Try refreshing — the Arduino may still be starting up
 
+## "Serial Monitor is blank on an ESP32-C5, C3 or S3 (no `w` menu, board seems dead)"
+
+On chips with native USB (ESP32-**C5**, **C3**, **S3**), **Tools → USB CDC On Boot** decides whether your sketch's `Serial` is routed to the USB port or to hardware UART0. With it **Disabled**, `Serial.print` goes out the UART pins and never reaches the USB Serial Monitor — so the [WiFi setup `w` menu](wifi.html#option-b-eeprom-serial-monitor) never appears and the board looks hung, even though Pardalote is booting and running fine. **Set USB CDC On Boot → `Enabled`** and re-upload.
+
+An early `E (…) MSPI Timing: Failed to allocate dummy cacheline for PSRAM` line can still print — that's harmless ROM-bootloader noise emitted *before* the CDC setting takes effect, not a PSRAM fault. Leave **PSRAM → Disabled** unless you're driving a camera. (Confirmed on the FireBeetle 2 ESP32-C5.)
+
 ## "Connection drops every few seconds" (UNO R4)
 
 - This is a known UNO R4 WiFi behaviour

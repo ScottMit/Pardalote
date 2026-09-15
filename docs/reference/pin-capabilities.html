@@ -510,6 +510,9 @@
 </table>
 <h2 id="firebeetle-2-esp32-c5">FireBeetle 2 ESP32-C5</h2>
 <p>The <strong>Alias</strong> names below work by name in your sketch (<code>arduino.analogRead(A1)</code>) — no include needed. <code>arduino.analogMax</code> = <strong>4095</strong>. Datasheet-derived — not yet bench-verified. A single 12-bit SAR ADC (no ADC2/WiFi split), and a 6-channel LED PWM controller (at most six PWM outputs at once).</p>
+<blockquote>
+<p><strong>Native USB:</strong> the C5 talks to the Serial Monitor over native USB, so set <strong>Tools → USB CDC On Boot → <code>Enabled</code></strong> — without it the Serial Monitor stays blank and the WiFi <code>w</code> menu never shows (the board is fine, you just can't see it). Leave <strong>PSRAM → Disabled</strong>. See <a href="troubleshooting.html#serial-monitor-is-blank-on-an-esp32-c5-c3-or-s3-no-w-menu-board-seems-dead">Troubleshooting</a>.</p>
+</blockquote>
 <table>
 <thead>
 <tr>
