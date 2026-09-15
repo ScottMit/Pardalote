@@ -1,6 +1,6 @@
 // ==============================================================
 // Camera PoseNet — p5.js + Pardalote
-// Runs ml5.js PoseNet on the MJPEG video streamed from an ESP32-S3 camera,
+// Runs ml5.js PoseNet on the MJPEG video streamed from an ESP32 camera,
 // instead of a local webcam (createCapture). There's no pin to set — the
 // camera's stream port is fixed by the firmware.
 //
@@ -24,6 +24,12 @@ const FRAME_SIZE = FRAMESIZE_VGA;   // 640×480 — matches the canvas
 
 // Flip the image left-to-right. A webcam selfie is usually mirrored.
 const MIRROR = true;
+
+// PoseNet always reports all 17 keypoints every frame, even ones it can't
+// actually see (occluded joints, or anything when the figure is small/far).
+// Those come back with a near-zero score and jitter around at random — so we
+// only draw keypoints (and skeleton bones) the model is at least this sure of.
+const MIN_CONFIDENCE = 0.2;
 
 let arduino;
 let imgEl = null;                 // raw <img> holding the live MJPEG stream
@@ -98,6 +104,7 @@ function draw() {
             fill(0, 255, 0);
             noStroke();
             for (let kp of p.pose.keypoints) {
+                if (kp.score < MIN_CONFIDENCE) continue;
                 circle(kp.position.x, kp.position.y, 15/sx);
             }
 
@@ -105,6 +112,9 @@ function draw() {
             stroke(255);
             strokeWeight(3/sx);
             for (let bone of p.skeleton) {
+                // skeleton pairs are [keypointA, keypointB]; skip a bone unless
+                // both ends clear the threshold, so it can't anchor to a jittery point.
+                if (bone[0].score < MIN_CONFIDENCE || bone[1].score < MIN_CONFIDENCE) continue;
                 const a = bone[0].position, b = bone[1].position;
                 line(a.x, a.y, b.x, b.y);
             }
