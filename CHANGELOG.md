@@ -52,7 +52,8 @@ Pardalote versions **two things independently**:
   paced to the servo's real position so a move can't run ahead of the hardware and
   drift. The shape you author — `easeIn` / `easeOut` / `easeInOut` / `back`, overshoot
   included — is the shape the servo runs, and each move lands on its authored timeline.
-  No API or wire-format change. In a coordinated group, the lanes stay phase-locked even
+  (A segment shorter than ~600 ms plays linear — too brief to render an easing shape, and
+  imperceptibly so.) No API or wire-format change. In a coordinated group, the lanes stay phase-locked even
   when one servo can't keep up: the whole gesture waits for its slowest channel and stays
   in formation, rather than the fast lanes running on and tearing the pose apart.
   *(All five curves + the multi-servo group barrier bench-confirmed on ST servos.)*

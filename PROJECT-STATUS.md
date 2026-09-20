@@ -105,6 +105,11 @@ structurally verified unless a bench entry says otherwise.
     curves — `linear` / `easeIn` / `easeOut` / `easeInOut` / `back` — render on hardware and
     **land on time** at both 2 s and 4 s (no creep, no early finish); `back` overshoots and
     settles smoothly. `tools/stub-compile/run.sh` stays clean on ESP32 / UNO R4 WiFi / Minima.
+  - **Short segments play linear (bench-confirmed 2026-09-20, Scott).** A bus gesture segment shorter than
+    `BUS_MIN_CURVE_MS = 3 * BUS_LEAD * BUS_STEP_MS` (~600 ms) plays linear regardless of authored curve — too
+    few stream ticks to render an easing shape, and endpoint-commanding a front-loaded curve there just trips
+    the pace-gate into a crawl. One-line override where the segment curve is read; auto-scales with the tick
+    params. (Docs note added; open: optionally gate the Gesture Builder preview to match for bus-servo rows.)
   - **Group-scoped pace barrier (bench-confirmed 2026-09-20, Scott — multi-servo working).** Multi-servo bench
     surfaced the per-lane limitation: when one channel couldn't keep up, the others didn't wait and
     the pose tore apart. The pace freeze is now decided per **cohort** — every lane sharing a gesture

@@ -243,7 +243,7 @@
 <tr>
 <td><code>curve</code></td>
 <td>string</td>
-<td>Easing shape for the segment — <code>linear</code> (default), <code>easeIn</code>, <code>easeOut</code>, <code>easeInOut</code>, <code>back</code>. Rendered on the board by the streaming interpolator.</td>
+<td>Easing shape for the segment — <code>linear</code> (default), <code>easeIn</code>, <code>easeOut</code>, <code>easeInOut</code>, <code>back</code>. Rendered on the board by the streaming interpolator. A segment shorter than ~600 ms plays <strong>linear</strong> regardless (too few stream ticks to render an easing shape cleanly; the difference is imperceptible at that duration).</td>
 </tr>
 </tbody>
 </table>

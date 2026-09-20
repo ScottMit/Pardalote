@@ -127,4 +127,5 @@ shape you draw on screen is the shape the schedule encodes.
   board-side **streaming interpolator**: it samples the curve on a fixed clock and
   streams look-ahead setpoints (batched across a group into one phase-locked
   write). The shape you draw, overshoot included, is the shape the servo runs — no
-  need to hand-decompose a move into extra keyframes to fake it.
+  need to hand-decompose a move into extra keyframes to fake it. (A segment shorter
+  than ~600 ms plays linear — too brief to render an easing shape, and imperceptibly so.)

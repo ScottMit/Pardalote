@@ -108,7 +108,7 @@ Each segment carries a duration and a displacement expressed **either** relative
 | `dur` | number | Segment duration in ms — sizes the segment's speed. |
 | `by` | number | **Relative** displacement in counts — the default frame. |
 | `to` | number | **Absolute** target in counts — use in place of `by`. |
-| `curve` | string | Easing shape for the segment — `linear` (default), `easeIn`, `easeOut`, `easeInOut`, `back`. Rendered on the board by the streaming interpolator. |
+| `curve` | string | Easing shape for the segment — `linear` (default), `easeIn`, `easeOut`, `easeInOut`, `back`. Rendered on the board by the streaming interpolator. A segment shorter than ~600 ms plays **linear** regardless (too few stream ticks to render an easing shape cleanly; the difference is imperceptible at that duration). |
 
 Relative by default (the board reads the live start position, then chains from each target). Absolute targets are clamped to the series range / `setLimits()`. Up to **12** segments. The board paces the stream to the servo's real position: if a segment's implied speed exceeds what the servo can deliver, the schedule holds until the hardware catches up rather than running ahead of it, so the timeline stays honest instead of drifting.
 

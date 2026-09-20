@@ -1035,7 +1035,7 @@ arduino.shoulder.stop();                    // halt — hold the last-read posit
 
 #### Gestures
 
-`gesture(segments)` plays an authored **segment schedule** — the board runs the segments back-to-back on its own clock. Values are in **counts**. A bus servo takes a *(position, speed)* target and runs its own move, so the board renders each segment's easing `curve` with a **streaming interpolator** (it samples the curve on a fixed clock and streams look-ahead setpoints, batched across a group into one phase-locked write) — the shape you author, overshoot included, is the shape the servo runs.
+`gesture(segments)` plays an authored **segment schedule** — the board runs the segments back-to-back on its own clock. Values are in **counts**. A bus servo takes a *(position, speed)* target and runs its own move, so the board renders each segment's easing `curve` with a **streaming interpolator** (it samples the curve on a fixed clock and streams look-ahead setpoints, batched across a group into one phase-locked write) — the shape you author, overshoot included, is the shape the servo runs. (Segments shorter than ~600 ms play linear — too brief to render an easing shape, and imperceptibly so.)
 
 ```javascript
 // Reach out, ease back, small settle — relative by default

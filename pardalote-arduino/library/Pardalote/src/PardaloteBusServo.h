@@ -204,6 +204,13 @@ private:
                                                    // timing but risks steppiness. (CURVE_BACK's carrot goes PAST the
                                                    // endpoint, ease > 1, so its overshoot is traced the same way.)
                                                    // Bench knob: higher = smoother BACK, but the overshoot leads more.
+    // Short segments play LINEAR regardless of authored curve. A curve only renders cleanly when
+    // the move spans several look-ahead windows (BUS_LEAD*BUS_STEP_MS): below that, more and more
+    // of it clamps to the endpoint (endpoint-commanding), where a front-loaded curve like easeOut
+    // phantom-lags and the pace-gate freezes it into a crawl. 3 windows is the floor for a clean
+    // curve; shorter than that, linear lands cleanly and the shape difference is imperceptible.
+    // Tied to the tick params so it auto-scales if BUS_LEAD / BUS_STEP_MS are retuned.
+    static const uint16_t BUS_MIN_CURVE_MS = 3 * BUS_LEAD * BUS_STEP_MS;   // 600 ms at the defaults
     inline static uint32_t _pausedMs[MAX_BUS_SERVOS]     = {};   // total time this lane's clock has been frozen
     inline static bool     _paused[MAX_BUS_SERVOS]       = {};   // schedule frozen right now (this lane's cohort is waiting)
     inline static bool     _behind[MAX_BUS_SERVOS]       = {};   // THIS lane's own gate verdict — is the servo lagging? (hysteresis)
@@ -465,7 +472,8 @@ private:
             uint16_t dur   = _bsegDurMs[id];
             int32_t  from  = _bsegFrom[id];
             int32_t  d     = _bsegTarget[id] - from;
-            uint8_t  curve = _bsegs[id][_bsegIndex[id]].curve;
+            // Short segments fall back to linear — too few ticks to render a curve (see BUS_MIN_CURVE_MS).
+            uint8_t  curve = (dur < BUS_MIN_CURVE_MS) ? CURVE_LINEAR : _bsegs[id][_bsegIndex[id]].curve;
             uint32_t el    = pnow - _bsegStartMs[id];
             float fracNow  = (float)el / (float)dur;
             int32_t posNow  = clampToRange(id, from + (int32_t)lroundf((float)d * pardaloteEase(curve, fracNow)));
@@ -502,13 +510,18 @@ private:
                 float fracLead = fracNow + (float)(BUS_LEAD * BUS_STEP_MS) / (float)dur;
                 if (fracLead > 1.0f) fracLead = 1.0f;
                 int32_t posCmd = clampToRange(id, from + (int32_t)lroundf((float)d * pardaloteEase(curve, fracLead)));
-                // Speed = distance to that aim point over the lead window (not the 1-tick
-                // curve step). This is what "reach the carrot in BUS_LEAD ticks" actually
-                // costs, so it never collapses to ~0 at a reversal (CURVE_BACK's overshoot
-                // peak) the way the instantaneous step does — that stall was the chop.
+                // Speed = distance to that aim point over the time until it (not the 1-tick
+                // curve step). Sizing it to the carrot never collapses to ~0 at a reversal
+                // (CURVE_BACK's overshoot peak) the way the instantaneous step does — that
+                // stall was the chop.
                 long  reach = labs((long)posCmd - (long)posNow);
-                float leadS = (float)(BUS_LEAD * BUS_STEP_MS) / 1000.0f;
-                int   speed = (int)lroundf((float)reach / leadS * BUS_SPEED_GAIN);
+                // Time until that carrot: the lead window normally, but the REAL time left
+                // (fracLead*dur - el) once fracLead clamps at the endpoint — which is the whole
+                // of a move shorter than the lead window, and the tail of every move. Using the
+                // fixed window there divides by too much and the servo crawls. Floor at one tick.
+                float leadMs = fracLead * (float)dur - (float)el;
+                if (leadMs < (float)BUS_STEP_MS) leadMs = (float)BUS_STEP_MS;
+                int   speed = (int)lroundf((float)reach / (leadMs / 1000.0f) * BUS_SPEED_GAIN);
                 pushSetpoint(id, posCmd, speed, ids, positions, speeds, accs, n);
             }
         }
