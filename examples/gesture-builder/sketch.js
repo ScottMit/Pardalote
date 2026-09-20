@@ -1101,9 +1101,16 @@ function buildSegments(rw, T = 0) {
 }
 function stop() {
     playing = false; scrubGroup = null;
-    if (ready) rows.forEach((rw, r) => { holdHere(r); rw.freed = false; });   // hold where they are
+    if (ready) {
+        // Hold at the CALCULATED playhead position (same source the playhead/scrub uses),
+        // NOT a sensor read: under the 50 Hz gesture stream the cached read lags the moving
+        // motor by hundreds of counts, so holding it would jerk the motor backward to a stale
+        // value. driveMotorsTo() also supersedes the on-board gesture (a direct write cancels it).
+        driveMotorsTo(headTime);
+        rows.forEach((rw) => { rw.freed = false; });
+    }
     updateFreeButtons();
-    positionPlayhead(headTime);   // stay put — the robot holds where it stopped, doesn't rewind
+    positionPlayhead(headTime);   // stay put — the robot holds at the playhead, doesn't rewind
     updateTransport(); persist();
     setStatus('stopped');
 }

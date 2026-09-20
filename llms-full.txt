@@ -233,6 +233,8 @@ Saved: YourWiFiName
 
 Credentials survive re-uploads and power cycles. Up to **5 networks** can be stored — useful for moving between home, studio, and classroom. Press `w` within 5 seconds of any boot to update them.
 
+> **Native-USB boards (ESP32-C5 / C3 / S3):** if the Serial Monitor stays blank and this menu never appears, set **Tools → USB CDC On Boot → `Enabled`** and re-upload — otherwise `Serial` isn't routed to the USB port. See Troubleshooting.
+
 ## Both options together
 
 If `SECRET_SSID` is defined and EEPROM networks are also stored, Pardalote tries `secrets.h` first, then falls back to the EEPROM networks in order.
@@ -1753,9 +1755,9 @@ Each segment carries a duration and a displacement expressed **either** relative
 | `dur` | number | Segment duration in ms — sizes the segment's speed. |
 | `by` | number | **Relative** displacement in counts — the default frame. |
 | `to` | number | **Absolute** target in counts — use in place of `by`. |
-| `curve` | string | Accepted for parity; not rendered within a bus-servo segment. |
+| `curve` | string | Easing shape for the segment — `linear` (default), `easeIn`, `easeOut`, `easeInOut`, `back`. Rendered on the board by the streaming interpolator. |
 
-Relative by default (the board reads the live start position, then chains from each target). Absolute targets are clamped to the series range / `setLimits()`. Up to **12** segments. If a segment's implied speed exceeds the servo's maximum it simply takes longer and the next fires on true arrival, so the timeline self-corrects.
+Relative by default (the board reads the live start position, then chains from each target). Absolute targets are clamped to the series range / `setLimits()`. Up to **12** segments. The board paces the stream to the servo's real position: if a segment's implied speed exceeds what the servo can deliver, the schedule holds until the hardware catches up rather than running ahead of it, so the timeline stays honest instead of drifting.
 
 ```javascript Example — reach out, ease back, small settle
 arduino.shoulder.gesture([
@@ -2908,6 +2910,8 @@ The **Alias** names below work by name in your sketch (`arduino.digitalWrite(D13
 
 The **Alias** names below work by name in your sketch (`arduino.analogRead(A1)`) — no include needed. `arduino.analogMax` = **4095**. Datasheet-derived — not yet bench-verified. A single 12-bit SAR ADC (no ADC2/WiFi split), and a 6-channel LED PWM controller (at most six PWM outputs at once).
 
+> **Native USB:** the C5 talks to the Serial Monitor over native USB, so set **Tools → USB CDC On Boot → `Enabled`** — without it the Serial Monitor stays blank and the WiFi `w` menu never shows (the board is fine, you just can't see it). Leave **PSRAM → Disabled**. See Troubleshooting.
+
 | GPIO | Alias | Analog in | Digital in | Digital out | PWM | Notes |
 |---|---|:---:|:---:|:---:|:---:|---|
 | 2  | A1  | ✓ | ✓ | ✓ | ✓ | ADC — readable on WiFi |
@@ -2947,6 +2951,12 @@ See also: Pins and reading · Protocol · Troubleshooting
 - Check the IP address in `sketch.js` matches what the Arduino printed
 - Arduino and browser must be on the same WiFi network
 - Try refreshing — the Arduino may still be starting up
+
+## "Serial Monitor is blank on an ESP32-C5, C3 or S3 (no `w` menu, board seems dead)"
+
+On chips with native USB (ESP32-**C5**, **C3**, **S3**), **Tools → USB CDC On Boot** decides whether your sketch's `Serial` is routed to the USB port or to hardware UART0. With it **Disabled**, `Serial.print` goes out the UART pins and never reaches the USB Serial Monitor — so the WiFi setup `w` menu never appears and the board looks hung, even though Pardalote is booting and running fine. **Set USB CDC On Boot → `Enabled`** and re-upload.
+
+An early `E (…) MSPI Timing: Failed to allocate dummy cacheline for PSRAM` line can still print — that's harmless ROM-bootloader noise emitted *before* the CDC setting takes effect, not a PSRAM fault. Leave **PSRAM → Disabled** unless you're driving a camera. (Confirmed on the FireBeetle 2 ESP32-C5.)
 
 ## "Connection drops every few seconds" (UNO R4)
 
@@ -3707,14 +3717,16 @@ arduino.on('ready', () => { arduino.pan.write(90); });  // it's simply there
 
 # Servo control
 
-A p5.js sketch that lets you control a servo with the mouse or keyboard. Visualises the servo arm angle on screen in real time.
+A p5.js **control panel** for one servo — a Pardalote tool that works out of the box (the connection and servo pin are set on the page and remembered by the browser, no code editing). A live gauge draws the arm and every command updates it in real time. Use it to exercise the modern servo API, or to drive the servo directly by dragging the arm.
 
 ## What This Example Does
 
-- **Mouse mode (default):** horizontal mouse position maps directly to servo angle (0–180°)
-- **Auto sweep:** presses `S` to continuously sweep the servo back and forth using `sweep()`
-- **Preset positions:** `C` = centre (90°), `L` = min (0°), `R` = max (180°)
-- **Angle display:** a servo arm is drawn on the canvas, driven by a local `angle` variable updated each time the sketch commands a new position
+- **Drag the arm:** grab the arm on the gauge and drag to aim the servo — a direct `write()` by pointer. The arm tracks the *applied* angle, so a drag past a soft limit stops at the allowed band.
+- **Immediate writes:** the `0°`, `center 90°`, and `180°` buttons call `write()`.
+- **Timed move + arrival:** `writeTimed(target, duration)` interpolates on the board; an awaited `whenDone()` logs `arrived` / `TIMEOUT` with the elapsed time.
+- **Soft limits:** `setLimits(min, max)` clamps on the Arduino — the clamp shows on the gauge (teal band) and in the log; `clearLimits()` removes them.
+- **Home:** `setHome()` (here) or `setHome(value)`, then `home()` to snap back or `home(1000)` to glide.
+- **Live gauge + call log:** the arm shows `arduino.myServo.angle` — the value the library actually applied — alongside the current limits and home angle, with a rolling log of the last few calls underneath.
 
 ## Hardware Requirements
 
@@ -3728,7 +3740,7 @@ A p5.js sketch that lets you control a servo with the mouse or keyboard. Visuali
 |---|---|
 | Power (red) | 5 V |
 | Ground (brown/black) | GND |
-| Signal (orange/yellow) | Pin 7 (configurable in sketch.js) |
+| Signal (orange/yellow) | Pin 11 (set on the page — the **Wiring** row) |
 
 For more than one or two servos, power them from an external 5 V supply rather than the Arduino's 5 V pin.
 
@@ -3831,13 +3843,13 @@ Include the `pardalote.js` bundle (core + every extension) before your sketch:
 ## Troubleshooting
 
 **"Servo doesn't move"**
-- Check wiring: signal to pin 7, power to 5 V, ground to GND
-- Verify the sketch has `#include <PardaloteServo.h>`
+- Check wiring: signal to the pin set in the **Wiring** row (default 11), power to 5 V, ground to GND
+- Verify the firmware sketch has `#include <PardaloteServo.h>`
 - Check the browser console for connection errors
 
 **"Servo jitters"**
-- `write()` is called every frame in mouse mode — the library has a built-in 20 ms throttle, but if the servo still jitters check its power supply
-- Use `setThreshold(2)` to ignore small angle changes: `arduino.myServo.setThreshold(2)`
+- Dragging the arm calls `write()` rapidly — the library coalesces these with a built-in 20 ms throttle, but if the servo still jitters check its power supply (give it its own 5 V and a common ground)
+- Raise the change threshold to ignore sub-degree wobble: `arduino.myServo.setWriteThreshold(2)`
 
 **"Servo moves to wrong position on startup"**
 - `center()` moves to 90° — if the servo arm is mounted off-centre this is mechanical, not a code issue
@@ -4194,9 +4206,9 @@ summary to open a **settings dialog** — choose **Bus servo**, **PWM servo**, o
 **Stepper** and set its connection pins there; the value axis and units follow the
 type (counts / degrees / steps). Each **keyframe** is a time × a value; the line
 between two keyframes is a **segment** you can shape with an easing curve. **Play** sends every row as one lane of a single `arduino.gesture({…})`
-so they all start together and arrive together — starting from the **playhead** you
-position on the ruler. **Pause** freezes the playhead and lets you **scrub** the
-outputs through the sequence by hand.
+so they all start together and arrive together — playing forward from the **playhead**
+you position on the ruler. The playhead is a **remote control**: drag it any time and
+the outputs follow the sequence to that point, live.
 
 ## Hardware
 
@@ -4243,10 +4255,10 @@ This is a **tool** — no code editing. Open `index.html` and:
 | **drag the last keyframe** past the right edge | extend the timeline |
 | **drag a max / min value** (gutter) | set that output's soft limit (the value axis spans min–max, in the type's unit) |
 | **right-click a max / min value** | **reset** to the type's default range — or (bus servos only) **pose limits** by sweeping the range by hand |
-| **drag the playhead** (ruler) | set where **play** starts; while **paused**, scrub it to drive the outputs through the sequence |
-| **▶ play** | play from the playhead (one batched `arduino.gesture({…})`) |
-| **❙❙ pause** | freeze the playhead; scrub to move the outputs (a held `group.write()`) |
-| **■ stop** | cancel the gesture, hold, return the playhead to the start |
+| **drag the playhead** (ruler) | **drive the outputs** to that point in the sequence, live — a remote control (grabbing it during play takes over). Play resumes from wherever it rests |
+| **▶ play** | play the sequence forward from the playhead (one batched `arduino.gesture({…})`) |
+| **■ stop** | cancel the gesture and hold where it is — the playhead stays put (the robot doesn't rewind) |
+| **\|◀◀ start** / **end ▶▶\|** | send the playhead **and the outputs** to the start / end |
 | **free** / **free all** | release an output's torque to hand-pose it — bus servos and steppers-with-EN only (greyed otherwise) |
 
 The teal marker in each row's gutter is that output's **live position** (sensed for bus

@@ -108,9 +108,9 @@ Each segment carries a duration and a displacement expressed **either** relative
 | `dur` | number | Segment duration in ms — sizes the segment's speed. |
 | `by` | number | **Relative** displacement in counts — the default frame. |
 | `to` | number | **Absolute** target in counts — use in place of `by`. |
-| `curve` | string | Accepted for parity; not rendered within a bus-servo segment. |
+| `curve` | string | Easing shape for the segment — `linear` (default), `easeIn`, `easeOut`, `easeInOut`, `back`. Rendered on the board by the streaming interpolator. |
 
-Relative by default (the board reads the live start position, then chains from each target). Absolute targets are clamped to the series range / `setLimits()`. Up to **12** segments. If a segment's implied speed exceeds the servo's maximum it simply takes longer and the next fires on true arrival, so the timeline self-corrects.
+Relative by default (the board reads the live start position, then chains from each target). Absolute targets are clamped to the series range / `setLimits()`. Up to **12** segments. The board paces the stream to the servo's real position: if a segment's implied speed exceeds what the servo can deliver, the schedule holds until the hardware catches up rather than running ahead of it, so the timeline stays honest instead of drifting.
 
 ```javascript Example — reach out, ease back, small settle
 arduino.shoulder.gesture([

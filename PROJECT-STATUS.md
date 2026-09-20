@@ -64,7 +64,7 @@ structurally verified unless a bench entry says otherwise.
 > regardless of the "(this session)" labels still on those older bullets.
 > (The heading predates the multi-session history.)
 
-- **Bus-servo GESTURE now streamed: true on-hardware curve shaping (NEWEST, NOT bench-tested).**
+- **Bus-servo GESTURE now streamed: true on-hardware curve shaping (bench-confirmed 2026-09-20).**
   Retires the old caveat "to make a shape read on real bus-servo hardware, decompose into
   more segments." The bus gesture engine in `PardaloteBusServo.h` was **arrival-clocked**
   (each segment = one `WritePosEx(target, speed)`, advance when the Moving flag settles), so
@@ -72,13 +72,20 @@ structurally verified unless a bench entry says otherwise.
   never rendered. Replaced with a **board-side streaming interpolator**, mirroring how the PWM
   `ServoExt::loop()` already renders curves — reusing the shared `pardaloteEase()` (defs.h) so
   the shape matches the browser's `curveShape()` exactly.
-  - **How:** new `serviceGestureStreaming(now)` runs a fixed tick (`BUS_STEP_MS = 20` → 50 Hz,
-    a bench knob). Each tick, for every lane with a running gesture, it samples the eased curve
-    at `now` and one tick ahead and commands the **look-ahead position with a feed-forward
-    speed** sized to cover one tick (counts/sec) — so the servo cruises smoothly instead of
-    jump-and-wait, and `CURVE_BACK` overshoots then returns (clamped to soft/series range via
-    new `clampToRange()`). ST lanes batch into **one `SyncWritePosEx`** per tick (phase-locked);
-    SC/SCS lanes (no SyncWrite) stream individually.
+  - **How (current, after the creep rework):** `serviceGesture(now)` runs a fixed tick
+    (`BUS_STEP_MS = 40` → ~25 Hz, a bench knob). The phase clock is **paced**: a periodic
+    position read (`BUS_GATE_MS`) FREEZES the schedule whenever the servo falls behind, so the
+    stream can never outrun the hardware — that's what killed the end-of-move **creep** (the
+    old open-loop clock ended the schedule when the last setpoint was *sent*, not when the servo
+    *arrived*). Each tick every lane aims at a point `BUS_LEAD` ticks ahead **on the curve** and
+    commands it at the speed to reach that carrot over the lead window — so the servo chases a
+    point it never catches (cruises continuously, no stop-and-go) while tracing the curve's
+    shape, instead of sprinting to the endpoint and finishing early. `CURVE_BACK`'s carrot runs
+    PAST the endpoint (ease > 1), tracing the overshoot then settling (clamped via
+    `clampToRange()`). ST lanes batch into **one `SyncWritePosEx`** per tick (phase-locked);
+    SC/SCS lanes (no SyncWrite) stream individually. `BUS_SPEED_GAIN` (=1.0) is the speed
+    calibration knob. (The earlier `serviceGestureStreaming` / 50 Hz / look-ahead-feed-forward
+    design in the git history is superseded.)
   - **Time-clocked now**, so `startGesture()` honors the group's shared `startMs` (the wire
     handler captures one `millis()` for all channel blocks). Bus lanes in a group therefore
     **arrive together** — the old "approximate for bus" note in `internal/gesture.h` is gone.
@@ -94,16 +101,25 @@ structurally verified unless a bench entry says otherwise.
   - **No wire-format / dependency change.** Reuses SCServo's `SyncWritePosEx` + `pardaloteEase`.
     Browser, `arduino.gesture({…})`, and C++ `Pardalote.gesture()` untouched. Older firmware
     renders piecewise from the same schedule (graceful).
-  - **Structurally verified only** — `tools/stub-compile/run.sh` clean on ESP32 / UNO R4 WiFi /
-    Minima, and the header force-parses clean on all three (harness sketch plays a bus gesture).
-    **ZERO hardware bench.** Bench checklist:
-    (1) one servo, ease-in-out + `CURVE_BACK` — confirm the shape renders and overshoot is
-        visible and clamps at limits;
-    (2) tune `BUS_STEP_MS` (try 10 ms) and `BUS_STREAM_ACC` if motion is coarse or buzzes;
-    (3) a multi-servo group — confirm phase-lock / arrive-together and bus headroom;
-    (4) SC/SCS series (individual streamed writes) if an SC servo is on the bench;
-    (5) supersede mid-gesture with a `write()`; (6) brownout mid-stream → LOST + recovery;
-    (7) confirm no WiFi/USB transport stutter at the tick rate (the reason reads were decoupled).
+  - **Bench-confirmed 2026-09-20 (Scott, single ST servo via the Gesture Builder):** all five
+    curves — `linear` / `easeIn` / `easeOut` / `easeInOut` / `back` — render on hardware and
+    **land on time** at both 2 s and 4 s (no creep, no early finish); `back` overshoots and
+    settles smoothly. `tools/stub-compile/run.sh` stays clean on ESP32 / UNO R4 WiFi / Minima.
+  - **Group-scoped pace barrier (bench-confirmed 2026-09-20, Scott — multi-servo working).** Multi-servo bench
+    surfaced the per-lane limitation: when one channel couldn't keep up, the others didn't wait and
+    the pose tore apart. The pace freeze is now decided per **cohort** — every lane sharing a gesture
+    start (`_gestureStartMs`, one group dispatched together) freezes/resumes as a unit whenever any
+    member lags (`_behind[]`), so the group waits for its slowest servo and stays phase-locked. **No
+    give-up ceiling (by design, Scott 2026-09-20):** a big move just slows the whole gesture, and a
+    genuinely stuck lane holds the entire gesture (no DONE) until it recovers — an honest halt rather
+    than confusing limp-forward. A merely-slow servo always closes the gap during a freeze and resumes.
+    No extra bus traffic.
+  - **Still open on the bench:** (a) SC/SCS series (individual streamed writes); (b) supersede
+    mid-gesture with a `write()`; (c) brownout mid-stream → LOST + recovery (the barrier now halts a
+    stuck lane until recovery — confirm the stuck→recover path directly); (d) no WiFi/USB transport
+    stutter at the tick rate. Tuning knobs if needed: `BUS_LEAD` (smoothness vs end-trail),
+    `BUS_SPEED_GAIN` (late↑ / early↓), `BUS_STEP_MS` (finer resolution at the cost of
+    proportionally more bus writes).
   - Optional next: **linear-passthrough** (a single `CURVE_LINEAR` segment = the servo's own
     constant-speed move; skip streaming for it) to cut packets on plain timed moves.
 

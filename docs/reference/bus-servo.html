@@ -243,11 +243,11 @@
 <tr>
 <td><code>curve</code></td>
 <td>string</td>
-<td>Accepted for parity; not rendered within a bus-servo segment.</td>
+<td>Easing shape for the segment — <code>linear</code> (default), <code>easeIn</code>, <code>easeOut</code>, <code>easeInOut</code>, <code>back</code>. Rendered on the board by the streaming interpolator.</td>
 </tr>
 </tbody>
 </table>
-<p>Relative by default (the board reads the live start position, then chains from each target). Absolute targets are clamped to the series range / <code>setLimits()</code>. Up to <strong>12</strong> segments. If a segment's implied speed exceeds the servo's maximum it simply takes longer and the next fires on true arrival, so the timeline self-corrects.</p>
+<p>Relative by default (the board reads the live start position, then chains from each target). Absolute targets are clamped to the series range / <code>setLimits()</code>. Up to <strong>12</strong> segments. The board paces the stream to the servo's real position: if a segment's implied speed exceeds what the servo can deliver, the schedule holds until the hardware catches up rather than running ahead of it, so the timeline stays honest instead of drifting.</p>
 <div class="code-ex"><span class="lang-badge lang-js">JS</span><div class="bar">Example — reach out, ease back, small settle</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">shoulder</span><span class="p">.</span><span class="nx">gesture</span><span class="p">([</span>
 <span class="w">    </span><span class="p">{</span><span class="w"> </span><span class="nx">by</span><span class="o">:</span><span class="w">  </span><span class="mf">600</span><span class="p">,</span><span class="w"> </span><span class="nx">dur</span><span class="o">:</span><span class="w"> </span><span class="mf">400</span><span class="w"> </span><span class="p">},</span>
 <span class="w">    </span><span class="p">{</span><span class="w"> </span><span class="nx">by</span><span class="o">:</span><span class="w"> </span><span class="o">-</span><span class="mf">600</span><span class="p">,</span><span class="w"> </span><span class="nx">dur</span><span class="o">:</span><span class="w"> </span><span class="mf">600</span><span class="w"> </span><span class="p">},</span>

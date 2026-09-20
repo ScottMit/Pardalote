@@ -43,6 +43,19 @@ Pardalote versions **two things independently**:
   gesture — another browser or the sketch — making board- and browser-authored
   gestures equally visible. Backward-compatible: older clients ignore the new code
   (protocol MINOR 0 → 1, no MAJOR break).
+- **Bus servos now render easing curves on the board.** A `gesture()` on a Feetech
+  bus servo used to ignore the segment's `curve` — the servo drew a plain velocity
+  ramp per segment, so authored easing and overshoot were lost (the old docs told you
+  to fake a shape by decomposing it into more segments). The board now runs a
+  **streaming interpolator**: it samples the eased curve on a fixed clock and streams
+  look-ahead setpoints (batched across a group into one phase-locked `SyncWrite`),
+  paced to the servo's real position so a move can't run ahead of the hardware and
+  drift. The shape you author — `easeIn` / `easeOut` / `easeInOut` / `back`, overshoot
+  included — is the shape the servo runs, and each move lands on its authored timeline.
+  No API or wire-format change. In a coordinated group, the lanes stay phase-locked even
+  when one servo can't keep up: the whole gesture waits for its slowest channel and stays
+  in formation, rather than the fast lanes running on and tearing the pose apart.
+  *(All five curves + the multi-servo group barrier bench-confirmed on ST servos.)*
 
 ## [1.1.0] — 2026-08-17
 

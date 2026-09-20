@@ -56,17 +56,23 @@ JS byte-encoding verified in-browser; board playback unexercised.
 - [ ] **B.5h Limit switch during gesture** — a hardware limit trip mid-gesture still hard-stops on the board and emits `LIMIT`+`DONE` (the switch guard runs before the mode branch).
 - [ ] **B.5i Segment cap** — >16 segments → extras dropped + `warn`, no overrun of `MAX_STEPPER_SEGMENTS`.
 
-### Bus servo gesture player — expressive motion (NEW, zero bench)
-On-board segment sequencer via `CMD_BUSSERVO_GESTURE` (0x5A). No per-tick loop:
-each segment is one position write at a distance/duration-matched speed;
-the board advances to the next segment when the servo's **Moving flag settles**
-(the same feedback the DONE poller uses), and emits one `CMD_BUSSERVO_DONE`
-after the last. `curve` byte accepted but NOT rendered intra-segment. `from`
-captured live at gesture start (`readPos`), then chained from each target.
-JS byte-encoding verified in-browser; board playback unexercised.
-- [ ] **B.7a Relative sequence plays [both]** — `grip.gesture([{by:600,dur:400},{by:-600,dur:600},{by:80,dur:200}])`: each segment fires only after the previous **arrives** (Moving flag), not on a timer; exactly ONE `DONE` at the end; `whenDone()` resolves.
+### Bus servo gesture player — expressive motion (streaming interpolator; curves BENCH-CONFIRMED 2026-09-20)
+On-board **streaming interpolator** via `CMD_BUSSERVO_GESTURE` (0x5A). A fixed tick
+(`serviceGesture`, `BUS_STEP_MS`≈40 → ~25 Hz) samples the eased curve and commands a
+look-ahead "carrot" on the curve, so the authored easing/overshoot renders on real
+hardware. The phase clock is **paced**: a periodic position read freezes the schedule
+whenever the servo lags, so the stream never outruns the hardware (this killed the
+end-of-move creep). One `CMD_BUSSERVO_DONE` after the last segment; `from` captured
+live at gesture start (`readPos`), then chained from each target. (Supersedes the old
+arrival-clocked "one write per segment, advance on Moving-flag settle" model.)
+**Bench-confirmed (Scott, single ST servo via Gesture Builder):** all five curves
+`linear`/`easeIn`/`easeOut`/`easeInOut`/`back` render and **land on time** at 2 s and
+4 s; `back` overshoots and settles smoothly. Remaining B.7/B.8 items below (DONE
+bookkeeping, clamps, interrupt, timeout, cap, group phase-lock) still to run.
+- [x] **B.7-curves Curves render + land on time [ST]** — the five easing shapes are visibly distinct on hardware, `back` overshoots then settles, and each finishes on the authored timeline (no creep, no early finish) at 2 s and 4 s. *(2026-09-20, single ST servo.)*
+- [ ] **B.7a Relative sequence plays [both]** — `grip.gesture([{by:600,dur:400},{by:-600,dur:600},{by:80,dur:200}])`: segments run on the paced board clock (held back only while the servo lags), exactly ONE `DONE` at the end; `whenDone()` resolves.
 - [ ] **B.7b No mid-sequence DONE leak** — confirm intermediate segments do NOT broadcast `CMD_BUSSERVO_DONE` (only the final one). A stray DONE would resolve `whenDone()` early / break `group.gesture()` later.
-- [ ] **B.7c Saturated-speed self-heal** — a segment whose distance/duration exceeds the servo's max still completes: it just takes longer and the next fires on true arrival (feedback, not timer). No desync/hang.
+- [ ] **B.7c Saturated-speed stays honest** — a segment whose distance/duration exceeds the servo's max still completes without drift: the pace-gate holds the schedule until the servo catches up rather than running ahead, so the timeline never gets ahead of the hardware. No desync/hang.
 - [ ] **B.7d Absolute + soft limits** — `{to, absolute:true}` reaches targets; out-of-range (e.g. 9999) clamped on the board to series max (4095 ST / 1023 SC); soft `setLimits` respected.
 - [ ] **B.7e Interrupt clears sequencer** — a direct `write`/`runSpeed`/`setMode`/`detach`/sync-write mid-gesture abandons it (`cancelBusGesture`) — the next settle must NOT resume the old sequence or hijack the new write into it.
 - [ ] **B.7f No-answer / timeout mid-gesture** — if the servo stops answering (`MOVE_NO_RESP_MS`) or hits `MOVE_MAX_MS` mid-sequence, the gesture aborts cleanly with a final `DONE` (whenDone resolves, no stuck sequencer).
@@ -86,6 +92,7 @@ servo+stepper+busservo, absolute + relative pads); board playback unexercised.
 - [ ] **B.8b Padding holds, doesn't drift** — a short lane's trailing hold keeps the member still for the pad (esp. **bus servo** — verify the duration floor B.8d makes it wait, not race ahead). Absolute lane holds at its last target, not 0.
 - [ ] **B.8c One batched message** — the whole group gesture goes out as a single WebSocket/serial message (one `CMD_SERVO/STEPPER/BUSSERVO_GESTURE` frame per present type, coalesced). Watch on `arduino.on('frame')`.
 - [ ] **B.8d Bus segment duration floor** — a bus lane segment that settles before its authored `dur` still waits out `dur` before advancing (single-servo bus gesture too — authored 400ms segment takes ≥400ms). Guards group phase-lock and holds.
+- [x] **B.8e Group-scoped pace barrier [ST, multi-servo]** — with two+ bus lanes in one group, load/slow ONE channel so it can't keep up: the whole group **waits for it and stays in formation** (fast lanes freeze, don't run on and desync), then all resume/finish together. A big move just slows the whole gesture. **No give-up ceiling (by design):** a genuinely stuck lane HOLDS the whole gesture (no DONE) until it recovers, then continues — an honest halt, not a limp-forward. A merely-slow servo still closes the gap during the freeze and resumes. *(Bench-confirmed 2026-09-20, Scott — multi-servo working.)*
 - [ ] **B.8e Overlap / follow-through** — neighbouring lanes with offset timings (one leads, one trails via a leading hold) read as coordinated follow-through, not lockstep.
 - [ ] **B.8f Unsupported / bad lanes skipped** — a lane naming a non-gesture member, an unknown name, or an empty array → warn + skip, the rest still play.
 
