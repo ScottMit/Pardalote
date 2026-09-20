@@ -2,7 +2,7 @@
 // extensions and exercises the sketch-callable gesture() API (per-actuator
 // gesture + onGestureDone, and the coordinated Pardalote.gesture() builder),
 // so INSTALL_GESTURE, startGesture(), and the Access methods are all
-// instantiated. Mirrors examples/board-gestures. -fsyntax-only only.
+// instantiated. Mirrors examples/board-gestures-*. -fsyntax-only only.
 #include <Pardalote.h>
 #include <PardaloteServo.h>
 #include <PardaloteStepper.h>
@@ -39,6 +39,15 @@ void setup() {
         .add(DEVICE_STEPPER, lift, LIFT_G,    2, false)
         .add(DEVICE_BUSSERVO, grip, GRIP_G,   1)
         .play();
+
+    // gesture mods — scale/speed/crop, per-actuator (a PardaloteGestureMod) and
+    // on the coordinated builder (.scale/.speed/.crop group-wide, per-lane laneScale)
+    PardaloteServo.gesture(pan, PAN_IDLE, 2, GESTURE_FLAG_ABSOLUTE, PardaloteGestureMod(0.7f, 1.5f));
+    PardaloteStepper.gesture(lift, LIFT_G, 2, 0, PardaloteGestureMod(1.0f, 1.0f, 0.0f, 0.5f));  // crop
+    Pardalote.gesture()
+        .add(DEVICE_SERVO,    pan,  PAN_IDLE,  2)
+        .add(DEVICE_BUSSERVO, grip, GRIP_G,   1, true, 1.3f)   // per-lane laneScale
+        .speed(1.5f).crop(0.0f, 0.75f).play();
 
     // coordinated one-shot write / writeTimed — the arduino.write() twins
     Pardalote.write()

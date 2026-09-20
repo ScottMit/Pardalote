@@ -64,6 +64,99 @@ static inline uint32_t pardaloteGestureTotal(const PardaloteSeg* segs, uint8_t c
 }
 
 // -------------------------------------------------------------------
+// Gesture manipulation — scale / speed / crop, the board-side twin of the JS
+// Gesture (scale/speed/crop) surface. A sketch reshapes an authored gesture
+// without editing its flash segments; the transform runs once, at gesture start,
+// over the RAM segment copy each actuator already keeps (no extra buffer). See
+// PLAN-board-gestures.md and the JS applyGestureMods() it mirrors byte-for-byte.
+//
+//   scale  amplitude ×  — relative deltas only (an absolute target has no anchor
+//                         to scale about, so it's left as-is, matching JS)
+//   speed  tempo ×      — 2 = twice as fast (dur ÷ speed), 0.5 = half
+//   crop   [from,to]    — play only that fraction of the timeline; a RELATIVE
+//                         gesture then ends off-home
+// -------------------------------------------------------------------
+struct PardaloteGestureMod {
+    float scale, speed, cropFrom, cropTo;
+    // Defaults = identity, so PardaloteGestureMod() is "no change"; a constructor
+    // (not default member initialisers) keeps brace-init — { 0.7f, 1.5f } — valid
+    // on every Arduino core's C++ dialect.
+    PardaloteGestureMod(float sc = 1.0f, float sp = 1.0f, float cf = 0.0f, float ct = 1.0f)
+        : scale(sc), speed(sp), cropFrom(cf), cropTo(ct) {}
+    bool identity() const {
+        return scale == 1.0f && speed == 1.0f && cropFrom <= 0.0f && cropTo >= 1.0f;
+    }
+};
+
+// Round half up, toward +inf — matches JavaScript Math.round exactly (C's
+// lroundf rounds half away from zero, which differs at negative .5), so a
+// board-modded gesture stays byte-identical to the browser-modded one.
+static inline int32_t pardaloteRound(float x) { return (int32_t)floorf(x + 0.5f); }
+
+// Apply scale/speed/crop to a lane's RAM segments IN PLACE (crop can only shrink
+// the count, so a single left-to-right pass is safe). Templated on the actuator's
+// own Seg type — every one is { curve, dur, value } — so all three actuators share
+// this. Mirrors the JS applyGestureModsLane() order (scale → speed → crop) and its
+// rounding, using pardaloteEase() (== the JS curveShape crop reuses). `flags`
+// carries GESTURE_FLAG_ABSOLUTE. Returns the new segment count.
+template <typename Seg>
+static uint8_t pardaloteApplyModsInPlace(Seg* seg, uint8_t n, uint8_t flags,
+                                         const PardaloteGestureMod& mod) {
+    if (mod.identity() || n == 0) return n;
+    const bool absolute = (flags & GESTURE_FLAG_ABSOLUTE);
+
+    // 1. scale (relative only) — amplitude, timing untouched.
+    if (mod.scale != 1.0f && !absolute)
+        for (uint8_t i = 0; i < n; i++)
+            seg[i].value = pardaloteRound((float)seg[i].value * mod.scale);
+
+    // 2. speed — tempo, amplitude untouched.
+    const float sp = (mod.speed > 0.0f) ? mod.speed : 1.0f;
+    if (sp != 1.0f)
+        for (uint8_t i = 0; i < n; i++) {
+            uint32_t d = seg[i].dur ? seg[i].dur : 1;
+            long nd = pardaloteRound((float)d / sp);
+            if (nd < 1) nd = 1;
+            seg[i].dur = nd > 0xFFFF ? 0xFFFF : (uint16_t)nd;
+        }
+
+    // 3. crop — window on this lane's (post-speed) timeline; boundary segments
+    //    split, the partial piece linearised (relative). Absolute segments keep
+    //    curve+value, only the duration is clipped (mirrors JS).
+    float from = mod.cropFrom, to = mod.cropTo;
+    if (from < 0) from = 0; if (from > 1) from = 1;
+    if (to   < 0) to   = 0; if (to   > 1) to   = 1;
+    if (from <= 0.0f && to >= 1.0f) return n;   // full window → no crop
+    if (to <= from) return 0;                   // empty window
+
+    uint32_t total = 0;
+    for (uint8_t i = 0; i < n; i++) total += seg[i].dur ? seg[i].dur : 1;
+    const float A = from * total, B = to * total;
+    float t0 = 0; uint8_t w = 0;
+    for (uint8_t i = 0; i < n; i++) {
+        Seg cur = seg[i];                        // copy before the in-place write (w <= i)
+        float d  = cur.dur ? cur.dur : 1;
+        float t1 = t0 + d;
+        float oa = fmaxf(t0, A), ob = fminf(t1, B);
+        if (ob > oa) {
+            float u0 = (oa - t0) / d, u1 = (ob - t0) / d;
+            bool  full = (u0 <= 0.0f && u1 >= 1.0f);
+            long  cd = pardaloteRound(ob - oa); if (cd < 1) cd = 1;
+            Seg s = cur;
+            s.dur = cd > 0xFFFF ? 0xFFFF : (uint16_t)cd;
+            if (!absolute) {
+                s.curve = full ? cur.curve : (uint8_t)CURVE_LINEAR;
+                float frac = pardaloteEase(cur.curve, u1) - pardaloteEase(cur.curve, u0);
+                s.value = pardaloteRound((float)cur.value * frac);
+            }
+            seg[w++] = s;
+        }
+        t0 = t1;
+    }
+    return w;
+}
+
+// -------------------------------------------------------------------
 // Starter registry — one function per gesture-capable device type.
 //
 //   startMs — shared timebase so a coordinated group starts phase-locked
@@ -77,11 +170,13 @@ static inline uint32_t pardaloteGestureTotal(const PardaloteSeg* segs, uint8_t c
 // library TUs, exactly like the extension registry).
 // -------------------------------------------------------------------
 typedef void (*GestureStarter)(int id, const PardaloteSeg* segs, uint8_t count,
-                               uint8_t flags, uint32_t startMs, uint32_t padToMs);
+                               uint8_t flags, uint32_t startMs, uint32_t padToMs,
+                               const PardaloteGestureMod& mod);
 
 void registerGestureStarter(uint16_t deviceId, GestureStarter start);
 void startGestureFor(uint16_t deviceId, int id, const PardaloteSeg* segs,
-                     uint8_t count, uint8_t flags, uint32_t startMs, uint32_t padToMs);
+                     uint8_t count, uint8_t flags, uint32_t startMs, uint32_t padToMs,
+                     const PardaloteGestureMod& mod = PardaloteGestureMod());
 
 // Place at the bottom of a gesture-capable extension header, next to
 // INSTALL_EXTENSION. Registers the extension's startGesture() during
@@ -130,24 +225,36 @@ class PardaloteGesture {
         uint8_t            count;
         uint8_t            flags;
         uint32_t           total;
+        float              scale;   // per-lane amplitude override; NAN = use the group scale
     };
     Lane    _lanes[MAX_LANES];
     uint8_t _n = 0;
+    PardaloteGestureMod _mod;       // group-wide: speed & crop (global), default scale
 
 public:
     // Add one actuator's lane. deviceId is DEVICE_SERVO / DEVICE_STEPPER /
-    // DEVICE_BUSSERVO. absolute=false makes value a relative delta.
+    // DEVICE_BUSSERVO. absolute=false makes value a relative delta. laneScale
+    // (optional) scales just this lane's amplitude, overriding the group scale.
     PardaloteGesture& add(uint16_t deviceId, int id, const PardaloteSeg* segs,
-                          uint8_t count, bool absolute = true) {
+                          uint8_t count, bool absolute = true, float laneScale = NAN) {
         if (_n < MAX_LANES && segs && count) {
             _lanes[_n++] = { deviceId, id, segs, count,
                              (uint8_t)(absolute ? GESTURE_FLAG_ABSOLUTE : 0),
-                             pardaloteGestureTotal(segs, count) };
+                             pardaloteGestureTotal(segs, count), laneScale };
         }
         return *this;
     }
 
-    // Start every lane, padded to the longest, under one shared clock.
+    // Reshape the whole gesture (the board-side twin of the JS opts). speed and
+    // crop are GROUP-WIDE so the lanes stay phase-locked; scale here is the group
+    // default (a lane's own laneScale, if given, wins). Chainable before play().
+    PardaloteGesture& scale(float k)          { _mod.scale = k; return *this; }
+    PardaloteGesture& speed(float f)          { _mod.speed = f; return *this; }
+    PardaloteGesture& crop(float from, float to) { _mod.cropFrom = from; _mod.cropTo = to; return *this; }
+
+    // Start every lane, padded to the longest, under one shared clock. Any
+    // scale/speed/crop is applied per lane at start (after the arrive-together
+    // pad, so a global speed/crop keeps the padded lanes equal → still in step).
     void play() {
         uint32_t maxTotal = 0;
         for (uint8_t i = 0; i < _n; i++)
@@ -155,7 +262,9 @@ public:
         uint32_t now = millis();
         for (uint8_t i = 0; i < _n; i++) {
             const Lane& L = _lanes[i];
-            startGestureFor(L.dev, L.id, L.segs, L.count, L.flags, now, maxTotal);
+            PardaloteGestureMod m = _mod;
+            if (!isnan(L.scale)) m.scale = L.scale;   // per-lane amplitude override
+            startGestureFor(L.dev, L.id, L.segs, L.count, L.flags, now, maxTotal, m);
         }
     }
 };

@@ -18,6 +18,22 @@ Pardalote versions **two things independently**:
 
 ## [Unreleased]
 
+- **Reshape a gesture as it plays — `scale` · `speed` · `crop`.** Any gesture can be
+  amplitude-scaled, sped up or slowed, or cropped to a slice of its timeline without
+  editing its segments — so one authored motion reads gentle or emphatic, fast or slow.
+  Pass `{ scale, speed, crop }` as opts to any `gesture()` (`speed`/`crop` global,
+  `scale` a number or a per-lane `{ name: k }` map), or build a reusable, immutable
+  chainable value with `arduino.makeGesture(spec)`:
+  `head.gesture(nod.scale(0.7).speed(0.5).crop(0.2, 0.8))`. `crop` reuses the same
+  easing maths the board mirrors, so a cropped shape reads identically on hardware; a
+  cropped relative gesture ends off-home (`Gesture.cropped` flags it). Applied in the
+  browser and sent as an ordinary gesture frame — **no API break, no wire change.**
+  The board mirrors it for sketch-authored gestures: a `PardaloteGestureMod` on
+  `PardaloteServo.gesture(...)` (and the stepper / bus-servo twins), or
+  `Pardalote.gesture().scale().speed().crop().play()` on the coordinated builder
+  (with per-lane `laneScale`). The transform runs at gesture start over the RAM
+  segment copy — no extra buffer — and is **byte-identical to the browser** (a
+  parity check in `tools/stub-compile/` diffs the two on every run).
 - **Sketch-authored gestures — the board composes motion too.** Following the rule
   that whoever speaks is in control, the Arduino side gains the full gesture surface
   the browser already had, so a sketch can run expressive motion with **no browser**.
@@ -33,8 +49,13 @@ Pardalote versions **two things independently**:
   and `Pardalote.writeTimed(dur)` mirror `arduino.write()` / `arduino.writeTimed()`
   for immediate and arrive-together coordinated moves. `onGestureDone(id, cb)` is the
   board-side `whenDone()`, so a headless sketch can chain gestures into a sequence.
-  New IDE example **`board-gestures`** — a two-servo creature head that idles and
-  reacts to a button, entirely on the board.
+  IDE examples **`board-gestures-PWM-servos`** and **`board-gestures-bus-servos`**
+  (the former renamed from `board-gestures`) — a two-servo creature head that idles
+  and reacts to a button, entirely on the board; each press steps through the same
+  react reshaped by scale / speed / crop, to show the mods on hardware. Bus servos
+  got a headless `PardaloteBusServo.configureBus(rxPin, txPin[, serial][, baud])`
+  (the board-side twin of the browser's `configureBus`) so a sketch can set the
+  ESP32 bus UART with no browser.
 - **Gesture-active visibility (protocol v1.1).** A playing schedule now broadcasts a
   lightweight `CMD_*_GESTURE_STATE [id, active]` (`0x64`/`0x65`/`0x66`) on its start
   and end — **existence, never the schedule** — so every browser reflects an

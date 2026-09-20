@@ -280,7 +280,7 @@ PardaloteBusServo.torque(id, false);     // release / hold
 
 All three run through the **same command path the browser uses** — so they respect soft limits, cancel timed moves, and auto-echo the commanded value back to the browser so its record stays in sync.
 
-The sketch can also **author gestures**, not just the browser — the board-side twin of the JavaScript gesture surface, so a sketch runs expressive motion with no browser at all. `PardaloteServo.gesture(id, segs, count)` plays a `PardaloteSeg[]` schedule; `Pardalote.gesture().add(DEVICE_*, id, segs, count).play()` coordinates several actuators (arriving together); `Pardalote.write()` / `Pardalote.writeTimed(dur)` are the coordinated one-shot twins; and `onGestureDone(id, cb)` chains gestures for a headless sequence. A running gesture broadcasts its *existence* to every browser (an `isGesturing` flag + `gesturestart` / `gestureend` events), never its schedule. See the `board-gestures` example.
+The sketch can also **author gestures**, not just the browser — the board-side twin of the JavaScript gesture surface, so a sketch runs expressive motion with no browser at all. `PardaloteServo.gesture(id, segs, count)` plays a `PardaloteSeg[]` schedule; `Pardalote.gesture().add(DEVICE_*, id, segs, count).play()` coordinates several actuators (arriving together); `Pardalote.write()` / `Pardalote.writeTimed(dur)` are the coordinated one-shot twins; and `onGestureDone(id, cb)` chains gestures for a headless sequence. A running gesture broadcasts its *existence* to every browser (an `isGesturing` flag + `gesturestart` / `gestureend` events), never its schedule. A sketch can also **reshape** a gesture — `scale` / `speed` / `crop`, via a `PardaloteGestureMod` on `gesture()` or `.scale()/.speed()/.crop()` on `Pardalote.gesture()`. See the `board-gestures-PWM-servos` and `board-gestures-bus-servos` examples.
 
 Notes:
 - A **bus servo read/scan/write is a blocking bus transaction** — fine in `setup()` or a throttled `loop()`, not a tight high-rate loop competing with the browser's own polling.
@@ -712,6 +712,8 @@ await arduino.pan.gesture([ /* … */ ]).whenDone();
 ```
 
 Up to 16 segments (extras dropped with a warning); `opts.absolute` forces the frame. Coordinate several actuators at once with [`group.gesture()`](#groups).
+
+**Reshape a gesture without editing it** — pass `{ scale, speed, crop }` to any `gesture()` (amplitude ×, tempo ×, and `crop: [from, to]` to play a slice), or build a reusable chainable value with `arduino.makeGesture(spec)`: `head.gesture(nod.scale(0.7).speed(0.5).crop(0.2, 0.8))`. `speed`/`crop` are global (lanes stay phase-locked); `scale` may be a per-lane `{ name: k }` map. A cropped relative gesture ends off-home (`Gesture.cropped` flags it). No wire change — the browser sends the reshaped schedule.
 
 #### Soft limits
 

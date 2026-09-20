@@ -187,6 +187,20 @@ Pardalote.gesture()                                  // each array a PardaloteSe
     .play();
 ```
 
+**Reshape a gesture** — the board-side twin of the JS [`scale` / `speed` / `crop`](gesture.html#shaping-a-gesture). Pass a `PardaloteGestureMod` to a single actuator's `gesture()`, or chain `.scale()` / `.speed()` / `.crop()` on the coordinated builder. The transform runs once, at gesture start, over the RAM copy each actuator already keeps — no extra buffer — and produces the byte-identical result to the browser doing the same:
+
+```cpp
+PardaloteServo.gesture(pan, NOD, 3, GESTURE_FLAG_ABSOLUTE, { 0.7f, 0.5f, 0.2f, 0.8f });  // {scale,speed,crop}
+
+Pardalote.gesture()
+    .add(DEVICE_SERVO, shoulder, SHOULDER, 2)
+    .add(DEVICE_SERVO, wrist,    WRIST,    1, true, 1.3f)   // per-lane amplitude (laneScale)
+    .speed(1.5f).crop(0.0f, 0.75f)                          // group-wide: keeps lanes phase-locked
+    .play();
+```
+
+`speed` and `crop` are group-wide (one factor, one window on the shared timeline) so the lanes stay in step; `scale` may differ per lane. `scale` multiplies **relative** deltas only (an absolute target has no anchor); a cropped **relative** gesture ends off-home. It's applied board-side, so the on-wire frame is unchanged.
+
 **Coordinated `write` / `writeTimed`** — the twins of [`arduino.write()` / `arduino.writeTimed()`](groups.html#writetimed) — take one target per actuator instead of a schedule:
 
 ```cpp
@@ -201,7 +215,7 @@ void onNodDone(int id) { PardaloteServo.gesture(id, IDLE, 2); }   // loop back t
 PardaloteServo.onGestureDone(pan, onNodDone);
 ```
 
-Watchers stay in sync: a board-authored gesture broadcasts its **existence** (never its shape) to every browser, which sees the actuator's `isGesturing` flag flip and `gesturestart` / `gestureend` fire — the same signals a browser-authored gesture gives. See the **`board-gestures`** sketch in the Arduino examples for a complete headless creature-head, and the [Gesture](gesture.html) page for the concept.
+Watchers stay in sync: a board-authored gesture broadcasts its **existence** (never its shape) to every browser, which sees the actuator's `isGesturing` flag flip and `gesturestart` / `gestureend` fire — the same signals a browser-authored gesture gives. See the **`board-gestures-PWM-servos`** and **`board-gestures-bus-servos`** sketches in the Arduino examples for a complete headless creature-head (both step through the scale/speed/crop shaping cycle on a button), and the [Gesture](gesture.html) page for the concept.
 
 ### Status helpers
 

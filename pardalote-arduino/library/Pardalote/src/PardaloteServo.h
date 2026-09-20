@@ -207,7 +207,8 @@ public:
     // so the coordinated PardaloteGesture builder reaches it. padToMs (from a
     // group) appends a trailing hold so short lanes arrive with the longest.
     static void startGesture(int id, const PardaloteSeg* segs, uint8_t count,
-                             uint8_t flags, uint32_t startMs, uint32_t padToMs = 0) {
+                             uint8_t flags, uint32_t startMs, uint32_t padToMs = 0,
+                             const PardaloteGestureMod& mod = PardaloteGestureMod()) {
         if (!validId(id) || !_attached[id] || !segs || count == 0) return;
         uint8_t  n     = count > MAX_SERVO_SEGMENTS ? MAX_SERVO_SEGMENTS : count;
         uint32_t total = 0;
@@ -224,6 +225,8 @@ public:
             _segs[id][n].value = (flags & GESTURE_FLAG_ABSOLUTE) ? _segs[id][n - 1].value : 0;
             n++;
         }
+        n = pardaloteApplyModsInPlace(_segs[id], n, flags, mod);   // scale · speed · crop
+        if (n == 0) { _segCount[id] = 0; return; }                 // cropped to nothing
         _segCount[id] = n;
         _segFlags[id] = flags;
         loadSegment(id, 0, startMs);
@@ -683,8 +686,9 @@ public:
     // is a PardaloteSeg[] (degrees; absolute by default, flags = 0 for
     // relative). For coordinated multi-servo motion use Pardalote.gesture().
     void gesture(int id, const PardaloteSeg* segs, uint8_t count,
-                 uint8_t flags = GESTURE_FLAG_ABSOLUTE) const {
-        ServoExt::startGesture(id, segs, count, flags, millis());
+                 uint8_t flags = GESTURE_FLAG_ABSOLUTE,
+                 const PardaloteGestureMod& mod = PardaloteGestureMod()) const {
+        ServoExt::startGesture(id, segs, count, flags, millis(), 0, mod);
     }
     // onGestureDone(id, cb) — the board-side whenDone(): cb(id) fires when the
     // gesture's last segment lands. Chain gestures for headless sequences.

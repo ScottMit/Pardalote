@@ -385,7 +385,8 @@ public:
     // starter for the coordinated PardaloteGesture builder. padToMs appends a
     // trailing hold so short lanes arrive with the longest.
     static void startGesture(int id, const PardaloteSeg* segs, uint8_t count,
-                             uint8_t flags, uint32_t startMs, uint32_t padToMs = 0) {
+                             uint8_t flags, uint32_t startMs, uint32_t padToMs = 0,
+                             const PardaloteGestureMod& mod = PardaloteGestureMod()) {
         if (!validId(id) || !_attached[id] || !_steppers[id] || !segs || count == 0) return;
         _homing[id] = HOME_IDLE;                         // a gesture supersedes homing
         uint8_t  n     = count > MAX_STEPPER_SEGMENTS ? MAX_STEPPER_SEGMENTS : count;
@@ -403,6 +404,8 @@ public:
             _segs[id][n].value = (flags & GESTURE_FLAG_ABSOLUTE) ? _segs[id][n - 1].value : 0;
             n++;
         }
+        n = pardaloteApplyModsInPlace(_segs[id], n, flags, mod);   // scale · speed · crop
+        if (n == 0) { _segCount[id] = 0; return; }                 // cropped to nothing
         _segCount[id] = n;
         _segFlags[id] = flags;
         loadStepperSegment(id, 0, startMs);
@@ -1253,8 +1256,9 @@ public:
     // a PardaloteSeg[] (steps; absolute by default, flags = 0 for relative). For
     // coordinated multi-actuator motion use Pardalote.gesture().
     void gesture(int id, const PardaloteSeg* segs, uint8_t count,
-                 uint8_t flags = GESTURE_FLAG_ABSOLUTE) const {
-        StepperExt::startGesture(id, segs, count, flags, millis());
+                 uint8_t flags = GESTURE_FLAG_ABSOLUTE,
+                 const PardaloteGestureMod& mod = PardaloteGestureMod()) const {
+        StepperExt::startGesture(id, segs, count, flags, millis(), 0, mod);
     }
     // onGestureDone(id, cb) — board-side whenDone(): cb(id) on the last segment.
     void onGestureDone(int id, PardaloteGestureDone cb) const { StepperExt::setOnGestureDone(id, cb); }

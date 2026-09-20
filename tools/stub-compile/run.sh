@@ -58,4 +58,31 @@ if [ "$fail" -eq 0 ]; then
 else
     echo "FAILURES above."
 fi
+
+# --- Gesture-mods parity: real board transform vs real JS transform ----------
+# Byte-for-byte check that pardaloteApplyModsInPlace() (gesture.h) == the JS
+# applyGestureModsLane() (bundle) for scale/speed/crop. Skipped if g++/node or
+# the JS bundle is unavailable (keeps the board-only run self-sufficient).
+BUNDLE="$HERE/../../lib/pardalote.js"
+if command -v node >/dev/null 2>&1 && [ -f "$BUNDLE" ]; then
+    echo
+    echo "=============================================================="
+    echo " Gesture mods parity (scale / speed / crop): board vs JS"
+    echo "=============================================================="
+    if "$CXX" -std=gnu++17 -I "$STUBS" -I "$SRC/internal" \
+           "$HERE/gesture_mods_equiv.cpp" -o /tmp/pardalote_gmods 2>/tmp/pardalote_gmods_err; then
+        if diff <(/tmp/pardalote_gmods) <(node "$HERE/gesture_mods_equiv.js" "$BUNDLE") >/dev/null; then
+            echo "  ok    board pardaloteApplyModsInPlace == JS applyGestureModsLane (7 cases)"
+        else
+            echo "  FAIL  board vs JS mods diverge:"
+            diff <(/tmp/pardalote_gmods) <(node "$HERE/gesture_mods_equiv.js" "$BUNDLE") | sed 's/^/        /'
+            fail=1
+        fi
+    else
+        echo "  FAIL  gesture_mods_equiv.cpp did not compile:"
+        sed 's/^/        /' /tmp/pardalote_gmods_err
+        fail=1
+    fi
+fi
+
 exit $fail

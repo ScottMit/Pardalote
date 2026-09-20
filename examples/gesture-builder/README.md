@@ -52,7 +52,7 @@ This is a **tool** — no code editing. Open `index.html` and:
 |---|---|
 | **click a row's gutter summary** | open the **settings** dialog — output type + connection pins (draggable; OK keeps, cancel/Esc revert) |
 | **double-click a lane** | add a **keyframe** at that time and value |
-| **drag a keyframe** | set its value (up/down) and time (left/right) |
+| **drag a keyframe** | set its value (up/down) and time (left/right). If the output isn't **free**, its motor follows the edit live — but only when the edit changes the value **at the playhead** (drag a keyframe the playhead sits on, or a segment touching it; otherwise the motor holds) |
 | **right-click a keyframe** | **delete** it, or **pose servo** (bus servos only) — free the servo, hand-move it, click to commit (Esc cancels) |
 | **right-click a segment** | set its **shape** (easing) — linear / easeIn / easeOut / easeInOut / back |
 | **drag the last keyframe** past the right edge | extend the timeline |
@@ -70,18 +70,20 @@ Everything (rows, keyframes, shapes, connection) is remembered per browser.
 
 ## Export
 
-Two code panels below the timeline show the built gesture as runnable code, updating
-live as you edit. In both, the movement is wrapped in a **`playGesture()`** function
-you call from whatever triggers it — a sensor, a button, an LLM, any command:
+Two code panels below the timeline show the built gesture as a **copy-paste snippet** —
+just the gesture, no connection or setup scaffolding — updating live as you edit. Drop
+whichever you need into your own project:
 
-- **JavaScript** (browser) — output setup + limits in `on('ready')`; the movement is
-  the batched `arduino.gesture({…})` (or a single `output.gesture([…])` for one output).
-- **C++** (a board-side Arduino sketch) — the same gesture as `static const PardaloteSeg`
-  schedules in flash, attached in `setup()` and played with `Pardalote.gesture().add(…).play()`
-  (or `Pardalote<Type>.gesture(id, segs, count)` for one output). No browser needed.
+- **JavaScript** (browser) — a **`gesture`** data object (one segment array per output, keyed
+  by your `arduino.add(name, …)` names) plus a **`playGesture(arduino)`** that runs it with
+  `arduino.gesture(gesture, { absolute: true })` — mirroring the C++ layout. A trailing comment
+  shows how to reshape it on the fly with `arduino.makeGesture(gesture).scale(0.7).speed(0.5).crop(…)`.
+- **C++** (board-side) — the gesture as `static const PardaloteSeg` schedules in flash
+  plus a **`playGesture()`** that plays them with `Pardalote.gesture().add(…).play()`
+  (or `Pardalote<Type>.gesture(id, segs, count)` for one output). Paste it beside your own
+  `setup()`/`loop()`; the ids come from your `attach()` calls. No browser needed.
 
-Each `on('ready')` / `setup()` calls `playGesture()` once as a demo. **Copy** whichever
-you need. Switched-off rows are omitted, matching what **play** sends.
+Switched-off rows are omitted, matching what **play** sends.
 
 ## How it works
 

@@ -6,8 +6,9 @@ gesture-starter + immediate-writer registries, INSTALL_GESTURE/INSTALL_WRITER,
 PardaloteGesture + PardaloteWrite builders, PardaloteGestureDone), registry storage
 in `extensions.cpp`, `Pardalote.gesture()/write()/writeTimed()` factories, and
 per-actuator `gesture()` + `onGestureDone()` + `startGesture()` + `writeNow()` +
-INSTALL_GESTURE/INSTALL_WRITER on servo, stepper, bus servo. Example
-`examples/board-gestures/`. Durable stub-compile harness `tools/stub-compile/` —
+INSTALL_GESTURE/INSTALL_WRITER on servo, stepper, bus servo. Examples
+`examples/board-gestures-PWM-servos/` + `-bus-servos/` (renamed/split 2026-09-20;
+both demo the scale/speed/crop shaping cycle). Durable stub-compile harness `tools/stub-compile/` —
 ALL CLEAN on ESP32/R4-WiFi/Minima. Byte-equivalence check DONE (below).
 Symmetric-visibility DONE (Tier B, below). **Docs + CHANGELOG DONE** (2026-08-30):
 `extensions.md` §Board-authored gestures; `gesture.md` §From the sketch + wire note;
@@ -338,3 +339,31 @@ surface as public.
 3. Chainable sugar both sides; resolve the `PardaloteGesture` naming/ownership.
 4. Extend byte/played-target equivalence test (`tools/stub-compile/
    gesture_equiv_test.cpp`) to cover modded playback. Then bench.
+
+### DONE 2026-09-20 — JS shipped + benched, board implemented + parity-verified
+- **JS (shipped, bench-confirmed in Plan-D).** `scale`/`speed`/`crop` as opts on every
+  `gesture()` and a lazy immutable chainable `Gesture` (`arduino.makeGesture(spec)`),
+  in `pardalote-core.js`; crop reuses `curveShape` (the shared formula — no JS-side
+  duplicate). Docs (`gesture.md` §Shaping, `extensions.md`, README) + CHANGELOG done,
+  bundle rebuilt. Plan-D now uses the library `Gesture` (its local `transforms.js`
+  deleted). **Naming decision:** kept the surface = params + a `Gesture` VALUE object
+  accepted by `gesture()`; `makeGesture()` is the factory (didn't touch `group.gesture`'s
+  immediate-send). scale composes (×), crop last-wins.
+- **Board (implemented, stub-clean, NOT bench-tested).** Not applied per-tick in
+  `loadSegment` after all — applied ONCE at gesture start over the RAM `_segs[]` copy
+  each actuator already keeps (crop only shrinks → safe in-place), via a templated
+  `pardaloteApplyModsInPlace<Seg>()` in `internal/gesture.h` (uses `pardaloteEase`;
+  `pardaloteRound` = `floorf(x+0.5)` to match JS `Math.round` exactly, incl. negative
+  halves). `PardaloteGestureMod{scale,speed,cropFrom,cropTo}` threads through the
+  `GestureStarter` typedef + `startGestureFor` (extensions.cpp) + each `startGesture`
+  + each Access `gesture(id,segs,count,flags,mod)`. **Naming resolved:** `speed`/`crop`
+  live on the `PardaloteGesture` builder (`.scale/.speed/.crop`, group-global), per-lane
+  amplitude via `add(..., laneScale)` — no new class colliding with `PardaloteGesture`.
+- **Order caveat (physical-equivalence, not byte):** JS group does mod→pad; board does
+  pad→mod (mod applied after the arrive-together pad). For RELATIVE gestures (the norm)
+  the result is physically identical; the single-lane transform is byte-identical (below).
+- **Parity verified.** New `tools/stub-compile/gesture_mods_equiv.{cpp,js}` runs the REAL
+  board `pardaloteApplyModsInPlace` vs the REAL JS `applyGestureModsLane` on 7 cases
+  (scale/speed/crop/combo/absolute) → **byte-identical**; wired into `run.sh` (all 3
+  boards compile clean too). **Only left: hardware bench** of board-authored modded
+  gestures (single + coordinated builder).

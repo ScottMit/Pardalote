@@ -212,54 +212,33 @@ function jsIdent(name, fallback, used) {
 }
 function generateCode() {
     const active = rows.map((rw, r) => ({ rw, r })).filter(({ rw }) => rw.on !== false && rw.points.length);
-    if (!active.length) return '// Add keyframes to a row, then the gesture appears here as Pardalote code.';
+    if (!active.length) return '// Add keyframes to a row, then the gesture appears here as a makeGesture() snippet.';
     const used = new Set();
     // handle follows the label: unnamed → output<N>, named "Left arm" → leftArm (the bus ID lives in attach())
     active.forEach(a => { a.id = jsIdent(rowName(a.rw, a.r), 'output' + (a.r + 1), used); });
-    const attachStr = (id, rw) => rw.type === 'servo'   ? `${id}.attach(${rw.pin})`
-                                : rw.type === 'stepper' ? `${id}.attach(${rw.step}, ${rw.dir}, ${rw.en})`
-                                :                         `${id}.attach(${rw.id}, 'ST')`;
     const descStr = (rw) => rw.type === 'servo'   ? `pin ${rw.pin}`
                           : rw.type === 'stepper' ? `STEP ${rw.step}/DIR ${rw.dir}/EN ${rw.en}`
                           :                         `ID ${rw.id}`;
-    const L = [];
-    L.push('// Pardalote gesture — built with Gesture Builder');
-    L.push('// Outputs: ' + active.map(a => `${a.id} = ${descStr(a.rw)}`).join(', '));
-    L.push('const arduino = new Arduino();');
-    active.forEach(a => L.push(`arduino.add('${a.id}', new ${TYPE(a.rw).cls}());`));
-    L.push(`const { ${active.map(a => a.id).join(', ')} } = arduino;`);
-    L.push('');
-    // The movement lives in its own function so you can call it from your own trigger.
-    L.push('// Call this to play the gesture — from a sensor, a button, an LLM, any command.');
-    L.push('function playGesture() {');
     const segLines = (rw, indent) => buildSegments(rw, 0).map(s => `${indent}{ to: ${s.to}, dur: ${s.dur}, curve: '${s.curve}' },`);
-    if (active.length === 1) {
-        // one channel → the actuator's own gesture(), no group needed
-        L.push(`  ${active[0].id}.gesture([`);
-        segLines(active[0].rw, '    ').forEach(l => L.push(l));
-        L.push('  ], { absolute: true });');
-    } else {
-        // many channels → one batched multi-channel gesture (start & arrive together)
-        L.push('  arduino.gesture({');
-        active.forEach((a, i) => {
-            L.push(`    ${a.id}: [`);
-            segLines(a.rw, '      ').forEach(l => L.push(l));
-            L.push(`    ]${i < active.length - 1 ? ',' : ''}`);
-        });
-        L.push('  }, { absolute: true });');
-    }
+    const L = [];
+    L.push('// Pardalote gesture — built with Gesture Builder.');
+    L.push('// The gesture data — one segment array per output (keys = your arduino.add(name, …) names).');
+    L.push('// Outputs: ' + active.map(a => `${a.id} = ${descStr(a.rw)}`).join(', '));
+    L.push('const gesture = {');
+    active.forEach((a, i) => {
+        L.push(`  ${a.id}: [`);
+        segLines(a.rw, '    ').forEach(l => L.push(l));
+        L.push(`  ]${i < active.length - 1 ? ',' : ''}`);
+    });
+    L.push('};');
+    L.push('');
+    L.push('// Play it — from a sensor, a button, an LLM, any command.');
+    L.push('function playGesture(arduino) {');
+    L.push('  arduino.gesture(gesture, { absolute: true });');
     L.push('}');
     L.push('');
-    L.push("arduino.on('ready', () => {");
-    active.forEach(a => {
-        let line = `  ${attachStr(a.id, a.rw)};`;
-        if (a.rw.min > 0 || a.rw.max < TYPE(a.rw).defMax) line += ` ${a.id}.setLimits(${a.rw.min}, ${a.rw.max});`;
-        L.push(line);
-    });
-    L.push('  playGesture();   // ← runs once on connect as a demo; move this to your own trigger');
-    L.push('});');
-    L.push('');
-    L.push("arduino.connect('192.168.x.x');   // your board's IP — or arduino.connectSerial(PROMPT) for USB");
+    L.push('// Reshape on the fly with makeGesture — scale the amplitude, speed it up/down, or crop it:');
+    L.push('//   arduino.gesture(arduino.makeGesture(gesture).scale(0.7).speed(0.5), { absolute: true });');
     return L.join('\n');
 }
 
@@ -272,32 +251,28 @@ const CPP = {
     servo:    { include: 'PardaloteServo.h',    obj: 'PardaloteServo',    device: 'DEVICE_SERVO' },
     stepper:  { include: 'PardaloteStepper.h',  obj: 'PardaloteStepper',  device: 'DEVICE_STEPPER' },
 };
-const cppAttachArgs = (id, rw) => rw.type === 'servo'   ? `"${id}", ${rw.pin}`
-                                : rw.type === 'stepper' ? `"${id}", ${rw.step}, ${rw.dir}, ${rw.en}`
-                                :                         `"${id}", ${rw.id}`;
 function generateArduinoCode() {
     const active = rows.map((rw, r) => ({ rw, r })).filter(({ rw }) => rw.on !== false && rw.points.length);
-    if (!active.length) return '// Add keyframes to a row, then the Arduino sketch appears here.';
+    if (!active.length) return '// Add keyframes to a row, then the Arduino snippet appears here.';
     const used = new Set();
     active.forEach(a => { a.id = jsIdent(rowName(a.rw, a.r), 'output' + (a.r + 1), used); });
     const descStr = (rw) => rw.type === 'servo' ? `pin ${rw.pin}` : rw.type === 'stepper' ? `STEP ${rw.step}/DIR ${rw.dir}/EN ${rw.en}` : `ID ${rw.id}`;
+    const includes = [...new Set(active.map(a => `<${CPP[a.rw.type].include}>`))].join(' + ');
     const L = [];
-    L.push('// Pardalote gesture — built with Gesture Builder (board-side Arduino sketch)');
-    L.push('// Outputs: ' + active.map(a => `${a.id} = ${descStr(a.rw)}`).join(', '));
-    L.push('#include <Pardalote.h>');
-    [...new Set(active.map(a => CPP[a.rw.type].include))].forEach(inc => L.push(`#include <${inc}>`));
-    L.push('');
-    L.push(`int ${active.map(a => a.id).join(', ')};   // logical ids from attach()`);
-    L.push('');
-    L.push('// The authored gesture — absolute targets. Each segment is { curve, duration-ms, value }.');
+    L.push('// Pardalote gesture — built with Gesture Builder (board-side).');
+    L.push('// Paste into your sketch. The PardaloteSeg[] arrays ARE the gesture; playGesture()');
+    L.push(`// plays them on the ids from your own attach() calls. Needs <Pardalote.h> + ${includes}.`);
     L.push('// static const arrays live in flash (32-bit boards) at no RAM cost.');
+    L.push('// Outputs: ' + active.map(a => `${a.id} = ${descStr(a.rw)}`).join(', '));
+    L.push('');
+    // Each segment is { curve, duration-ms, value } — absolute targets.
     active.forEach(a => {
         L.push(`static const PardaloteSeg ${a.id}Segs[] = {`);
         buildSegments(a.rw, 0).forEach(s => L.push(`  { ${CURVE_CPP[s.curve]}, ${s.dur}, ${s.to} },`));
         L.push('};');
     });
     L.push('');
-    L.push('// Call this to play the gesture — from a button, a sensor, any input.');
+    L.push(`// ${active.map(a => a.id).join(', ')} — the logical ids returned by attach() in your setup().`);
     L.push('void playGesture() {');
     if (active.length === 1) {
         const a = active[0];
@@ -307,16 +282,6 @@ function generateArduinoCode() {
         active.forEach(a => L.push(`    .add(${CPP[a.rw.type].device}, ${a.id}, ${a.id}Segs, ${buildSegments(a.rw, 0).length})`));
         L.push('    .play();');
     }
-    L.push('}');
-    L.push('');
-    L.push('void setup() {');
-    L.push('  Pardalote.begin();');
-    active.forEach(a => L.push(`  ${a.id} = ${CPP[a.rw.type].obj}.attach(${cppAttachArgs(a.id, a.rw)});`));
-    L.push('  playGesture();   // ← runs once at startup as a demo; move this to your own trigger');
-    L.push('}');
-    L.push('');
-    L.push('void loop() {');
-    L.push('  Pardalote.run();');
     L.push('}');
     return L.join('\n');
 }
@@ -802,6 +767,9 @@ function deletePoint(r, i) {
 function startPointDrag(e, r, i) {
     selectPoint(r, i); dragPt = { row: r, i }; lastPointer = { cx: e.clientX, cy: e.clientY };
     svg.setPointerCapture(e.pointerId);
+    // Seed the live-drive baseline with the value at the playhead now, so a keyframe whose
+    // reach doesn't include the playhead never triggers a write while it's dragged.
+    dragLastV = ready ? valueAtTime(rows[r], headTime) : null; lastDragSend = 0;
     showPointStatus(r, i);
 }
 function applyDragAt(cx, cy) {
@@ -812,6 +780,7 @@ function applyDragAt(cx, cy) {
     pts[i].t = Math.round(clamp(xToTime(x), tmin, tmax));
     pts[i].v = Math.round(yToVal(r, y));
     resizeSvg(); renderRow(r); showPointStatus(r, i);   // resizeSvg is grow-only while dragging
+    driveRowLive(r);   // active motor follows the edit live, if it changes the value at the playhead
 }
 // --- Editable status readout: type values in for precise manual entry ---
 // A compact number field in the status line; commit() clamps and returns the
@@ -1033,8 +1002,10 @@ svg.addEventListener('pointermove', (e) => {
 });
 svg.addEventListener('pointerup', (e) => {
     if (!dragPt) return;
+    const r = dragPt.row;
     dragPt = null; lastPointer = null;
     try { svg.releasePointerCapture(e.pointerId); } catch (_) {}
+    driveRowLive(r, true);   // ensure the final position at the playhead is sent
     recomputeTotal(); resizeSvg(); persist();
 });
 svg.addEventListener('contextmenu', (e) => {
@@ -1193,6 +1164,26 @@ function driveMotorsTo(t) {
         if (v != null) values[servoName(r)] = v;
     });
     if (Object.keys(values).length) arduino.write(values);   // fire-once coordinated write
+}
+// Live keypoint editing: while a keyframe is dragged, move THAT row's motor to follow the
+// edit — but only when it changes the value at the playhead. valueAtTime() already encodes
+// the three cases: playhead ON the keyframe → its value (direct control); on a segment
+// touching it → the recomputed interpolation; anywhere else → unchanged, so v == dragLastV
+// and nothing is sent (no movement). Active outputs only (a freed/hand-posed servo stays
+// put), and throttled like scrubbing. dragLastV is seeded at drag start (see startPointDrag).
+let dragLastV = null, lastDragSend = 0;
+function driveRowLive(r, force) {
+    if (!ready) return;
+    const rw = rows[r];
+    if (rw.on === false || rw.freed === true || !rw.points.length) return;   // not a free/off/empty output
+    const s = arduino[servoName(r)];
+    if (!s || s.present === false) return;
+    const v = valueAtTime(rw, headTime);
+    if (v == null || v === dragLastV) return;   // playhead not in this keyframe's reach → no movement
+    const now = performance.now();
+    if (!force && now - lastDragSend < 40) return;   // throttle ~25/s
+    lastDragSend = now; dragLastV = v;
+    arduino.write({ [servoName(r)]: v });
 }
 // "free" buttons are toggles — green when the servo is freed (torque off / hand-poseable).
 // `rw.freed` is live hardware state (not persisted); bindRow() frees on connect.

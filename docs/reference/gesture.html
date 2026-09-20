@@ -144,7 +144,7 @@
 <tr>
 <td><code>opts</code></td>
 <td>object</td>
-<td>Optional. <code>{ absolute }</code> forces the reference frame for <strong>all</strong> lanes.</td>
+<td>Optional. <code>{ absolute }</code> forces the reference frame for <strong>all</strong> lanes; <code>{ scale, speed, crop }</code> reshape the motion — see <a href="#shaping-a-gesture">Shaping a gesture</a>.</td>
 </tr>
 </tbody>
 </table>
@@ -168,6 +168,47 @@
 <p>For a <strong>single</strong> actuator, prefer its own <code>gesture([ … ])</code> — there's nothing to coordinate.</p>
 <h2 id="on-a-held-group--groupgesture">On a held group — <code>group.gesture()</code></h2>
 <p>If you're already holding a <a href="groups.html">group</a> to drive a set of actuators live — <code>write()</code>, <code>writeTimed()</code>, <code>read()</code>, <code>stop()</code> — then <a href="groups.html#gesture"><code>group.gesture(lanes)</code></a> does exactly the same thing on its members. Reach for <code>arduino.gesture()</code> when you just want to fire a gesture once; reach for a named group when you also need the live-control methods on the same set.</p>
+<h2 id="shaping-a-gesture">Shaping a gesture</h2>
+<p>Any gesture can be reshaped as it plays, without editing its segments — so one authored motion can read gentle or emphatic, fast or slow, or play just a slice of itself.</p>
+<table>
+<thead>
+<tr>
+<th>Transform</th>
+<th>Effect</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>scale</code></td>
+<td>Amplitude. Multiplies every relative <code>by</code> (an absolute <code>to</code> has no anchor to scale about, so it's left as-is). <code>1</code> = unchanged.</td>
+</tr>
+<tr>
+<td><code>speed</code></td>
+<td>Tempo. <code>2</code> = twice as fast, <code>0.5</code> = half. Amplitude and curves are untouched.</td>
+</tr>
+<tr>
+<td><code>crop</code></td>
+<td><code>[from, to]</code> — play only that fraction (<code>0</code>–<code>1</code>) of the timeline; boundary segments are split. <strong>Breaks the round-trip:</strong> a relative gesture no longer returns home, so send it home afterwards.</td>
+</tr>
+</tbody>
+</table>
+<p>Pass them as <strong>opts</strong> on any <code>gesture()</code> call:</p>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><div class="bar">Example — opts</div><pre><code><span class="nx">head</span><span class="p">.</span><span class="nx">gesture</span><span class="p">(</span><span class="nx">lanes</span><span class="p">,</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">scale</span><span class="o">:</span><span class="w"> </span><span class="mf">0.7</span><span class="p">,</span><span class="w"> </span><span class="nx">speed</span><span class="o">:</span><span class="w"> </span><span class="mf">1.5</span><span class="w"> </span><span class="p">});</span>
+<span class="nx">grip</span><span class="p">.</span><span class="nx">gesture</span><span class="p">(</span><span class="nx">reachSegs</span><span class="p">,</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">crop</span><span class="o">:</span><span class="w"> </span><span class="p">[</span><span class="mf">0</span><span class="p">,</span><span class="w"> </span><span class="mf">0.5</span><span class="p">]</span><span class="w"> </span><span class="p">});</span><span class="w">               </span><span class="c1">// just the first half</span>
+<span class="nx">head</span><span class="p">.</span><span class="nx">gesture</span><span class="p">(</span><span class="nx">lanes</span><span class="p">,</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">scale</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">antL</span><span class="o">:</span><span class="w"> </span><span class="mf">1.3</span><span class="p">,</span><span class="w"> </span><span class="nx">antR</span><span class="o">:</span><span class="w"> </span><span class="mf">1.3</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">});</span><span class="w">  </span><span class="c1">// per-lane amplitude</span>
+</code></pre></div>
+<p>…or build a reusable, chainable <strong>Gesture</strong> with <code>arduino.makeGesture()</code> and hand it to any <code>gesture()</code>:</p>
+<div class="sig sig-js">arduino.<span class="fn">makeGesture</span>(spec) → Gesture</div>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><div class="bar">Example — a reusable, tunable gesture</div><pre><code><span class="kd">const</span><span class="w"> </span><span class="nx">nod</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">makeGesture</span><span class="p">({</span><span class="w"> </span><span class="nx">tilt</span><span class="o">:</span><span class="w"> </span><span class="nx">nodSegs</span><span class="p">,</span><span class="w"> </span><span class="nx">antL</span><span class="o">:</span><span class="w"> </span><span class="nx">earSegs</span><span class="p">,</span><span class="w"> </span><span class="nx">antR</span><span class="o">:</span><span class="w"> </span><span class="nx">earSegs</span><span class="w"> </span><span class="p">});</span>
+
+<span class="k">await</span><span class="w"> </span><span class="nx">head</span><span class="p">.</span><span class="nx">gesture</span><span class="p">(</span><span class="nx">nod</span><span class="p">.</span><span class="nx">scale</span><span class="p">(</span><span class="mf">0.7</span><span class="p">).</span><span class="nx">speed</span><span class="p">(</span><span class="mf">0.5</span><span class="p">).</span><span class="nx">crop</span><span class="p">(</span><span class="mf">0.2</span><span class="p">,</span><span class="w"> </span><span class="mf">0.8</span><span class="p">)).</span><span class="nx">whenDone</span><span class="p">();</span>
+<span class="nx">head</span><span class="p">.</span><span class="nx">gesture</span><span class="p">(</span><span class="nx">nod</span><span class="p">.</span><span class="nx">scale</span><span class="p">(</span><span class="mf">1.2</span><span class="p">).</span><span class="nx">speed</span><span class="p">(</span><span class="mf">1.5</span><span class="p">));</span><span class="w">   </span><span class="c1">// a fresh variant — `nod` itself is unchanged</span>
+<span class="nx">nod</span><span class="p">.</span><span class="nx">cropped</span><span class="p">;</span><span class="w">      </span><span class="c1">// true when the crop window would end off-home</span>
+<span class="nx">nod</span><span class="p">.</span><span class="nx">duration</span><span class="p">();</span><span class="w">   </span><span class="c1">// total ms after the current mods</span>
+</code></pre></div>
+<p>A <code>Gesture</code> is <strong>immutable</strong>: every <code>.scale()</code> / <code>.speed()</code> / <code>.crop()</code> returns a new one, so a base gesture is safe to keep and vary. <code>scale</code> and <code>speed</code> compose (multiply) across calls; a later <code>crop</code> replaces an earlier window.</p>
+<p><strong>Coordination.</strong> In a multi-lane gesture, <code>speed</code> and <code>crop</code> act on the whole thing — one factor, one window on the shared timeline — so the lanes stay phase-locked. <code>scale</code> may differ per lane (a <code>{ name: k }</code> map), since amplitude never touches timing.</p>
+<p>The transforms are applied in the browser and sent as an ordinary gesture frame — nothing new crosses the wire, and the board plays the reshaped schedule like any other. A sketch can reshape its own gestures the same way — see <a href="extensions.html#board-authored-gestures">Board-authored gestures</a>.</p>
 <h2 id="awaiting-completion--whendone">Awaiting completion — <code>whenDone()</code></h2>
 <p>Every form returns something you can await. <code>whenDone()</code> resolves <code>true</code> when <strong>every</strong> channel reports it actually <strong>arrived</strong> (each actuator's feedback-confirmed <code>done</code>, not a timer), or <code>false</code> on a safety timeout if a channel never reports (dead servo, lost link).</p>
 <div class="sig sig-js">await arduino.gesture({ … }).<span class="fn">whenDone</span>([{ timeout }])</div>

@@ -26,10 +26,11 @@ void registerGestureStarter(uint16_t deviceId, GestureStarter start) {
 }
 
 void startGestureFor(uint16_t deviceId, int id, const PardaloteSeg* segs,
-                     uint8_t count, uint8_t flags, uint32_t startMs, uint32_t padToMs) {
+                     uint8_t count, uint8_t flags, uint32_t startMs, uint32_t padToMs,
+                     const PardaloteGestureMod& mod) {
     for (uint8_t i = 0; i < _numGestureStarters; i++) {
         if (_gestureRegistry[i].deviceId == deviceId) {
-            _gestureRegistry[i].start(id, segs, count, flags, startMs, padToMs);
+            _gestureRegistry[i].start(id, segs, count, flags, startMs, padToMs, mod);
             return;
         }
     }

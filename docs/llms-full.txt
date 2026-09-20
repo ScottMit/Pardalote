@@ -1061,6 +1061,20 @@ Pardalote.gesture()                                  // each array a PardaloteSe
     .play();
 ```
 
+**Reshape a gesture** — the board-side twin of the JS `scale` / `speed` / `crop`. Pass a `PardaloteGestureMod` to a single actuator's `gesture()`, or chain `.scale()` / `.speed()` / `.crop()` on the coordinated builder. The transform runs once, at gesture start, over the RAM copy each actuator already keeps — no extra buffer — and produces the byte-identical result to the browser doing the same:
+
+```cpp
+PardaloteServo.gesture(pan, NOD, 3, GESTURE_FLAG_ABSOLUTE, { 0.7f, 0.5f, 0.2f, 0.8f });  // {scale,speed,crop}
+
+Pardalote.gesture()
+    .add(DEVICE_SERVO, shoulder, SHOULDER, 2)
+    .add(DEVICE_SERVO, wrist,    WRIST,    1, true, 1.3f)   // per-lane amplitude (laneScale)
+    .speed(1.5f).crop(0.0f, 0.75f)                          // group-wide: keeps lanes phase-locked
+    .play();
+```
+
+`speed` and `crop` are group-wide (one factor, one window on the shared timeline) so the lanes stay in step; `scale` may differ per lane. `scale` multiplies **relative** deltas only (an absolute target has no anchor); a cropped **relative** gesture ends off-home. It's applied board-side, so the on-wire frame is unchanged.
+
 **Coordinated `write` / `writeTimed`** — the twins of `arduino.write()` / `arduino.writeTimed()` — take one target per actuator instead of a schedule:
 
 ```cpp
@@ -1075,7 +1089,7 @@ void onNodDone(int id) { PardaloteServo.gesture(id, IDLE, 2); }   // loop back t
 PardaloteServo.onGestureDone(pan, onNodDone);
 ```
 
-Watchers stay in sync: a board-authored gesture broadcasts its **existence** (never its shape) to every browser, which sees the actuator's `isGesturing` flag flip and `gesturestart` / `gestureend` fire — the same signals a browser-authored gesture gives. See the **`board-gestures`** sketch in the Arduino examples for a complete headless creature-head, and the Gesture page for the concept.
+Watchers stay in sync: a board-authored gesture broadcasts its **existence** (never its shape) to every browser, which sees the actuator's `isGesturing` flag flip and `gesturestart` / `gestureend` fire — the same signals a browser-authored gesture gives. See the **`board-gestures-PWM-servos`** and **`board-gestures-bus-servos`** sketches in the Arduino examples for a complete headless creature-head (both step through the scale/speed/crop shaping cycle on a button), and the Gesture page for the concept.
 
 ### Status helpers
 
@@ -1675,6 +1689,8 @@ arduino.shoulder.configureBus({ serial: 1, baud: 1000000 });
 arduino.shoulder.configureBus({ rxPin: 18, txPin: 19 });   // ESP32 custom pins
 ```
 
+A **headless sketch** has the same control: `PardaloteBusServo.configureBus(rxPin, txPin, serialIndex = 1, baud = 0)` — call it in `setup()` before `attach()`. The rx/tx pins are ESP32-only (UNO R4 is fixed to Serial1 = D0/D1 and ignores them).
+
 ## attach()
 
 Binds this instance to a servo ID on the bus. Call inside `on('ready')`.
@@ -2114,7 +2130,7 @@ Play a **multi-channel** gesture in **one batched message** — every channel st
 | Parameter | Type | Description |
 |---|---|---|
 | `lanes` | object | Actuator names (the names you passed to `add()`) mapped to segment arrays — each the same shape a single actuator's `gesture()` takes. |
-| `opts` | object | Optional. `{ absolute }` forces the reference frame for **all** lanes. |
+| `opts` | object | Optional. `{ absolute }` forces the reference frame for **all** lanes; `{ scale, speed, crop }` reshape the motion — see [Shaping a gesture](#shaping-a-gesture). |
 
 It runs through a **transient, anonymous group** — nothing is stored on the `arduino` — and **returns that group**, so `whenDone()` and `stop()` chain. A lane naming an actuator that doesn't support `gesture()`, an unknown name, or an empty array is skipped with a warning; the rest still play. **Mixed types work**: servos, steppers, and bus servos in one call each play via their own on-board mechanism, all coordinated on the board clock.
 
@@ -2141,6 +2157,43 @@ For a **single** actuator, prefer its own `gesture([ … ])` — there's nothing
 ## On a held group — `group.gesture()`
 
 If you're already holding a group to drive a set of actuators live — `write()`, `writeTimed()`, `read()`, `stop()` — then `group.gesture(lanes)` does exactly the same thing on its members. Reach for `arduino.gesture()` when you just want to fire a gesture once; reach for a named group when you also need the live-control methods on the same set.
+
+## Shaping a gesture
+
+Any gesture can be reshaped as it plays, without editing its segments — so one authored motion can read gentle or emphatic, fast or slow, or play just a slice of itself.
+
+| Transform | Effect |
+|---|---|
+| `scale` | Amplitude. Multiplies every relative `by` (an absolute `to` has no anchor to scale about, so it's left as-is). `1` = unchanged. |
+| `speed` | Tempo. `2` = twice as fast, `0.5` = half. Amplitude and curves are untouched. |
+| `crop` | `[from, to]` — play only that fraction (`0`–`1`) of the timeline; boundary segments are split. **Breaks the round-trip:** a relative gesture no longer returns home, so send it home afterwards. |
+
+Pass them as **opts** on any `gesture()` call:
+
+```javascript Example — opts
+head.gesture(lanes, { scale: 0.7, speed: 1.5 });
+grip.gesture(reachSegs, { crop: [0, 0.5] });               // just the first half
+head.gesture(lanes, { scale: { antL: 1.3, antR: 1.3 } });  // per-lane amplitude
+```
+
+…or build a reusable, chainable **Gesture** with `arduino.makeGesture()` and hand it to any `gesture()`:
+
+`arduino.makeGesture(spec) → Gesture`
+
+```javascript Example — a reusable, tunable gesture
+const nod = arduino.makeGesture({ tilt: nodSegs, antL: earSegs, antR: earSegs });
+
+await head.gesture(nod.scale(0.7).speed(0.5).crop(0.2, 0.8)).whenDone();
+head.gesture(nod.scale(1.2).speed(1.5));   // a fresh variant — `nod` itself is unchanged
+nod.cropped;      // true when the crop window would end off-home
+nod.duration();   // total ms after the current mods
+```
+
+A `Gesture` is **immutable**: every `.scale()` / `.speed()` / `.crop()` returns a new one, so a base gesture is safe to keep and vary. `scale` and `speed` compose (multiply) across calls; a later `crop` replaces an earlier window.
+
+**Coordination.** In a multi-lane gesture, `speed` and `crop` act on the whole thing — one factor, one window on the shared timeline — so the lanes stay phase-locked. `scale` may differ per lane (a `{ name: k }` map), since amplitude never touches timing.
+
+The transforms are applied in the browser and sent as an ordinary gesture frame — nothing new crosses the wire, and the board plays the reshaped schedule like any other. A sketch can reshape its own gestures the same way — see Board-authored gestures.
 
 ## Awaiting completion — `whenDone()`
 
@@ -4249,7 +4302,7 @@ This is a **tool** — no code editing. Open `index.html` and:
 |---|---|
 | **click a row's gutter summary** | open the **settings** dialog — output type + connection pins (draggable; OK keeps, cancel/Esc revert) |
 | **double-click a lane** | add a **keyframe** at that time and value |
-| **drag a keyframe** | set its value (up/down) and time (left/right) |
+| **drag a keyframe** | set its value (up/down) and time (left/right). If the output isn't **free**, its motor follows the edit live — but only when the edit changes the value **at the playhead** (drag a keyframe the playhead sits on, or a segment touching it; otherwise the motor holds) |
 | **right-click a keyframe** | **delete** it, or **pose servo** (bus servos only) — free the servo, hand-move it, click to commit (Esc cancels) |
 | **right-click a segment** | set its **shape** (easing) — linear / easeIn / easeOut / easeInOut / back |
 | **drag the last keyframe** past the right edge | extend the timeline |
@@ -4267,18 +4320,20 @@ Everything (rows, keyframes, shapes, connection) is remembered per browser.
 
 ## Export
 
-Two code panels below the timeline show the built gesture as runnable code, updating
-live as you edit. In both, the movement is wrapped in a **`playGesture()`** function
-you call from whatever triggers it — a sensor, a button, an LLM, any command:
+Two code panels below the timeline show the built gesture as a **copy-paste snippet** —
+just the gesture, no connection or setup scaffolding — updating live as you edit. Drop
+whichever you need into your own project:
 
-- **JavaScript** (browser) — output setup + limits in `on('ready')`; the movement is
-  the batched `arduino.gesture({…})` (or a single `output.gesture([…])` for one output).
-- **C++** (a board-side Arduino sketch) — the same gesture as `static const PardaloteSeg`
-  schedules in flash, attached in `setup()` and played with `Pardalote.gesture().add(…).play()`
-  (or `Pardalote<Type>.gesture(id, segs, count)` for one output). No browser needed.
+- **JavaScript** (browser) — a **`gesture`** data object (one segment array per output, keyed
+  by your `arduino.add(name, …)` names) plus a **`playGesture(arduino)`** that runs it with
+  `arduino.gesture(gesture, { absolute: true })` — mirroring the C++ layout. A trailing comment
+  shows how to reshape it on the fly with `arduino.makeGesture(gesture).scale(0.7).speed(0.5).crop(…)`.
+- **C++** (board-side) — the gesture as `static const PardaloteSeg` schedules in flash
+  plus a **`playGesture()`** that plays them with `Pardalote.gesture().add(…).play()`
+  (or `Pardalote<Type>.gesture(id, segs, count)` for one output). Paste it beside your own
+  `setup()`/`loop()`; the ids come from your `attach()` calls. No browser needed.
 
-Each `on('ready')` / `setup()` calls `playGesture()` once as a demo. **Copy** whichever
-you need. Switched-off rows are omitted, matching what **play** sends.
+Switched-off rows are omitted, matching what **play** sends.
 
 ## How it works
 
@@ -4324,7 +4379,8 @@ shape you draw on screen is the shape the schedule encodes.
   board-side **streaming interpolator**: it samples the curve on a fixed clock and
   streams look-ahead setpoints (batched across a group into one phase-locked
   write). The shape you draw, overshoot included, is the shape the servo runs — no
-  need to hand-decompose a move into extra keyframes to fake it.
+  need to hand-decompose a move into extra keyframes to fake it. (A segment shorter
+  than ~600 ms plays linear — too brief to render an easing shape, and imperceptibly so.)
 
 ---
 

@@ -28,6 +28,8 @@ arduino.shoulder.configureBus({ serial: 1, baud: 1000000 });
 arduino.shoulder.configureBus({ rxPin: 18, txPin: 19 });   // ESP32 custom pins
 ```
 
+A **headless sketch** has the same control: `PardaloteBusServo.configureBus(rxPin, txPin, serialIndex = 1, baud = 0)` — call it in `setup()` before `attach()`. The rx/tx pins are ESP32-only (UNO R4 is fixed to Serial1 = D0/D1 and ignores them).
+
 ## attach()
 
 Binds this instance to a servo ID on the bus. Call inside `on('ready')`.

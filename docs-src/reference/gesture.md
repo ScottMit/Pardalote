@@ -38,7 +38,7 @@ Play a **multi-channel** gesture in **one batched message** — every channel st
 | Parameter | Type | Description |
 |---|---|---|
 | `lanes` | object | Actuator names (the names you passed to [`add()`](extensions.html)) mapped to segment arrays — each the same shape a single actuator's `gesture()` takes. |
-| `opts` | object | Optional. `{ absolute }` forces the reference frame for **all** lanes. |
+| `opts` | object | Optional. `{ absolute }` forces the reference frame for **all** lanes; `{ scale, speed, crop }` reshape the motion — see [Shaping a gesture](#shaping-a-gesture). |
 
 It runs through a **transient, anonymous group** — nothing is stored on the `arduino` — and **returns that group**, so `whenDone()` and `stop()` chain. A lane naming an actuator that doesn't support `gesture()`, an unknown name, or an empty array is skipped with a warning; the rest still play. **Mixed types work**: servos, steppers, and bus servos in one call each play via their own on-board mechanism, all coordinated on the board clock.
 
@@ -65,6 +65,43 @@ For a **single** actuator, prefer its own `gesture([ … ])` — there's nothing
 ## On a held group — `group.gesture()`
 
 If you're already holding a [group](groups.html) to drive a set of actuators live — `write()`, `writeTimed()`, `read()`, `stop()` — then [`group.gesture(lanes)`](groups.html#gesture) does exactly the same thing on its members. Reach for `arduino.gesture()` when you just want to fire a gesture once; reach for a named group when you also need the live-control methods on the same set.
+
+## Shaping a gesture
+
+Any gesture can be reshaped as it plays, without editing its segments — so one authored motion can read gentle or emphatic, fast or slow, or play just a slice of itself.
+
+| Transform | Effect |
+|---|---|
+| `scale` | Amplitude. Multiplies every relative `by` (an absolute `to` has no anchor to scale about, so it's left as-is). `1` = unchanged. |
+| `speed` | Tempo. `2` = twice as fast, `0.5` = half. Amplitude and curves are untouched. |
+| `crop` | `[from, to]` — play only that fraction (`0`–`1`) of the timeline; boundary segments are split. **Breaks the round-trip:** a relative gesture no longer returns home, so send it home afterwards. |
+
+Pass them as **opts** on any `gesture()` call:
+
+```javascript Example — opts
+head.gesture(lanes, { scale: 0.7, speed: 1.5 });
+grip.gesture(reachSegs, { crop: [0, 0.5] });               // just the first half
+head.gesture(lanes, { scale: { antL: 1.3, antR: 1.3 } });  // per-lane amplitude
+```
+
+…or build a reusable, chainable **Gesture** with `arduino.makeGesture()` and hand it to any `gesture()`:
+
+<div class="sig">arduino.<span class="fn">makeGesture</span>(spec) → Gesture</div>
+
+```javascript Example — a reusable, tunable gesture
+const nod = arduino.makeGesture({ tilt: nodSegs, antL: earSegs, antR: earSegs });
+
+await head.gesture(nod.scale(0.7).speed(0.5).crop(0.2, 0.8)).whenDone();
+head.gesture(nod.scale(1.2).speed(1.5));   // a fresh variant — `nod` itself is unchanged
+nod.cropped;      // true when the crop window would end off-home
+nod.duration();   // total ms after the current mods
+```
+
+A `Gesture` is **immutable**: every `.scale()` / `.speed()` / `.crop()` returns a new one, so a base gesture is safe to keep and vary. `scale` and `speed` compose (multiply) across calls; a later `crop` replaces an earlier window.
+
+**Coordination.** In a multi-lane gesture, `speed` and `crop` act on the whole thing — one factor, one window on the shared timeline — so the lanes stay phase-locked. `scale` may differ per lane (a `{ name: k }` map), since amplitude never touches timing.
+
+The transforms are applied in the browser and sent as an ordinary gesture frame — nothing new crosses the wire, and the board plays the reshaped schedule like any other. A sketch can reshape its own gestures the same way — see [Board-authored gestures](extensions.html#board-authored-gestures).
 
 ## Awaiting completion — `whenDone()`
 

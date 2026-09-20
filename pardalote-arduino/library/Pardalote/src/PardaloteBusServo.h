@@ -554,6 +554,18 @@ private:
     }
 
 public:
+    // Board-side bus config — the sketch-side twin of the browser's
+    // configureBus(). Sets which UART + (ESP32) pins the bus uses, then re-begins.
+    // Same effect as the CMD_BUSSERVO_BUS_CONFIG wire path. Call before attach().
+    static void configureBus(int rxPin, int txPin, int serialIndex, uint32_t baud) {
+        _serialIndex = serialIndex;
+        if (baud) _baud = baud;
+        _rxPin = rxPin;
+        _txPin = txPin;
+        _busConfigured = false;   // force re-begin with the new settings
+        ensureBus();
+    }
+
     // Compose-and-play a segment schedule from the sketch — the board-side
     // gesture() (see internal/gesture.h). The same code the CMD_BUSSERVO_GESTURE
     // wire path runs, minus the byte unpack. Registered as the DEVICE_BUSSERVO
@@ -562,7 +574,8 @@ public:
     // startMs), so grouped lanes are phase-locked; padToMs appends a trailing
     // hold so short lanes arrive with the longest.
     static void startGesture(int id, const PardaloteSeg* segs, uint8_t count,
-                             uint8_t flags, uint32_t startMs, uint32_t padToMs = 0) {
+                             uint8_t flags, uint32_t startMs, uint32_t padToMs = 0,
+                             const PardaloteGestureMod& mod = PardaloteGestureMod()) {
         if (!validId(id) || !_attached[id] || !segs || count == 0) return;
         ensureBus();
         uint8_t  n     = count > MAX_BUS_SERVO_SEGMENTS ? MAX_BUS_SERVO_SEGMENTS : count;
@@ -580,6 +593,8 @@ public:
             _bsegs[id][n].value = (flags & GESTURE_FLAG_ABSOLUTE) ? _bsegs[id][n - 1].value : 0;
             n++;
         }
+        n = pardaloteApplyModsInPlace(_bsegs[id], n, flags, mod);   // scale · speed · crop
+        if (n == 0) { _bsegCount[id] = 0; return; }                 // cropped to nothing
         _bsegCount[id] = n;
         _bsegFlags[id] = flags;
         int32_t from = readPos(_servoId[id]);   // live start (lead-in anchor)
@@ -1385,6 +1400,15 @@ public:
         return BusServoExt::sketchAttach(name, servoId, series);
     }
 
+    // configureBus(rxPin, txPin, [serialIndex], [baud]) — set the bus UART from a
+    // HEADLESS sketch (the board-side twin of the browser's configureBus). Call
+    // once in setup() BEFORE attach(). The rx/tx pins are ESP32-only; UNO R4 is
+    // fixed to Serial1 (D0/D1) and ignores them. serialIndex 1 = Serial1 (default),
+    // 2 = Serial2 (ESP32). baud 0 keeps the default (1 Mbps).
+    void configureBus(int rxPin, int txPin, int serialIndex = 1, uint32_t baud = 0) const {
+        BusServoExt::configureBus(rxPin, txPin, serialIndex, baud);
+    }
+
     // scan(out, max, first?, last?) — DISCOVERY: ping the bus, report the
     // hardware ids that respond. On a Pardalote bus every responder is
     // Pardalote hardware; attach() the ones you want to drive.
@@ -1420,8 +1444,9 @@ public:
     // streaming interpolator renders each segment's easing curve on its own
     // clock (including CURVE_BACK overshoot). Coordinate via Pardalote.gesture().
     void gesture(int id, const PardaloteSeg* segs, uint8_t count,
-                 uint8_t flags = GESTURE_FLAG_ABSOLUTE) const {
-        BusServoExt::startGesture(id, segs, count, flags, millis());
+                 uint8_t flags = GESTURE_FLAG_ABSOLUTE,
+                 const PardaloteGestureMod& mod = PardaloteGestureMod()) const {
+        BusServoExt::startGesture(id, segs, count, flags, millis(), 0, mod);
     }
     // onGestureDone(id, cb) — board-side whenDone(): cb(id) on the last segment.
     void onGestureDone(int id, PardaloteGestureDone cb) const { BusServoExt::setOnGestureDone(id, cb); }
