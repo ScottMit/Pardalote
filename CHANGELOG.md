@@ -24,9 +24,13 @@ Pardalote versions **two things independently**:
   Pass `{ scale, speed, crop }` as opts to any `gesture()` (`speed`/`crop` global,
   `scale` a number or a per-lane `{ name: k }` map), or build a reusable, immutable
   chainable value with `arduino.makeGesture(spec)`:
-  `head.gesture(nod.scale(0.7).speed(0.5).crop(0.2, 0.8))`. `crop` reuses the same
-  easing maths the board mirrors, so a cropped shape reads identically on hardware; a
-  cropped relative gesture ends off-home (`Gesture.cropped` flags it). Applied in the
+  `head.gesture(nod.scale(0.7).speed(0.5).crop(0.2, 0.8))`. `scale` multiplies a
+  relative `by` directly and scales an absolute `to` around the lane's starting target
+  (`origin + (to − origin) × k`), so it works on either reference frame. `crop` also
+  works on either frame — it slices a clipped segment by the curve fraction, keeping a
+  relative delta or landing an absolute target at its eased mid-position — reusing the
+  same easing maths the board mirrors, so a cropped shape reads identically on
+  hardware; a cropped relative gesture ends off-home (`Gesture.cropped` flags it). Applied in the
   browser and sent as an ordinary gesture frame — **no API break, no wire change.**
   The board mirrors it for sketch-authored gestures: a `PardaloteGestureMod` on
   `PardaloteServo.gesture(...)` (and the stepper / bus-servo twins), or

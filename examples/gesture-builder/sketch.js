@@ -124,8 +124,10 @@ const $ = (id) => document.getElementById(id);
 const statusEl = $('info');   // tool feedback lives in the bottom ribbon; connect.js owns the header #status
 const rxEl = $('rx'), txEl = $('tx');
 const gutter = $('gutter'), lanesScroll = $('lanesScroll'), svg = $('lanes'), menuEl = $('ctxmenu');
-const codeText = $('codeText'), copyCode = $('copyCode'), outputDialogEl = $('outputDialog');
-const inoText = $('inoText'), copyIno = $('copyIno');
+const outputDialogEl = $('outputDialog');
+// Code panels: an EDITABLE gesture definition (textarea) + a read-only USAGE example, per language.
+const defJs = $('defJs'), useJs = $('useJs'), copyDefJs = $('copyDefJs'), copyUseJs = $('copyUseJs');
+const defIno = $('defIno'), useIno = $('useIno'), copyDefIno = $('copyDefIno'), copyUseIno = $('copyUseIno');
 const mainEl = document.querySelector('main');
 let rulerG, playhead, playheadHandle;
 let gutterCells = [];   // per row: { deg, marker, inp }
@@ -196,94 +198,212 @@ function persist() {
 // ---------------------------------------------------------------
 // Export the built gesture as runnable Pardalote code
 // ---------------------------------------------------------------
-// A safe, unique JS identifier from a row's name (fallback: servo<ID>).
+// The identifier form of a name: just drop the characters that would stop it working as code
+// (spaces, punctuation), keeping the user's own casing — no camelCasing. Shared by the code
+// exporter AND the row-name editor, so the label displays exactly as it appears in the code.
+// No uniqueness handling — that's jsIdent's job at export time.
+function identName(name, fallback) {
+    let s = (name || '').replace(/[^A-Za-z0-9_$]/g, '');   // keep only chars valid in an identifier
+    if (/^[0-9]/.test(s)) s = '_' + s;                     // an identifier can't start with a digit
+    return s || fallback;
+}
+// A safe, UNIQUE JS identifier from a row's name (fallback: output<N>) — appends 2, 3, … on collision.
 function jsIdent(name, fallback, used) {
-    let s = (name || '').trim().replace(/[^A-Za-z0-9]+/g, ' ').trim();
-    let id = fallback;
-    if (s) {
-        const w = s.split(/\s+/);
-        id = w[0].toLowerCase() + w.slice(1).map(p => p[0].toUpperCase() + p.slice(1).toLowerCase()).join('');
-        if (!/^[A-Za-z_]/.test(id)) id = 'servo' + id;
-    }
-    let out = id, n = 2;
+    let id = identName(name, fallback), out = id, n = 2;
     while (used.has(out)) out = id + (n++);
     used.add(out);
     return out;
 }
-function generateCode() {
-    const active = rows.map((rw, r) => ({ rw, r })).filter(({ rw }) => rw.on !== false && rw.points.length);
-    if (!active.length) return '// Add keyframes to a row, then the gesture appears here as a makeGesture() snippet.';
+// Active rows (on + has keyframes) with their generated lane id — the shared basis for BOTH
+// code panels AND for matching a pasted definition's lane names back onto existing rows.
+function laneList() {
     const used = new Set();
-    // handle follows the label: unnamed → output<N>, named "Left arm" → leftArm (the bus ID lives in attach())
-    active.forEach(a => { a.id = jsIdent(rowName(a.rw, a.r), 'output' + (a.r + 1), used); });
-    const descStr = (rw) => rw.type === 'servo'   ? `pin ${rw.pin}`
-                          : rw.type === 'stepper' ? `STEP ${rw.step}/DIR ${rw.dir}/EN ${rw.en}`
-                          :                         `ID ${rw.id}`;
-    const segLines = (rw, indent) => buildSegments(rw, 0).map(s => `${indent}{ to: ${s.to}, dur: ${s.dur}, curve: '${s.curve}' },`);
-    const L = [];
-    L.push('// Pardalote gesture — built with Gesture Builder.');
-    L.push('// The gesture data — one segment array per output (keys = your arduino.add(name, …) names).');
-    L.push('// Outputs: ' + active.map(a => `${a.id} = ${descStr(a.rw)}`).join(', '));
-    L.push('const gesture = {');
-    active.forEach((a, i) => {
+    return rows.map((rw, r) => ({ rw, r }))
+        .filter(({ rw }) => rw.on !== false && rw.points.length)
+        .map(a => ({ rw: a.rw, r: a.r, id: jsIdent(rowName(a.rw, a.r), 'output' + (a.r + 1), used) }));
+}
+const descStr = (rw) => rw.type === 'servo'   ? `pin ${rw.pin}`
+                      : rw.type === 'stepper' ? `STEP ${rw.step}/DIR ${rw.dir}/EN ${rw.en}`
+                      :                         `ID ${rw.id}`;
+
+// --- JavaScript panels -------------------------------------------------
+// Definition (EDITABLE): just the data — one segment array per lane, keyed by the lane name.
+// Edit or paste it and click away to rebuild the timeline (applyDefEdit). No comments/exec so
+// it round-trips cleanly.
+function generateJsDef() {
+    const lanes = laneList();
+    if (!lanes.length) return 'const gesture = {\n};';
+    const L = ['const gesture = {'];
+    lanes.forEach((a, i) => {
         L.push(`  ${a.id}: [`);
-        segLines(a.rw, '    ').forEach(l => L.push(l));
-        L.push(`  ]${i < active.length - 1 ? ',' : ''}`);
+        buildSegments(a.rw, 0).forEach(s => L.push(`    { to: ${s.to}, dur: ${s.dur}, curve: '${s.curve}' },`));
+        L.push(`  ]${i < lanes.length - 1 ? ',' : ''}`);
     });
     L.push('};');
+    return L.join('\n');
+}
+// Usage (read-only): a full runnable program that plays the `gesture` defined above —
+// setup, connection and all, so it drops straight into a project.
+function generateJsUse() {
+    const lanes = laneList();
+    if (!lanes.length) return '// add keyframes to a row';
+    const attachStr = (id, rw) => rw.type === 'servo'   ? `arduino.${id}.attach(${rw.pin})`
+                                : rw.type === 'stepper' ? `arduino.${id}.attach(${rw.step}, ${rw.dir}, ${rw.en})`
+                                :                         `arduino.${id}.attach(${rw.id}, 'ST')`;
+    const L = [];
+    L.push('// Full example — plays the `gesture` above. Outputs: ' + lanes.map(a => `${a.id} = ${descStr(a.rw)}`).join(', '));
+    L.push('const arduino = new Arduino();');
+    lanes.forEach(a => L.push(`arduino.add('${a.id}', new ${TYPE(a.rw).cls}());`));
     L.push('');
-    L.push('// Play it — from a sensor, a button, an LLM, any command.');
-    L.push('function playGesture(arduino) {');
+    L.push("arduino.on('ready', () => {");
+    lanes.forEach(a => {
+        let line = `  ${attachStr(a.id, a.rw)};`;
+        if (a.rw.min > 0 || a.rw.max < TYPE(a.rw).defMax) line += ` arduino.${a.id}.setLimits(${a.rw.min}, ${a.rw.max});`;
+        L.push(line);
+    });
+    L.push('  playGesture();   // ← runs once on connect as a demo; move this to your own trigger');
+    L.push('});');
+    L.push('');
+    L.push('// Play the gesture — from a sensor, a button, an LLM, any command.');
+    L.push('function playGesture() {');
     L.push('  arduino.gesture(gesture, { absolute: true });');
     L.push('}');
     L.push('');
-    L.push('// Reshape on the fly with makeGesture — scale the amplitude, speed it up/down, or crop it:');
-    L.push('//   arduino.gesture(arduino.makeGesture(gesture).scale(0.7).speed(0.5), { absolute: true });');
+    L.push("arduino.connect('192.168.x.x');   // your board's IP — or arduino.connectSerial(PROMPT) for USB");
     return L.join('\n');
 }
 
-// ---------------------------------------------------------------
-// Export the same gesture as a board-side Arduino sketch (C++)
-// ---------------------------------------------------------------
+// --- Arduino panels ----------------------------------------------------
 const CURVE_CPP = { linear: 'CURVE_LINEAR', easeIn: 'CURVE_EASE_IN', easeOut: 'CURVE_EASE_OUT', easeInOut: 'CURVE_EASE_IN_OUT', back: 'CURVE_BACK' };
+const CURVE_FROM_CPP = Object.fromEntries(Object.entries(CURVE_CPP).map(([k, v]) => [v, k]));
 const CPP = {
     busservo: { include: 'PardaloteBusServo.h', obj: 'PardaloteBusServo', device: 'DEVICE_BUSSERVO' },
     servo:    { include: 'PardaloteServo.h',    obj: 'PardaloteServo',    device: 'DEVICE_SERVO' },
     stepper:  { include: 'PardaloteStepper.h',  obj: 'PardaloteStepper',  device: 'DEVICE_STEPPER' },
 };
-function generateArduinoCode() {
-    const active = rows.map((rw, r) => ({ rw, r })).filter(({ rw }) => rw.on !== false && rw.points.length);
-    if (!active.length) return '// Add keyframes to a row, then the Arduino snippet appears here.';
-    const used = new Set();
-    active.forEach(a => { a.id = jsIdent(rowName(a.rw, a.r), 'output' + (a.r + 1), used); });
-    const descStr = (rw) => rw.type === 'servo' ? `pin ${rw.pin}` : rw.type === 'stepper' ? `STEP ${rw.step}/DIR ${rw.dir}/EN ${rw.en}` : `ID ${rw.id}`;
-    const includes = [...new Set(active.map(a => `<${CPP[a.rw.type].include}>`))].join(' + ');
+// Definition (EDITABLE): the PardaloteSeg[] arrays — one per lane, named <id>Segs. Each segment
+// is { curve, duration-ms, value } (absolute). Edit/paste + click away to rebuild the timeline.
+function generateInoDef() {
+    const lanes = laneList();
+    if (!lanes.length) return '// add keyframes to a row';
     const L = [];
-    L.push('// Pardalote gesture — built with Gesture Builder (board-side).');
-    L.push('// Paste into your sketch. The PardaloteSeg[] arrays ARE the gesture; playGesture()');
-    L.push(`// plays them on the ids from your own attach() calls. Needs <Pardalote.h> + ${includes}.`);
-    L.push('// static const arrays live in flash (32-bit boards) at no RAM cost.');
-    L.push('// Outputs: ' + active.map(a => `${a.id} = ${descStr(a.rw)}`).join(', '));
-    L.push('');
-    // Each segment is { curve, duration-ms, value } — absolute targets.
-    active.forEach(a => {
+    lanes.forEach(a => {
         L.push(`static const PardaloteSeg ${a.id}Segs[] = {`);
         buildSegments(a.rw, 0).forEach(s => L.push(`  { ${CURVE_CPP[s.curve]}, ${s.dur}, ${s.to} },`));
         L.push('};');
     });
+    return L.join('\n');
+}
+// Usage (read-only): a full runnable sketch that plays the …Segs[] arrays defined above.
+function generateInoUse() {
+    const lanes = laneList();
+    if (!lanes.length) return '// add keyframes to a row';
+    const cppAttachArgs = (id, rw) => rw.type === 'servo'   ? `"${id}", ${rw.pin}`
+                                    : rw.type === 'stepper' ? `"${id}", ${rw.step}, ${rw.dir}, ${rw.en}`
+                                    :                         `"${id}", ${rw.id}`;
+    const L = [];
+    L.push('// Full sketch — plays the …Segs[] arrays above. Outputs: ' + lanes.map(a => `${a.id} = ${descStr(a.rw)}`).join(', '));
+    L.push('#include <Pardalote.h>');
+    [...new Set(lanes.map(a => CPP[a.rw.type].include))].forEach(inc => L.push(`#include <${inc}>`));
     L.push('');
-    L.push(`// ${active.map(a => a.id).join(', ')} — the logical ids returned by attach() in your setup().`);
+    L.push(`int ${lanes.map(a => a.id).join(', ')};   // logical ids from attach()`);
+    L.push('');
+    L.push('// Play the gesture — from a button, a sensor, any input.');
     L.push('void playGesture() {');
-    if (active.length === 1) {
-        const a = active[0];
+    if (lanes.length === 1) {
+        const a = lanes[0];
         L.push(`  ${CPP[a.rw.type].obj}.gesture(${a.id}, ${a.id}Segs, ${buildSegments(a.rw, 0).length});`);
     } else {
         L.push('  Pardalote.gesture()');
-        active.forEach(a => L.push(`    .add(${CPP[a.rw.type].device}, ${a.id}, ${a.id}Segs, ${buildSegments(a.rw, 0).length})`));
+        lanes.forEach(a => L.push(`    .add(${CPP[a.rw.type].device}, ${a.id}, ${a.id}Segs, ${buildSegments(a.rw, 0).length})`));
         L.push('    .play();');
     }
     L.push('}');
+    L.push('');
+    L.push('void setup() {');
+    L.push('  Pardalote.begin();');
+    lanes.forEach(a => L.push(`  ${a.id} = ${CPP[a.rw.type].obj}.attach(${cppAttachArgs(a.id, a.rw)});`));
+    L.push('  playGesture();   // ← runs once at startup as a demo; move this to your own trigger');
+    L.push('}');
+    L.push('');
+    L.push('void loop() {');
+    L.push('  Pardalote.run();');
+    L.push('}');
     return L.join('\n');
+}
+
+// --- Parse a definition back into the timeline (def is the source of truth) ------------
+// Tolerant, non-eval parsers: pull { key: [ {to|by, dur, curve}, … ] } lanes from the JS object,
+// or the PardaloteSeg[] arrays from the C++. Each returns [{ key, segs }] or null if it read none.
+function parseSegFields(s) {
+    const dur = s.match(/\bdur\s*:\s*(\d+)/);
+    if (!dur) return null;                                  // a segment must have a duration
+    const to = s.match(/\bto\s*:\s*(-?\d+(?:\.\d+)?)/);
+    const by = s.match(/\bby\s*:\s*(-?\d+(?:\.\d+)?)/);
+    const cv = s.match(/\bcurve\s*:\s*['"]?([A-Za-z]+)['"]?/);
+    const seg = { dur: Math.max(1, Math.round(+dur[1])), curve: cv && CURVES.includes(cv[1]) ? cv[1] : 'linear' };
+    if (to) seg.to = Math.round(+to[1]); else if (by) seg.by = Math.round(+by[1]); else seg.to = 0;
+    return seg;
+}
+function parseJsDef(text) {
+    const lanes = [];
+    const laneRe = /([A-Za-z_$][\w$]*)\s*:\s*\[([\s\S]*?)\]/g;   // name: [ …objects… ] (segments hold no ']')
+    let m;
+    while ((m = laneRe.exec(text))) {
+        const segs = [], objRe = /\{([^{}]*)\}/g; let o;
+        while ((o = objRe.exec(m[2]))) { const seg = parseSegFields(o[1]); if (seg) segs.push(seg); }
+        if (segs.length) lanes.push({ key: m[1], segs });
+    }
+    return lanes.length ? lanes : null;
+}
+function parseInoDef(text) {
+    const lanes = [];
+    const arrRe = /([A-Za-z_$][\w$]*?)Segs\s*\[\s*\]\s*=\s*\{([\s\S]*?)\}\s*;/g;
+    let m;
+    while ((m = arrRe.exec(text))) {
+        const segs = [], segRe = /\{\s*(CURVE_[A-Z_]+)\s*,\s*(\d+)\s*,\s*(-?\d+)\s*\}/g; let s;
+        while ((s = segRe.exec(m[2]))) segs.push({ curve: CURVE_FROM_CPP[s[1]] || 'linear', dur: Math.max(1, +s[2]), to: +s[3] });
+        if (segs.length) lanes.push({ key: m[1], segs });
+    }
+    return lanes.length ? lanes : null;
+}
+// Invert buildSegments(): a lane's segment schedule → timeline keyframes. segs[0] is the lead-in
+// to point 0 (its curve is discarded); point i's curve is the curve of the segment LEAVING it
+// (segs[i+1]); the last point's curve defaults to linear (it has no leaving segment).
+function segmentsToPoints(segs, min, max) {
+    const pts = []; let t = 0, acc = 0;
+    for (let i = 0; i < segs.length; i++) {
+        const s = segs[i];
+        const v = (s.to != null) ? (acc = s.to) : (acc += (s.by || 0));
+        t = clamp(t + s.dur, 0, TMAX);
+        const curve = (i + 1 < segs.length && CURVES.includes(segs[i + 1].curve)) ? segs[i + 1].curve : 'linear';
+        pts.push({ t: Math.round(t), v: clamp(Math.round(v), min, max), curve });
+    }
+    return pts.slice(0, MAX_POINTS);
+}
+// Rebuild the timeline from parsed lanes (def is source of truth): each lane matches an existing
+// ACTIVE row by its generated id — keeping that row's type / pins / limits — or becomes a new
+// bus-servo row. Active rows the def omits are dropped; inactive/empty rows are left untouched.
+function applyParsedLanes(lanes) {
+    const byId = new Map(laneList().map(a => [a.id, a.rw]));
+    const claimed = new Set();
+    let nextId = Math.min(253, Math.max(0, ...rows.map(r => r.id)) + 1);
+    const out = [];
+    lanes.forEach(lane => {
+        const existing = byId.get(lane.key);
+        if (existing && !claimed.has(existing)) {
+            claimed.add(existing);
+            existing.points = segmentsToPoints(lane.segs, existing.min, existing.max);
+            if (existing.points.length) { out.push(existing); return; }
+        }
+        const row = defaultRow();               // new lane → default bus-servo row (user sets its ID)
+        row.name = lane.key; row.id = Math.min(253, nextId++);
+        row.points = segmentsToPoints(lane.segs, row.min, row.max);
+        if (row.points.length) out.push(row);
+    });
+    // Preserve rows the def never listed (switched off or empty) — editing it shouldn't delete them.
+    rows.forEach(rw => { if (!claimed.has(rw) && (rw.on === false || !rw.points.length)) out.push(rw); });
+    rows = out.length ? out : [defaultRow()];
 }
 // Minimal JS syntax highlighter — wraps tokens in Pygments-style spans so the
 // exported code reads like the docs reference pages (styled in style.css).
@@ -321,10 +441,15 @@ function highlightCode(code) {
     }
     return out;
 }
-let lastCode = '', lastIno = '';
+let lastDefJs = '', lastUseJs = '', lastDefIno = '', lastUseIno = '';
 function updateCode() {
-    if (codeText) { lastCode = generateCode(); codeText.innerHTML = highlightCode(lastCode); }
-    if (inoText) { lastIno = generateArduinoCode(); inoText.innerHTML = highlightCode(lastIno); }
+    lastDefJs = generateJsDef(); lastUseJs = generateJsUse();
+    lastDefIno = generateInoDef(); lastUseIno = generateInoUse();
+    if (useJs)  useJs.innerHTML  = highlightCode(lastUseJs);
+    if (useIno) useIno.innerHTML = highlightCode(lastUseIno);
+    // Refresh the editable definitions from the timeline — but never clobber one being edited.
+    if (defJs  && document.activeElement !== defJs)  defJs.value  = lastDefJs;
+    if (defIno && document.activeElement !== defIno) defIno.value = lastDefIno;
 }
 function selectCode(el) { const r = document.createRange(); r.selectNodeContents(el); const s = getSelection(); s.removeAllRanges(); s.addRange(r); }
 function recomputeTotal() {
@@ -352,7 +477,17 @@ function busPins() {
 // -------------------------------------------------------------------
 // A row's display label: its custom name, or the positional "Row N" default.
 // Default label is "Output N" (position-based, type-neutral for future non-servo outputs).
-const rowName = (rw, r) => (rw.name && rw.name.length) ? rw.name : 'Output ' + (r + 1);
+const rowName = (rw, r) => (rw.name && rw.name.length) ? rw.name : 'Output' + (r + 1);
+// Make `base` unique among the OTHER rows' names (their custom name or "OutputN" default),
+// appending 2, 3, … on collision — the same guard the code exporter applies, done at edit time.
+function uniqueRowName(base, r) {
+    if (!base) return '';
+    const taken = new Set();
+    rows.forEach((rw, i) => { if (i !== r) taken.add(rowName(rw, i)); });
+    if (!taken.has(base)) return base;
+    let n = 2; while (taken.has(base + n)) n++;
+    return base + n;
+}
 
 // Click a row label to rename it: swap the text for an input, commit on Enter/blur,
 // cancel on Escape. A blank entry (or the plain "Row N" default) clears the custom
@@ -369,7 +504,8 @@ function startRename(r, nameEl) {
     const finish = (save) => {
         if (done) return; done = true;
         const v = save ? input.value.trim() : cur;
-        rows[r].name = (v === '' || v === 'Output ' + (r + 1)) ? '' : v;
+        // Store the identifier form (no spaces etc.) so the label matches the exported code.
+        rows[r].name = (v === '' || v === 'Output' + (r + 1)) ? '' : uniqueRowName(identName(v, ''), r);
         persist();
         nameEl.textContent = rowName(rows[r], r);
     };
@@ -916,20 +1052,28 @@ function addRowAt(index) {
     index = clamp(index, 0, rows.length);
     const nextId = Math.min(253, Math.max(0, ...rows.map(r => r.id)) + 1);
     const row = defaultRow(); row.id = nextId; rows.splice(index, 0, row);
-    afterRowChange();
+    afterRowChange(index, index);   // rebind from the insert down; only the new row (at index) frees
 }
 function deleteRow(index) {
     if (rows.length <= 1) { setStatus('need at least one row'); return; }
     rows.splice(index, 1);
-    afterRowChange();
+    afterRowChange(index);          // rebind the rows that shifted up; none is "new", so all keep state
 }
-function afterRowChange() {
+function afterRowChange(fromIndex = 0, newIndex = -1) {
     selPoint = null; selSeg = null;
-    recomputeTotal(); rebuildAllDom(); rebindAll(); persist();
+    recomputeTotal(); rebuildAllDom(); rebindAll(fromIndex, newIndex); persist();
 }
-function rebindAll() {
+// Re-bind rows from `fromIndex` down — the ones whose positional servoName shifted. Rows above
+// it didn't move, so we leave them attached (no needless detach/re-grip). The row at `newIndex`
+// (a freshly added row) applies the connect default (bus servo frees for hand-posing); every
+// other re-bound row RESTORES its current freed state, so adding a row frees ONLY the new row.
+function rebindAll(fromIndex = 0, newIndex = -1) {
     if (!ready) return;
-    rows.forEach((_, r) => { const s = arduino[servoName(r)]; if (s && s.isAttached && s.detach) s.detach(); bindRow(r); });
+    for (let r = fromIndex; r < rows.length; r++) {
+        const s = arduino[servoName(r)];
+        if (s && s.isAttached && s.detach) s.detach();
+        bindRow(r, r === newIndex);
+    }
     updateFreeButtons();
 }
 
@@ -1272,15 +1416,25 @@ function ensureActuator(r) {
 function ensureAllActuators() { rows.forEach((_, r) => ensureActuator(r)); }
 // Command an output to hold at its current value (type-aware; used by stop).
 function holdHere(r) { const t = TYPE(rows[r]), s = arduino[servoName(r)]; if (s) t.write(s, t.cur(s)); }
-function bindRow(r) {
+// initial=true → apply the type's connect default (bus servo frees for hand-posing). This is
+// a first connect or a genuinely new/retyped row. initial=false → RESTORE this row's current
+// freed state — used when RE-binding an already-bound row (its positional servoName shifted, or
+// the bus was reconfigured), so a rebind never force-frees a servo the user had holding torque.
+function bindRow(r, initial = true) {
     const rw = rows[r], t = TYPE(rw), s = ensureActuator(r);
     t.attach(s, rw);
-    if (t.freeOnConnect && t.free) { t.free(s); rw.freed = true; }   // bus servo: free on connect for hand-posing
-    else { if (t.hold) t.hold(s); rw.freed = false; }                // stepper: enable/hold · PWM: nothing
+    if (initial) {
+        if (t.freeOnConnect && t.free) { t.free(s); rw.freed = true; }   // bus servo: free on connect for hand-posing
+        else { if (t.hold) t.hold(s); rw.freed = false; }                // stepper: enable/hold · PWM: nothing
+    } else {
+        if (!canFree(r)) rw.freed = false;                               // types that can't free are never freed
+        if (rw.freed && t.free) t.free(s);                               // keep it free (hand-posed)
+        else if (t.hold) t.hold(s);                                      // restore torque/hold (PWM: nothing)
+    }
     if (rw.min > 0 || rw.max < t.defMax) s.setLimits(rw.min, rw.max);
     if (t.hasFeedback) s.read(150);                                  // only bus servos report position
 }
-function reattachRow(r) { if (!ready) return; const s = arduino[servoName(r)]; if (s && s.detach) s.detach(); ensureActuator(r); bindRow(r); }
+function reattachRow(r) { if (!ready) return; const s = arduino[servoName(r)]; if (s && s.detach) s.detach(); ensureActuator(r); bindRow(r, false); }
 
 // -------------------------------------------------------------------
 // Live update loop — degrees / markers / playhead / edge auto-scroll
@@ -1376,14 +1530,31 @@ $('stop').onclick = stop;
 $('toEnd').onclick = goToEnd;
 $('freeAll').onclick = freeAll;
 function wireCopy(btn, getText, el) {
+    const selectAll = () => { if (el.tagName === 'TEXTAREA') { el.focus(); el.select(); } else selectCode(el); };
     btn.onclick = () => {
         const done = (ok) => { btn.textContent = ok ? 'copied' : 'select + ⌘C'; setTimeout(() => { btn.textContent = 'copy'; }, 1400); };
-        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(getText()).then(() => done(true), () => { selectCode(el); done(false); });
-        else { selectCode(el); done(false); }
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(getText()).then(() => done(true), () => { selectAll(); done(false); });
+        else { selectAll(); done(false); }
     };
 }
-wireCopy(copyCode, () => lastCode, codeText);
-wireCopy(copyIno, () => lastIno, inoText);
+wireCopy(copyDefJs, () => lastDefJs, defJs);
+wireCopy(copyUseJs, () => lastUseJs, useJs);
+wireCopy(copyDefIno, () => lastDefIno, defIno);
+wireCopy(copyUseIno, () => lastUseIno, useIno);
+// Editing or pasting a definition and clicking away rebuilds the timeline (def = source of truth);
+// everything else — the other panels and the other language — regenerates from it via persist().
+function applyDefEdit(el, generatedDef, parser, label) {
+    if (el.value === generatedDef) return;   // no real change (focus in/out) — don't rebuild or glitch torque
+    const lanes = parser(el.value);
+    if (!lanes) { setStatus(`couldn't read the ${label} gesture — timeline unchanged`); el.value = generatedDef; return; }
+    applyParsedLanes(lanes);
+    selPoint = null; selSeg = null;
+    recomputeTotal(); rebuildAllDom(); if (ready) rebindAll(0, -1);
+    persist();   // → updateCode() regenerates all four panels
+    setStatus(`timeline updated from ${label} code`);
+}
+defJs.addEventListener('blur', () => applyDefEdit(defJs, lastDefJs, parseJsDef, 'JavaScript'));
+defIno.addEventListener('blur', () => applyDefEdit(defIno, lastDefIno, parseInoDef, 'Arduino'));
 
 arduino = new Arduino();
 ensureAllActuators();   // one actuator per row, of that row's output type

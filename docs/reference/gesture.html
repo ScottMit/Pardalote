@@ -115,6 +115,23 @@
 </tbody>
 </table>
 <p>A gesture is <strong>relative</strong> by default — each <code>by</code> segment chains from wherever the actuator is when it starts, so the same gesture replays from any pose. Use <code>to</code> for absolute targets, or force it for a whole gesture with <code>{ absolute: true }</code>. Absolute targets are clamped to the actuator's <a href="bus-servo.html#setlimits--clearlimits">soft limits</a>.</p>
+<h2 id="relative-or-absolute">Relative or absolute?</h2>
+<p>Both frames play through the same engine — the difference is what a value <em>means</em>, and it changes how a gesture replays, scales, and crops. Choose per gesture.</p>
+<p><strong>Relative (<code>by</code>) — expressive motion you replay and reshape.</strong> A <code>by</code> segment <em>adds</em> a delta to wherever the actuator already is, so:</p>
+<ul>
+<li>The same gesture runs correctly <strong>from any pose</strong>, and a net-zero sequence returns home. It <strong>layers on top of</strong> other positioning (a bias, a current pose) rather than overriding it.</li>
+<li>The modifiers need no anchor to reason about: <a href="#shaping-a-gesture"><code>scale</code></a> multiplies the deltas directly (around the implicit home), and <code>crop</code> slices faithfully (a clipped segment keeps the right fraction of its eased travel).</li>
+<li>It's portable — you don't need to know absolute positions or a home.</li>
+<li>Reach for it for a <strong>vocabulary of reusable moves</strong> — nods, wiggles, glances — that should read the same wherever the actuator happens to be, and that you want to scale or crop.</li>
+</ul>
+<p><strong>Absolute (<code>to</code>) — go to exact positions.</strong> A <code>to</code> segment drives to a specific target regardless of the starting pose, so:</p>
+<ul>
+<li>The <strong>end pose is definite</strong> and every target is clamped to the <a href="bus-servo.html#setlimits--clearlimits">soft limits</a>. An absolute gesture <strong>overrides</strong> where the actuator was rather than adding to it.</li>
+<li>It's <strong>what-you-author-is-what-you-get</strong> when the positions are captured against real hardware (e.g. a visual keyframe tool) — no home or reference-frame to get right.</li>
+<li>The modifiers work here too, with one wrinkle: they reckon from the gesture's <strong>starting target</strong> (<code>origin</code>, the first <code>to</code>) rather than a home. <code>scale</code> pivots on it — <code>origin + (to − origin) × k</code>, growing or shrinking the excursions <em>from the opening pose</em> (the opening move itself isn't scaled). <code>crop</code> slices absolute targets by the same curve-fraction maths as relative — a clipped target lands at its eased mid-position — except a cut <em>inside the very first segment</em> holds at the origin, since the pose before it isn't known.</li>
+<li>Reach for it when you need the actuator <strong>at</strong> a particular place — a definite rest/end pose, or a mechanism that must hit exact points — or when you're authoring positions visually and want them played back verbatim.</li>
+</ul>
+<p>Rule of thumb: <strong>relative</strong> for reusable, layer-on-top, fully-reshapeable expression; <strong>absolute</strong> for exact, deterministic positioning.</p>
 <h2 id="one-actuator--gesture">One actuator — <code>gesture()</code></h2>
 <p>Play a schedule on a single actuator. The segment shape and any on-hardware notes are per actuator — see <a href="servo.html#gesture">servo</a>, <a href="bus-servo.html#gesture">bus servo</a>, and <a href="stepper.html#gesture">stepper</a>.</p>
 <div class="sig sig-js">servo.<span class="fn">gesture</span>(segments, [opts])</div>
@@ -151,11 +168,10 @@
 <p>It runs through a <strong>transient, anonymous group</strong> — nothing is stored on the <code>arduino</code> — and <strong>returns that group</strong>, so <code>whenDone()</code> and <code>stop()</code> chain. A lane naming an actuator that doesn't support <code>gesture()</code>, an unknown name, or an empty array is skipped with a warning; the rest still play. <strong>Mixed types work</strong>: servos, steppers, and bus servos in one call each play via their own on-board mechanism, all coordinated on the board clock.</p>
 <div class="code-ex"><span class="lang-badge lang-js">JS</span><div class="bar">Example — a coordinated reach with follow-through</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;shoulder&#39;</span><span class="p">,</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">BusServo</span><span class="p">());</span>
 <span class="nx">arduino</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;wrist&#39;</span><span class="p">,</span><span class="w">    </span><span class="ow">new</span><span class="w"> </span><span class="nx">Servo</span><span class="p">());</span>
-<span class="kd">const</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">shoulder</span><span class="p">,</span><span class="w"> </span><span class="nx">wrist</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">arduino</span><span class="p">;</span>
 
 <span class="nx">arduino</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;ready&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
-<span class="w">    </span><span class="nx">shoulder</span><span class="p">.</span><span class="nx">attach</span><span class="p">(</span><span class="mf">1</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;ST&#39;</span><span class="p">);</span>
-<span class="w">    </span><span class="nx">wrist</span><span class="p">.</span><span class="nx">attach</span><span class="p">(</span><span class="mf">9</span><span class="p">);</span>
+<span class="w">    </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">shoulder</span><span class="p">.</span><span class="nx">attach</span><span class="p">(</span><span class="mf">1</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;ST&#39;</span><span class="p">);</span>
+<span class="w">    </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">wrist</span><span class="p">.</span><span class="nx">attach</span><span class="p">(</span><span class="mf">9</span><span class="p">);</span>
 
 <span class="w">    </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">gesture</span><span class="p">({</span>
 <span class="w">        </span><span class="nx">shoulder</span><span class="o">:</span><span class="w"> </span><span class="p">[{</span><span class="w"> </span><span class="nx">by</span><span class="o">:</span><span class="w"> </span><span class="mf">300</span><span class="p">,</span><span class="w"> </span><span class="nx">dur</span><span class="o">:</span><span class="w"> </span><span class="mf">400</span><span class="p">,</span><span class="w"> </span><span class="nx">curve</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;easeOut&#39;</span><span class="w">   </span><span class="p">},</span>
@@ -180,7 +196,7 @@
 <tbody>
 <tr>
 <td><code>scale</code></td>
-<td>Amplitude. Multiplies every relative <code>by</code> (an absolute <code>to</code> has no anchor to scale about, so it's left as-is). <code>1</code> = unchanged.</td>
+<td>Amplitude. Relative <code>by</code> is multiplied; an absolute <code>to</code> scales around the gesture's <strong>starting target</strong> — <code>origin + (to − origin) × k</code>, where <code>origin</code> is the lane's first <code>to</code> — so the start pose is kept and only the excursions from it grow or shrink. <code>1</code> = unchanged.</td>
 </tr>
 <tr>
 <td><code>speed</code></td>

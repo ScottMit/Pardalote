@@ -1073,7 +1073,7 @@ Pardalote.gesture()
     .play();
 ```
 
-`speed` and `crop` are group-wide (one factor, one window on the shared timeline) so the lanes stay in step; `scale` may differ per lane. `scale` multiplies **relative** deltas only (an absolute target has no anchor); a cropped **relative** gesture ends off-home. It's applied board-side, so the on-wire frame is unchanged.
+`speed` and `crop` are group-wide (one factor, one window on the shared timeline) so the lanes stay in step; `scale` may differ per lane. `scale` multiplies a **relative** delta directly and scales an **absolute** target around the lane's starting target (`origin + (to − origin) × k`); a cropped **relative** gesture ends off-home. It's applied board-side, so the on-wire frame is unchanged.
 
 **Coordinated `write` / `writeTimed`** — the twins of `arduino.write()` / `arduino.writeTimed()` — take one target per actuator instead of a schedule:
 
@@ -2107,6 +2107,26 @@ Every gesture is an array of segments. Each segment is one leg of the motion:
 
 A gesture is **relative** by default — each `by` segment chains from wherever the actuator is when it starts, so the same gesture replays from any pose. Use `to` for absolute targets, or force it for a whole gesture with `{ absolute: true }`. Absolute targets are clamped to the actuator's soft limits.
 
+## Relative or absolute?
+
+Both frames play through the same engine — the difference is what a value *means*, and it changes how a gesture replays, scales, and crops. Choose per gesture.
+
+**Relative (`by`) — expressive motion you replay and reshape.** A `by` segment *adds* a delta to wherever the actuator already is, so:
+
+- The same gesture runs correctly **from any pose**, and a net-zero sequence returns home. It **layers on top of** other positioning (a bias, a current pose) rather than overriding it.
+- The modifiers need no anchor to reason about: [`scale`](#shaping-a-gesture) multiplies the deltas directly (around the implicit home), and `crop` slices faithfully (a clipped segment keeps the right fraction of its eased travel).
+- It's portable — you don't need to know absolute positions or a home.
+- Reach for it for a **vocabulary of reusable moves** — nods, wiggles, glances — that should read the same wherever the actuator happens to be, and that you want to scale or crop.
+
+**Absolute (`to`) — go to exact positions.** A `to` segment drives to a specific target regardless of the starting pose, so:
+
+- The **end pose is definite** and every target is clamped to the soft limits. An absolute gesture **overrides** where the actuator was rather than adding to it.
+- It's **what-you-author-is-what-you-get** when the positions are captured against real hardware (e.g. a visual keyframe tool) — no home or reference-frame to get right.
+- The modifiers work here too, with one wrinkle: they reckon from the gesture's **starting target** (`origin`, the first `to`) rather than a home. `scale` pivots on it — `origin + (to − origin) × k`, growing or shrinking the excursions *from the opening pose* (the opening move itself isn't scaled). `crop` slices absolute targets by the same curve-fraction maths as relative — a clipped target lands at its eased mid-position — except a cut *inside the very first segment* holds at the origin, since the pose before it isn't known.
+- Reach for it when you need the actuator **at** a particular place — a definite rest/end pose, or a mechanism that must hit exact points — or when you're authoring positions visually and want them played back verbatim.
+
+Rule of thumb: **relative** for reusable, layer-on-top, fully-reshapeable expression; **absolute** for exact, deterministic positioning.
+
 ## One actuator — `gesture()`
 
 Play a schedule on a single actuator. The segment shape and any on-hardware notes are per actuator — see servo, bus servo, and stepper.
@@ -2137,11 +2157,10 @@ It runs through a **transient, anonymous group** — nothing is stored on the `a
 ```javascript Example — a coordinated reach with follow-through
 arduino.add('shoulder', new BusServo());
 arduino.add('wrist',    new Servo());
-const { shoulder, wrist } = arduino;
 
 arduino.on('ready', () => {
-    shoulder.attach(1, 'ST');
-    wrist.attach(9);
+    arduino.shoulder.attach(1, 'ST');
+    arduino.wrist.attach(9);
 
     arduino.gesture({
         shoulder: [{ by: 300, dur: 400, curve: 'easeOut'   },
@@ -2164,7 +2183,7 @@ Any gesture can be reshaped as it plays, without editing its segments — so one
 
 | Transform | Effect |
 |---|---|
-| `scale` | Amplitude. Multiplies every relative `by` (an absolute `to` has no anchor to scale about, so it's left as-is). `1` = unchanged. |
+| `scale` | Amplitude. Relative `by` is multiplied; an absolute `to` scales around the gesture's **starting target** — `origin + (to − origin) × k`, where `origin` is the lane's first `to` — so the start pose is kept and only the excursions from it grow or shrink. `1` = unchanged. |
 | `speed` | Tempo. `2` = twice as fast, `0.5` = half. Amplitude and curves are untouched. |
 | `crop` | `[from, to]` — play only that fraction (`0`–`1`) of the timeline; boundary segments are split. **Breaks the round-trip:** a relative gesture no longer returns home, so send it home afterwards. |
 
@@ -4318,22 +4337,30 @@ The teal marker in each row's gutter is that output's **live position** (sensed 
 servos; last-commanded for PWM servos and steppers).
 Everything (rows, keyframes, shapes, connection) is remembered per browser.
 
-## Export
+## Export — and import
 
-Two code panels below the timeline show the built gesture as a **copy-paste snippet** —
-just the gesture, no connection or setup scaffolding — updating live as you edit. Drop
-whichever you need into your own project:
+Four code panels below the timeline. For each language, the **gesture** panel is the
+definition (one segment array per output) and is **editable**; the **example use** panel
+beside it is a read-only, full runnable program that plays that definition — setup,
+connection (or `setup()`/`loop()`) and all. Switched-off rows are omitted, matching what
+**play** sends.
 
-- **JavaScript** (browser) — a **`gesture`** data object (one segment array per output, keyed
-  by your `arduino.add(name, …)` names) plus a **`playGesture(arduino)`** that runs it with
-  `arduino.gesture(gesture, { absolute: true })` — mirroring the C++ layout. A trailing comment
-  shows how to reshape it on the fly with `arduino.makeGesture(gesture).scale(0.7).speed(0.5).crop(…)`.
-- **C++** (board-side) — the gesture as `static const PardaloteSeg` schedules in flash
-  plus a **`playGesture()`** that plays them with `Pardalote.gesture().add(…).play()`
-  (or `Pardalote<Type>.gesture(id, segs, count)` for one output). Paste it beside your own
-  `setup()`/`loop()`; the ids come from your `attach()` calls. No browser needed.
+**It's two-way.** Edit the numbers in a gesture panel — or paste in a definition you saved
+earlier — and **click away**: the timeline rebuilds from it, and every other panel (and the
+other language) regenerates to match. So you can bring an already-authored gesture back in and
+keep editing it visually. The definition is the source of truth: each lane matches an existing
+row by name (keeping its output type / pins / limits), a lane you add becomes a new bus-servo
+row (set its ID after), and a lane you remove drops that row. If the code can't be read, the
+timeline is left untouched and the panel reverts.
 
-Switched-off rows are omitted, matching what **play** sends.
+- **JavaScript** — a **`gesture`** object (one segment array per output, keyed by your
+  `arduino.add(name, …)` names). The example connects, attaches, and plays it with
+  `arduino.gesture(gesture, { absolute: true })` — copy both panels for a complete program.
+- **C++** (board-side) — the gesture as `static const PardaloteSeg …Segs[]` schedules in flash;
+  the example is a full sketch (`setup()`/`loop()`, `attach()`) that plays them with
+  `Pardalote.gesture().add(…).play()` (or `Pardalote<Type>.gesture(id, segs, count)` for one output).
+
+Editing **either** language's definition rewrites the timeline — and the other language follows.
 
 ## How it works
 

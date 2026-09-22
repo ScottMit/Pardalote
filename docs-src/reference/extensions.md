@@ -199,7 +199,7 @@ Pardalote.gesture()
     .play();
 ```
 
-`speed` and `crop` are group-wide (one factor, one window on the shared timeline) so the lanes stay in step; `scale` may differ per lane. `scale` multiplies **relative** deltas only (an absolute target has no anchor); a cropped **relative** gesture ends off-home. It's applied board-side, so the on-wire frame is unchanged.
+`speed` and `crop` are group-wide (one factor, one window on the shared timeline) so the lanes stay in step; `scale` may differ per lane. `scale` multiplies a **relative** delta directly and scales an **absolute** target around the lane's starting target (`origin + (to − origin) × k`); a cropped **relative** gesture ends off-home. It's applied board-side, so the on-wire frame is unchanged.
 
 **Coordinated `write` / `writeTimed`** — the twins of [`arduino.write()` / `arduino.writeTimed()`](groups.html#writetimed) — take one target per actuator instead of a schedule:
 

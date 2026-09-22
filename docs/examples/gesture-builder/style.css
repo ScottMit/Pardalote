@@ -198,6 +198,12 @@ main { position: relative; }   /* anchor the row context-menu */
 .codeblock .c1 { color: #8a867f; font-style: italic; }      /* comments */
 .codeblock .o  { color: var(--grey); }                      /* operators */
 .codeblock .nx, .codeblock .p { color: var(--ink); }        /* names / punctuation */
+/* four panels: each language's editable gesture def beside its read-only usage example */
+.codegrid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 18px; margin-top: 18px; }
+.codegrid .codeout { margin: 0; min-width: 0; }             /* min-width:0 keeps <pre> from blowing the column out */
+@media (max-width: 720px) { .codegrid { grid-template-columns: 1fr; } }
+.codeedit { display: block; white-space: pre; }            /* editable textarea; inherits .codeblock look */
+.codeedit:focus { outline: none; border-color: var(--ink); }
 
 /* Dragging (keyframes, playhead, limit labels, the settings dialog) starts in
    these areas — suppress text selection so a drag never highlights gutter/ruler

@@ -38,6 +38,8 @@ int main() {
     run("speed.5",   nod, 4, 0, M(1.0f, 0.5f, 0.0f, 1.0f));
     run("crop.2-.8", nod, 4, 0, M(1.0f, 1.0f, 0.2f, 0.8f));
     run("combo",     nod, 4, 0, M(0.7f, 1.5f, 0.1f, 0.9f));
+    run("abs-scale", nodAbs, 4, GESTURE_FLAG_ABSOLUTE, M(0.5f, 1.0f, 0.0f, 1.0f));   // scale around origin
+    run("abs-crop",  nodAbs, 4, GESTURE_FLAG_ABSOLUTE, M(1.0f, 1.0f, 0.1f, 0.6f));   // curve-sliced targets
     run("abs-combo", nodAbs, 4, GESTURE_FLAG_ABSOLUTE, M(0.5f, 2.0f, 0.25f, 0.75f));
     return 0;
 }

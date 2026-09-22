@@ -68,22 +68,30 @@ The teal marker in each row's gutter is that output's **live position** (sensed 
 servos; last-commanded for PWM servos and steppers).
 Everything (rows, keyframes, shapes, connection) is remembered per browser.
 
-## Export
+## Export — and import
 
-Two code panels below the timeline show the built gesture as a **copy-paste snippet** —
-just the gesture, no connection or setup scaffolding — updating live as you edit. Drop
-whichever you need into your own project:
+Four code panels below the timeline. For each language, the **gesture** panel is the
+definition (one segment array per output) and is **editable**; the **example use** panel
+beside it is a read-only, full runnable program that plays that definition — setup,
+connection (or `setup()`/`loop()`) and all. Switched-off rows are omitted, matching what
+**play** sends.
 
-- **JavaScript** (browser) — a **`gesture`** data object (one segment array per output, keyed
-  by your `arduino.add(name, …)` names) plus a **`playGesture(arduino)`** that runs it with
-  `arduino.gesture(gesture, { absolute: true })` — mirroring the C++ layout. A trailing comment
-  shows how to reshape it on the fly with `arduino.makeGesture(gesture).scale(0.7).speed(0.5).crop(…)`.
-- **C++** (board-side) — the gesture as `static const PardaloteSeg` schedules in flash
-  plus a **`playGesture()`** that plays them with `Pardalote.gesture().add(…).play()`
-  (or `Pardalote<Type>.gesture(id, segs, count)` for one output). Paste it beside your own
-  `setup()`/`loop()`; the ids come from your `attach()` calls. No browser needed.
+**It's two-way.** Edit the numbers in a gesture panel — or paste in a definition you saved
+earlier — and **click away**: the timeline rebuilds from it, and every other panel (and the
+other language) regenerates to match. So you can bring an already-authored gesture back in and
+keep editing it visually. The definition is the source of truth: each lane matches an existing
+row by name (keeping its output type / pins / limits), a lane you add becomes a new bus-servo
+row (set its ID after), and a lane you remove drops that row. If the code can't be read, the
+timeline is left untouched and the panel reverts.
 
-Switched-off rows are omitted, matching what **play** sends.
+- **JavaScript** — a **`gesture`** object (one segment array per output, keyed by your
+  `arduino.add(name, …)` names). The example connects, attaches, and plays it with
+  `arduino.gesture(gesture, { absolute: true })` — copy both panels for a complete program.
+- **C++** (board-side) — the gesture as `static const PardaloteSeg …Segs[]` schedules in flash;
+  the example is a full sketch (`setup()`/`loop()`, `attach()`) that plays them with
+  `Pardalote.gesture().add(…).play()` (or `Pardalote<Type>.gesture(id, segs, count)` for one output).
+
+Editing **either** language's definition rewrites the timeline — and the other language follows.
 
 ## How it works
 

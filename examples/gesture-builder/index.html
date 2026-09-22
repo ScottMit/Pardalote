@@ -51,22 +51,37 @@
     <!-- floating per-output settings (type + connection pins), opened from the gutter -->
     <div id="outputDialog" hidden></div>
 
-    <!-- Export: the gesture as runnable Pardalote code, to drop into a robot system -->
-    <div class="codeout">
-        <div class="codeout-head">
-            <span class="lbl">JavaScript code</span>
-            <button id="copyCode">copy</button>
+    <!-- Export / import: the gesture DEFINITION is editable — edit or paste it and click away
+         to rebuild the timeline; the USAGE panel below each is a read-only example of playing it. -->
+    <div class="codegrid">
+        <div class="codeout">
+            <div class="codeout-head">
+                <span class="lbl">JavaScript — gesture (editable · click away to apply)</span>
+                <button id="copyDefJs">copy</button>
+            </div>
+            <textarea id="defJs" class="codeblock codeedit" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
         </div>
-        <pre class="codeblock"><code id="codeText"></code></pre>
-    </div>
-
-    <!-- The same gesture as a board-side Arduino sketch (C++) -->
-    <div class="codeout">
-        <div class="codeout-head">
-            <span class="lbl">Arduino code</span>
-            <button id="copyIno">copy</button>
+        <div class="codeout">
+            <div class="codeout-head">
+                <span class="lbl">JavaScript — example use</span>
+                <button id="copyUseJs">copy</button>
+            </div>
+            <pre class="codeblock"><code id="useJs"></code></pre>
         </div>
-        <pre class="codeblock"><code id="inoText"></code></pre>
+        <div class="codeout">
+            <div class="codeout-head">
+                <span class="lbl">Arduino — gesture (editable · click away to apply)</span>
+                <button id="copyDefIno">copy</button>
+            </div>
+            <textarea id="defIno" class="codeblock codeedit" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
+        </div>
+        <div class="codeout">
+            <div class="codeout-head">
+                <span class="lbl">Arduino — example use</span>
+                <button id="copyUseIno">copy</button>
+            </div>
+            <pre class="codeblock"><code id="useIno"></code></pre>
+        </div>
     </div>
 
 </main>

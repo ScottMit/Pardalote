@@ -15,6 +15,26 @@ Every gesture is an array of segments. Each segment is one leg of the motion:
 
 A gesture is **relative** by default — each `by` segment chains from wherever the actuator is when it starts, so the same gesture replays from any pose. Use `to` for absolute targets, or force it for a whole gesture with `{ absolute: true }`. Absolute targets are clamped to the actuator's [soft limits](bus-servo.html#setlimits--clearlimits).
 
+## Relative or absolute?
+
+Both frames play through the same engine — the difference is what a value *means*, and it changes how a gesture replays, scales, and crops. Choose per gesture.
+
+**Relative (`by`) — expressive motion you replay and reshape.** A `by` segment *adds* a delta to wherever the actuator already is, so:
+
+- The same gesture runs correctly **from any pose**, and a net-zero sequence returns home. It **layers on top of** other positioning (a bias, a current pose) rather than overriding it.
+- The modifiers need no anchor to reason about: [`scale`](#shaping-a-gesture) multiplies the deltas directly (around the implicit home), and `crop` slices faithfully (a clipped segment keeps the right fraction of its eased travel).
+- It's portable — you don't need to know absolute positions or a home.
+- Reach for it for a **vocabulary of reusable moves** — nods, wiggles, glances — that should read the same wherever the actuator happens to be, and that you want to scale or crop.
+
+**Absolute (`to`) — go to exact positions.** A `to` segment drives to a specific target regardless of the starting pose, so:
+
+- The **end pose is definite** and every target is clamped to the [soft limits](bus-servo.html#setlimits--clearlimits). An absolute gesture **overrides** where the actuator was rather than adding to it.
+- It's **what-you-author-is-what-you-get** when the positions are captured against real hardware (e.g. a visual keyframe tool) — no home or reference-frame to get right.
+- The modifiers work here too, with one wrinkle: they reckon from the gesture's **starting target** (`origin`, the first `to`) rather than a home. `scale` pivots on it — `origin + (to − origin) × k`, growing or shrinking the excursions *from the opening pose* (the opening move itself isn't scaled). `crop` slices absolute targets by the same curve-fraction maths as relative — a clipped target lands at its eased mid-position — except a cut *inside the very first segment* holds at the origin, since the pose before it isn't known.
+- Reach for it when you need the actuator **at** a particular place — a definite rest/end pose, or a mechanism that must hit exact points — or when you're authoring positions visually and want them played back verbatim.
+
+Rule of thumb: **relative** for reusable, layer-on-top, fully-reshapeable expression; **absolute** for exact, deterministic positioning.
+
 ## One actuator — `gesture()`
 
 Play a schedule on a single actuator. The segment shape and any on-hardware notes are per actuator — see [servo](servo.html#gesture), [bus servo](bus-servo.html#gesture), and [stepper](stepper.html#gesture).
@@ -45,11 +65,10 @@ It runs through a **transient, anonymous group** — nothing is stored on the `a
 ```javascript Example — a coordinated reach with follow-through
 arduino.add('shoulder', new BusServo());
 arduino.add('wrist',    new Servo());
-const { shoulder, wrist } = arduino;
 
 arduino.on('ready', () => {
-    shoulder.attach(1, 'ST');
-    wrist.attach(9);
+    arduino.shoulder.attach(1, 'ST');
+    arduino.wrist.attach(9);
 
     arduino.gesture({
         shoulder: [{ by: 300, dur: 400, curve: 'easeOut'   },
@@ -72,7 +91,7 @@ Any gesture can be reshaped as it plays, without editing its segments — so one
 
 | Transform | Effect |
 |---|---|
-| `scale` | Amplitude. Multiplies every relative `by` (an absolute `to` has no anchor to scale about, so it's left as-is). `1` = unchanged. |
+| `scale` | Amplitude. Relative `by` is multiplied; an absolute `to` scales around the gesture's **starting target** — `origin + (to − origin) × k`, where `origin` is the lane's first `to` — so the start pose is kept and only the excursions from it grow or shrink. `1` = unchanged. |
 | `speed` | Tempo. `2` = twice as fast, `0.5` = half. Amplitude and curves are untouched. |
 | `crop` | `[from, to]` — play only that fraction (`0`–`1`) of the timeline; boundary segments are split. **Breaks the round-trip:** a relative gesture no longer returns home, so send it home afterwards. |
 

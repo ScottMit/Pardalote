@@ -110,7 +110,7 @@ output type and set its pins (ID / Pin / STEP·DIR·EN). Add or remove rows with
 </tr>
 <tr>
 <td><strong>drag a keyframe</strong></td>
-<td>set its value (up/down) and time (left/right)</td>
+<td>set its value (up/down) and time (left/right). If the output isn't <strong>free</strong>, its motor follows the edit live — but only when the edit changes the value <strong>at the playhead</strong> (drag a keyframe the playhead sits on, or a segment touching it; otherwise the motor holds)</td>
 </tr>
 <tr>
 <td><strong>right-click a keyframe</strong></td>
@@ -157,19 +157,28 @@ output type and set its pins (ID / Pin / STEP·DIR·EN). Add or remove rows with
 <p>The teal marker in each row's gutter is that output's <strong>live position</strong> (sensed for bus
 servos; last-commanded for PWM servos and steppers).
 Everything (rows, keyframes, shapes, connection) is remembered per browser.</p>
-<h2 id="export">Export</h2>
-<p>Two code panels below the timeline show the built gesture as runnable code, updating
-live as you edit. In both, the movement is wrapped in a <strong><code>playGesture()</code></strong> function
-you call from whatever triggers it — a sensor, a button, an LLM, any command:</p>
+<h2 id="export--and-import">Export — and import</h2>
+<p>Four code panels below the timeline. For each language, the <strong>gesture</strong> panel is the
+definition (one segment array per output) and is <strong>editable</strong>; the <strong>example use</strong> panel
+beside it is a read-only, full runnable program that plays that definition — setup,
+connection (or <code>setup()</code>/<code>loop()</code>) and all. Switched-off rows are omitted, matching what
+<strong>play</strong> sends.</p>
+<p><strong>It's two-way.</strong> Edit the numbers in a gesture panel — or paste in a definition you saved
+earlier — and <strong>click away</strong>: the timeline rebuilds from it, and every other panel (and the
+other language) regenerates to match. So you can bring an already-authored gesture back in and
+keep editing it visually. The definition is the source of truth: each lane matches an existing
+row by name (keeping its output type / pins / limits), a lane you add becomes a new bus-servo
+row (set its ID after), and a lane you remove drops that row. If the code can't be read, the
+timeline is left untouched and the panel reverts.</p>
 <ul>
-<li><strong>JavaScript</strong> (browser) — output setup + limits in <code>on('ready')</code>; the movement is
-the batched <code>arduino.gesture({…})</code> (or a single <code>output.gesture([…])</code> for one output).</li>
-<li><strong>C++</strong> (a board-side Arduino sketch) — the same gesture as <code>static const PardaloteSeg</code>
-schedules in flash, attached in <code>setup()</code> and played with <code>Pardalote.gesture().add(…).play()</code>
-(or <code>Pardalote&lt;Type&gt;.gesture(id, segs, count)</code> for one output). No browser needed.</li>
+<li><strong>JavaScript</strong> — a <strong><code>gesture</code></strong> object (one segment array per output, keyed by your
+<code>arduino.add(name, …)</code> names). The example connects, attaches, and plays it with
+<code>arduino.gesture(gesture, { absolute: true })</code> — copy both panels for a complete program.</li>
+<li><strong>C++</strong> (board-side) — the gesture as <code>static const PardaloteSeg …Segs[]</code> schedules in flash;
+the example is a full sketch (<code>setup()</code>/<code>loop()</code>, <code>attach()</code>) that plays them with
+<code>Pardalote.gesture().add(…).play()</code> (or <code>Pardalote&lt;Type&gt;.gesture(id, segs, count)</code> for one output).</li>
 </ul>
-<p>Each <code>on('ready')</code> / <code>setup()</code> calls <code>playGesture()</code> once as a demo. <strong>Copy</strong> whichever
-you need. Switched-off rows are omitted, matching what <strong>play</strong> sends.</p>
+<p>Editing <strong>either</strong> language's definition rewrites the timeline — and the other language follows.</p>
 <h2 id="how-it-works">How it works</h2>
 <p><strong>Each row becomes a <code>gesture()</code>.</strong> A row's keyframes are turned into an absolute
 segment schedule — a lead-in from the servo's live position to the first keyframe,
@@ -205,7 +214,8 @@ whose controller takes a raw angle — Pardalote renders the easing with a
 board-side <strong>streaming interpolator</strong>: it samples the curve on a fixed clock and
 streams look-ahead setpoints (batched across a group into one phase-locked
 write). The shape you draw, overshoot included, is the shape the servo runs — no
-need to hand-decompose a move into extra keyframes to fake it.</li>
+need to hand-decompose a move into extra keyframes to fake it. (A segment shorter
+than ~600 ms plays linear — too brief to render an easing shape, and imperceptibly so.)</li>
 </ul>
 
   </div>

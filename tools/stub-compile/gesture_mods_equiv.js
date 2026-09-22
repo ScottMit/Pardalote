@@ -35,4 +35,6 @@ run('speed2',    nod,    [1.0, 2.0, 0.0, 1.0]);
 run('speed.5',   nod,    [1.0, 0.5, 0.0, 1.0]);
 run('crop.2-.8', nod,    [1.0, 1.0, 0.2, 0.8]);
 run('combo',     nod,    [0.7, 1.5, 0.1, 0.9]);
+run('abs-scale', nodAbs, [0.5, 1.0, 0.0, 1.0]);   // scale around origin
+run('abs-crop',  nodAbs, [1.0, 1.0, 0.1, 0.6]);   // curve-sliced targets
 run('abs-combo', nodAbs, [0.5, 2.0, 0.25, 0.75]);

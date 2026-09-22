@@ -120,6 +120,196 @@ function curveShape(curve, t) {
     }
 }
 
+// -------------------------------------------------------------------
+// Gesture manipulation — scale / speed / crop as play-time transforms.
+//
+// These operate on a gesture's SEGMENT SCHEDULE — a lane is an array of
+// { by|to, dur, curve }; a multi-lane gesture is { name: lane, … } — and return
+// a NEW schedule (pure, non-mutating). They are the JS half of a design shared
+// with the board (see PLAN-board-gestures.md): the browser MATERIALISES the
+// transformed schedule (cheap here) and sends an ordinary gesture frame; the
+// board applies the same maths at segment-load time. crop reuses curveShape()
+// above — the SAME easing the board's pardaloteEase() mirrors — so a cropped
+// shape reads identically on hardware.
+//
+//   scale(k)   amplitude: relative `by` × k. Absolute `to` needs an anchor, so
+//              it is left unchanged (warns). k = 1 is the identity.
+//   speed(f)   tempo: dur ÷ f (2 = twice as fast, 0.5 = half). f = 1 identity.
+//   crop(a,b)  play only the [a,b] fraction of the shared timeline; boundary
+//              segments are split (the partial piece → linear). A RELATIVE
+//              gesture loses its net-zero round-trip and ENDS OFF-HOME.
+//
+// Coordination: speed & crop act on the WHOLE gesture (one factor, one window on
+// the shared timeline) so grouped lanes stay phase-locked; scale may be per-lane
+// (a { name: k } map) since amplitude never touches timing.
+// -------------------------------------------------------------------
+const _clamp01g = (v) => Math.max(0, Math.min(1, Number(v) || 0));
+const _segDurMs  = (s) => Math.max(1, Math.round(s.dur || 0));
+
+// Longest lane's total ms. Accepts a lane array or a { name: lane } object.
+function gestureDuration(spec) {
+    const lanes = Array.isArray(spec) ? { _: spec } : (spec || {});
+    let max = 0;
+    for (const segs of Object.values(lanes)) {
+        const t = segs.reduce((n, s) => n + _segDurMs(s), 0);
+        if (t > max) max = t;
+    }
+    return max;
+}
+
+const _cloneLane = (segs) => segs.map((s) => ({ ...s }));
+
+// Amplitude: scale relative deltas; leave absolute targets (warns once).
+function _scaleLane(segs, k, warn) {
+    if (k === 1) return _cloneLane(segs);
+    let warned = false;
+    return segs.map((s) => {
+        if (s.by !== undefined || s.value !== undefined) {
+            const out = { ...s };
+            if (s.by !== undefined) out.by = Math.round(s.by * k);
+            else out.value = Math.round(s.value * k);
+            return out;
+        }
+        if (s.to !== undefined && !warned && warn) { warn('scale ignored for absolute (to) segments — use relative by'); warned = true; }
+        return { ...s };
+    });
+}
+
+// Tempo: divide every duration by the playback-rate factor (> 0).
+function _speedLane(segs, factor) {
+    if (!(factor > 0) || factor === 1) return _cloneLane(segs);
+    return segs.map((s) => ({ ...s, dur: Math.max(1, Math.round(_segDurMs(s) / factor)) }));
+}
+
+// Crop a { name: lane } object to [from,to] of the shared timeline (max lane).
+function _cropLanes(lanes, from, to, warn) {
+    from = _clamp01g(from); to = _clamp01g(to);
+    if (to <= from) return {};
+    if (from <= 0 && to >= 1) { const o = {}; for (const k in lanes) o[k] = _cloneLane(lanes[k]); return o; }
+    const total = gestureDuration(lanes), A = from * total, B = to * total;
+    const out = {};
+    let warnedAbs = false;
+    for (const [k, segs] of Object.entries(lanes)) {
+        const kept = []; let t0 = 0;
+        for (const s of segs) {
+            const d = _segDurMs(s), t1 = t0 + d;
+            const oa = Math.max(t0, A), ob = Math.min(t1, B);
+            if (ob > oa) {
+                const u0 = (oa - t0) / d, u1 = (ob - t0) / d, full = u0 <= 0 && u1 >= 1;
+                if (s.by !== undefined || s.value !== undefined) {
+                    const base = s.by !== undefined ? s.by : s.value;
+                    const frac = curveShape(s.curve, u1) - curveShape(s.curve, u0);
+                    const seg = { dur: Math.max(1, Math.round(ob - oa)), curve: full ? s.curve : 'linear' };
+                    if (s.by !== undefined) seg.by = Math.round(base * frac);
+                    else seg.value = Math.round(base * frac);
+                    kept.push(seg);
+                } else {
+                    if (!warnedAbs && warn) { warn('crop: absolute (to) segment kept whole — crop needs relative by'); warnedAbs = true; }
+                    kept.push({ ...s, dur: Math.max(1, Math.round(ob - oa)) });
+                }
+            }
+            t0 = t1;
+        }
+        if (kept.length) out[k] = kept;
+    }
+    return out;
+}
+
+// Normalise an opts bag → a mods object; test whether any transform is active.
+function _gestureMods(opts) {
+    return {
+        scale: (opts.scale !== undefined ? opts.scale : 1),
+        speed: (opts.speed !== undefined ? opts.speed : 1),
+        crop:  Array.isArray(opts.crop) ? opts.crop : null,
+    };
+}
+function _hasGestureMods(m) {
+    const scaleOn = (m.scale && typeof m.scale === 'object')
+        ? Object.keys(m.scale).length > 0
+        : (m.scale != null && m.scale !== 1);
+    return !!(scaleOn || (m.speed != null && m.speed !== 1) || m.crop);
+}
+
+// Apply mods to a { name: lane } object. scale is a number (all lanes) or a
+// { name: k } map (per-lane); speed & crop are global.
+function applyGestureMods(lanes, mods, warn) {
+    let out = {};
+    for (const [k, segs] of Object.entries(lanes)) {
+        let s = segs;
+        const kScale = (mods.scale && typeof mods.scale === 'object')
+            ? (mods.scale[k] !== undefined ? mods.scale[k] : 1)
+            : mods.scale;
+        if (kScale != null && kScale !== 1) s = _scaleLane(s, kScale, warn);
+        if (mods.speed != null && mods.speed !== 1) s = _speedLane(s, mods.speed);
+        out[k] = (s === segs) ? _cloneLane(s) : s;
+    }
+    if (mods.crop) out = _cropLanes(out, mods.crop[0], mods.crop[1], warn);
+    return out;
+}
+
+// Apply mods to a single lane (array). Per-lane scale maps don't apply here.
+function applyGestureModsLane(segs, mods, warn) {
+    const scaleNum = (mods.scale && typeof mods.scale === 'object') ? 1 : mods.scale;
+    const out = applyGestureMods({ _: segs }, { scale: scaleNum, speed: mods.speed, crop: mods.crop }, warn);
+    return out._ || [];
+}
+
+// Resolve a per-actuator gesture() input to a plain segments array, applying any
+// mods (from a chainable Gesture, or from opts.{scale,speed,crop}). Shared by
+// every actuator's _gestureBlock(). A plain array with no mods is returned
+// as-is, so the group's batched path (plain arrays, no opts) is untouched.
+function _resolveGestureSegs(input, opts, warn) {
+    if (input instanceof Gesture) {
+        if (input.multi) { if (warn) warn('gesture: multi-lane Gesture on a single actuator — use a group'); return []; }
+        return input.resolve(warn);
+    }
+    const mods = _gestureMods(opts || {});
+    if (!Array.isArray(input) || !_hasGestureMods(mods)) return input;
+    return applyGestureModsLane(input, mods, warn);
+}
+
+// -------------------------------------------------------------------
+// Gesture — a lazy, immutable, chainable handle. Wraps a gesture spec (a single
+// lane array, or a { name: lane } object) plus recorded mods; each method returns
+// a NEW Gesture and materialises nothing until .resolve()/.duration(). Hand one
+// to any target's gesture():
+//   head.gesture(nod.scale(0.7).speed(0.5).crop(0.2, 0.8))
+// The plain-spec + opts form of gesture() still works — a Gesture just carries
+// the mods with the value so a base can be reused and varied. Build one with
+// arduino.makeGesture(spec).
+// -------------------------------------------------------------------
+class Gesture {
+    constructor(spec, mods) {
+        this._spec = spec;
+        this._mods = mods || { scale: 1, speed: 1, crop: null };
+    }
+    // Clone the spec so later external mutation can't leak into the Gesture.
+    static from(spec) {
+        const clone = Array.isArray(spec)
+            ? spec.map((s) => ({ ...s }))
+            : Object.fromEntries(Object.entries(spec || {}).map(([k, v]) => [k, v.map((s) => ({ ...s }))]));
+        return new Gesture(clone);
+    }
+    get multi() { return !Array.isArray(this._spec); }
+    _with(patch) { return new Gesture(this._spec, { ...this._mods, ...patch }); }
+    // Numbers compose (multiply); a per-lane { name: k } map replaces.
+    scale(k) {
+        const next = (typeof k === 'object' || typeof this._mods.scale === 'object') ? k : this._mods.scale * k;
+        return this._with({ scale: next });
+    }
+    speed(f)       { return this._with({ speed: this._mods.speed * f }); }
+    crop(from, to) { return this._with({ crop: [from, to] }); }
+    get mods() { return { scale: this._mods.scale, speed: this._mods.speed, crop: this._mods.crop ? [...this._mods.crop] : null }; }
+    // True when the crop window narrows the timeline → the gesture ends off-home.
+    get cropped() { const c = this._mods.crop; return !!c && (c[0] > 0 || c[1] < 1); }
+    // Materialise to the SAME shape as the spec (array → array, object → object).
+    resolve(warn) {
+        return this.multi ? applyGestureMods(this._spec, this._mods, warn)
+                          : applyGestureModsLane(this._spec, this._mods, warn);
+    }
+    duration() { return gestureDuration(this.resolve()); }
+}
+
 // Message-channel value types (low byte of a CMD_MESSAGE target) and flags
 // (high byte). Must match defs.h MSG_TYPE_* / MSG_FLAG_*.
 const MSG_TYPE_INT   = 0;
@@ -2039,10 +2229,20 @@ class Arduino {
     // segment shape. opts.absolute forces the reference frame for all lanes.
     //   arduino.gesture({ shoulder: [{ by: 300, dur: 400, curve: 'easeOut' }],
     //                     wrist:    [{ to: 90,  dur: 250, curve: 'back'    }] });
+    //   arduino.gesture({ … }, { scale, speed, crop });   // opts form
+    //   arduino.gesture(arduino.makeGesture({ … }).scale(0.7).crop(0.2, 0.8));
     gesture(lanes, opts = {}) {
-        const g = this._anonGroup(lanes, 'gesture');
+        const spec = (lanes instanceof Gesture) ? lanes._spec : lanes;
+        const g = this._anonGroup(spec, 'gesture');
         return g ? g.gesture(lanes, opts) : this;
     }
+
+    // makeGesture(spec) — wrap a gesture spec (a { name: segments } object, or a
+    // single lane array) as a lazy, chainable Gesture you can scale/speed/crop
+    // and reuse, then play by passing it to any target's gesture():
+    //   const nod = arduino.makeGesture({ tilt: […], antL: […] });
+    //   head.gesture(nod.scale(0.7).speed(0.5));   // a new variant each call
+    makeGesture(spec) { return Gesture.from(spec); }
 
     // -------------------------------------------------------------------
     // Core API — mirrors Arduino's own function names where possible
@@ -2471,8 +2671,23 @@ class Group {
     // Each lane is relative by default (infers absolute from `to`, or opts.absolute).
     // Members without gesture support, and empty/unknown lanes, are skipped with a warn.
     // For a one-shot gesture without holding a named group, use arduino.gesture({…}).
-    gesture(lanes, opts = {}) {
+    gesture(input, opts = {}) {
+        // Accept a chainable Gesture (carries its own mods) or raw lanes + opts.
+        // scale/speed/crop are applied here — once, across all lanes — so the
+        // group stays phase-locked (speed/crop global; scale may be per-lane).
+        let lanes, mods;
+        if (input instanceof Gesture) {
+            if (!input.multi) {
+                this.arduino._notify('warn', `Group '${this.name}'`, 'single-lane Gesture — a group needs { name: … } lanes');
+                return this;
+            }
+            lanes = input._spec; mods = input._mods;
+        } else {
+            lanes = input; mods = _gestureMods(opts);
+        }
         if (!lanes || typeof lanes !== 'object') return this;
+        if (_hasGestureMods(mods))
+            lanes = applyGestureMods(lanes, mods, (msg) => this.arduino._notify('warn', `Group '${this.name}'`, msg));
         this._lastMoved = [];
 
         // 1. Resolve lanes → per-member items; infer reference frame + total duration.
@@ -2937,6 +3152,7 @@ class Servo extends Extension {
     // whenDone(), updates cached angle, emits 'gesture'. Returns { bytes, total }
     // or null when there's nothing to play.
     _gestureBlock(segments, opts = {}) {
+        segments = _resolveGestureSegs(segments, opts, (m) => this._warn(m));   // Gesture / scale·speed·crop
         this._sweepAbort = true;
         if (!this.isAttached) { this._warn('not attached (gesture)'); return null; }
         if (!Array.isArray(segments) || segments.length === 0) {
@@ -3688,6 +3904,7 @@ class BusServo extends Extension {
     // whenDone(), mirrors the commanded target, emits 'write'. Returns
     // { bytes, total } or null when there's nothing to play.
     _gestureBlock(segments, opts = {}) {
+        segments = _resolveGestureSegs(segments, opts, (m) => this._warn(m));   // Gesture / scale·speed·crop
         if (!this._requireAttached('gesture')) return null;
         if (!Array.isArray(segments) || segments.length === 0) {
             this._warn('gesture: needs a non-empty array of segments');
@@ -4557,6 +4774,7 @@ class Stepper extends Extension {
     // whenDone(), mirrors the commanded target, emits 'move'. Returns
     // { bytes, total } or null when there's nothing to play.
     _gestureBlock(segments, opts = {}) {
+        segments = _resolveGestureSegs(segments, opts, (m) => this._warn(m));   // Gesture / scale·speed·crop
         if (!this._requireAttached('gesture')) return null;
         if (!Array.isArray(segments) || segments.length === 0) {
             this._warn('gesture: needs a non-empty array of segments');

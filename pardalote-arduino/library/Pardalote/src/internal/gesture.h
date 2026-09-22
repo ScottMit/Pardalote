@@ -70,8 +70,8 @@ static inline uint32_t pardaloteGestureTotal(const PardaloteSeg* segs, uint8_t c
 // over the RAM segment copy each actuator already keeps (no extra buffer). See
 // PLAN-board-gestures.md and the JS applyGestureMods() it mirrors byte-for-byte.
 //
-//   scale  amplitude ×  — relative deltas only (an absolute target has no anchor
-//                         to scale about, so it's left as-is, matching JS)
+//   scale  amplitude ×  — relative deltas scale directly; absolute targets scale
+//                         around the origin (the first target), matching JS
 //   speed  tempo ×      — 2 = twice as fast (dur ÷ speed), 0.5 = half
 //   crop   [from,to]    — play only that fraction of the timeline; a RELATIVE
 //                         gesture then ends off-home
@@ -105,10 +105,19 @@ static uint8_t pardaloteApplyModsInPlace(Seg* seg, uint8_t n, uint8_t flags,
     if (mod.identity() || n == 0) return n;
     const bool absolute = (flags & GESTURE_FLAG_ABSOLUTE);
 
-    // 1. scale (relative only) — amplitude, timing untouched.
-    if (mod.scale != 1.0f && !absolute)
-        for (uint8_t i = 0; i < n; i++)
-            seg[i].value = pardaloteRound((float)seg[i].value * mod.scale);
+    // 1. scale — amplitude, timing untouched. Relative deltas scale directly;
+    //    absolute targets scale around the ORIGIN (the first target) so the
+    //    gesture keeps its start pose and only the excursions grow/shrink.
+    if (mod.scale != 1.0f) {
+        if (absolute) {
+            const float origin = (float)seg[0].value;
+            for (uint8_t i = 0; i < n; i++)
+                seg[i].value = pardaloteRound(origin + ((float)seg[i].value - origin) * mod.scale);
+        } else {
+            for (uint8_t i = 0; i < n; i++)
+                seg[i].value = pardaloteRound((float)seg[i].value * mod.scale);
+        }
+    }
 
     // 2. speed — tempo, amplitude untouched.
     const float sp = (mod.speed > 0.0f) ? mod.speed : 1.0f;
@@ -121,8 +130,9 @@ static uint8_t pardaloteApplyModsInPlace(Seg* seg, uint8_t n, uint8_t flags,
         }
 
     // 3. crop — window on this lane's (post-speed) timeline; boundary segments
-    //    split, the partial piece linearised (relative). Absolute segments keep
-    //    curve+value, only the duration is clipped (mirrors JS).
+    //    split, the partial piece linearised. Relative keeps the eased delta
+    //    inside the window; absolute takes the eased ABSOLUTE position at the cut,
+    //    chaining `from` across the targets (origin = first target). Mirrors JS.
     float from = mod.cropFrom, to = mod.cropTo;
     if (from < 0) from = 0; if (from > 1) from = 1;
     if (to   < 0) to   = 0; if (to   > 1) to   = 1;
@@ -133,6 +143,7 @@ static uint8_t pardaloteApplyModsInPlace(Seg* seg, uint8_t n, uint8_t flags,
     for (uint8_t i = 0; i < n; i++) total += seg[i].dur ? seg[i].dur : 1;
     const float A = from * total, B = to * total;
     float t0 = 0; uint8_t w = 0;
+    float fromVal = (float)seg[0].value;         // absolute origin (first target)
     for (uint8_t i = 0; i < n; i++) {
         Seg cur = seg[i];                        // copy before the in-place write (w <= i)
         float d  = cur.dur ? cur.dur : 1;
@@ -143,14 +154,17 @@ static uint8_t pardaloteApplyModsInPlace(Seg* seg, uint8_t n, uint8_t flags,
             bool  full = (u0 <= 0.0f && u1 >= 1.0f);
             long  cd = pardaloteRound(ob - oa); if (cd < 1) cd = 1;
             Seg s = cur;
-            s.dur = cd > 0xFFFF ? 0xFFFF : (uint16_t)cd;
-            if (!absolute) {
-                s.curve = full ? cur.curve : (uint8_t)CURVE_LINEAR;
+            s.dur   = cd > 0xFFFF ? 0xFFFF : (uint16_t)cd;
+            s.curve = full ? cur.curve : (uint8_t)CURVE_LINEAR;
+            if (absolute) {
+                s.value = pardaloteRound(fromVal + ((float)cur.value - fromVal) * pardaloteEase(cur.curve, u1));
+            } else {
                 float frac = pardaloteEase(cur.curve, u1) - pardaloteEase(cur.curve, u0);
                 s.value = pardaloteRound((float)cur.value * frac);
             }
             seg[w++] = s;
         }
+        fromVal = (float)cur.value;              // next segment starts from this target
         t0 = t1;
     }
     return w;
