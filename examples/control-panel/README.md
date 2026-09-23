@@ -41,7 +41,7 @@ No additional components are needed to use the panel — just an Arduino with Pa
    Saved: YourWiFiName
    > x
    ```
-   Credentials are saved to EEPROM and survive re-uploads. Press `w` within 5 seconds of any boot to update them.
+   Credentials are saved to EEPROM and survive re-uploads. Press `w` in the Serial Monitor at any point while the board is trying to connect to update them.
 
    **Prefer compile-time credentials?** Uncomment the two lines in `secrets.h`:
    ```cpp

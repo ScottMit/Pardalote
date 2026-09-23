@@ -104,12 +104,26 @@ Password: ********
 Saved: YourWiFiName
 &gt; x
 </code></pre></div>
-<p>Credentials survive re-uploads and power cycles. Up to <strong>5 networks</strong> can be stored — useful for moving between home, studio, and classroom. Press <code>w</code> within 5 seconds of any boot to update them.</p>
+<p>Credentials survive re-uploads and power cycles. Up to <strong>5 networks</strong> can be stored — useful for moving between home, studio, and classroom. Press <code>w</code> in the Serial Monitor at any point while the board is trying to connect to update them.</p>
 <blockquote>
 <p><strong>Native-USB boards (ESP32-C5 / C3 / S3):</strong> if the Serial Monitor stays blank and this menu never appears, set <strong>Tools → USB CDC On Boot → <code>Enabled</code></strong> and re-upload — otherwise <code>Serial</code> isn't routed to the USB port. See <a href="troubleshooting.html#serial-monitor-is-blank-on-an-esp32-c5-c3-or-s3-no-w-menu-board-seems-dead">Troubleshooting</a>.</p>
 </blockquote>
 <h2 id="both-options-together">Both options together</h2>
 <p>If <code>SECRET_SSID</code> is defined and EEPROM networks are also stored, Pardalote tries <code>secrets.h</code> first, then falls back to the EEPROM networks in order.</p>
+<h2 id="how-the-board-connects">How the board connects</h2>
+<p>At boot the board goes straight to connecting — there's no pause. It tries each network for up to 10 seconds, in order, and if none connects it loops back to the first one and keeps going until one does. So a board that powers up before its router is ready will join as soon as the network appears.</p>
+<p>Before each attempt it prints a reminder:</p>
+<div class="code-ex"><div class="bar">Serial Monitor — connecting</div><pre><code>=== Pardalote ===
+Stored networks:
+  1. Studio
+  2. HomeWiFi
+Press &#39;w&#39; to configure WiFi (or connect over USB)
+Trying: Studio
+Failed.
+Press &#39;w&#39; to configure WiFi (or connect over USB)
+Trying: HomeWiFi
+</code></pre></div>
+<p>Press <code>w</code> at any time to stop and open the configuration menu. Connecting stays paused while you're in the menu. When you exit with <code>x</code>, it starts again from the first network.</p>
 <h2 id="after-connecting">After connecting</h2>
 <p>The board announces its IP address:</p>
 <ul>

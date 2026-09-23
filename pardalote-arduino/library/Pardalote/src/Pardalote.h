@@ -335,7 +335,7 @@ private:
     bool _listenAuthed  = false;   // a matching key arrived during listen
     bool _listenKeyTried = false;  // a (wrong) key was tried during listen
 
-    // Boot-watch: during the "press 'w'" config window we also watch USB for a
+    // Boot-watch: during the config menu and the WiFi connect cycle we watch USB for a
     // takeover probe. If one arrives we skip WiFi entirely and go serial — the
     // fast path for the common "board reset onto WiFi, then switch" case (an
     // ESP32 DTR-resets when the port opens). _bootWatch gates _handleListenMessage

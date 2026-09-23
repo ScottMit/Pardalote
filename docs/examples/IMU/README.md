@@ -85,7 +85,7 @@ when an R4 connects.
    Saved: YourWiFiName
    > x
    ```
-   Credentials are saved to EEPROM and survive re-uploads. Press `w` within 5 seconds of any boot to update them.
+   Credentials are saved to EEPROM and survive re-uploads. Press `w` in the Serial Monitor at any point while the board is trying to connect to update them.
 
    **Prefer compile-time credentials?** Create a `secrets.h` file in the sketch folder with:
    ```cpp

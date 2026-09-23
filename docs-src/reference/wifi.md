@@ -30,13 +30,33 @@ Saved: YourWiFiName
 > x
 ```
 
-Credentials survive re-uploads and power cycles. Up to **5 networks** can be stored — useful for moving between home, studio, and classroom. Press `w` within 5 seconds of any boot to update them.
+Credentials survive re-uploads and power cycles. Up to **5 networks** can be stored — useful for moving between home, studio, and classroom. Press `w` in the Serial Monitor at any point while the board is trying to connect to update them.
 
 > **Native-USB boards (ESP32-C5 / C3 / S3):** if the Serial Monitor stays blank and this menu never appears, set **Tools → USB CDC On Boot → `Enabled`** and re-upload — otherwise `Serial` isn't routed to the USB port. See [Troubleshooting](troubleshooting.html#serial-monitor-is-blank-on-an-esp32-c5-c3-or-s3-no-w-menu-board-seems-dead).
 
 ## Both options together
 
 If `SECRET_SSID` is defined and EEPROM networks are also stored, Pardalote tries `secrets.h` first, then falls back to the EEPROM networks in order.
+
+## How the board connects
+
+At boot the board goes straight to connecting — there's no pause. It tries each network for up to 10 seconds, in order, and if none connects it loops back to the first one and keeps going until one does. So a board that powers up before its router is ready will join as soon as the network appears.
+
+Before each attempt it prints a reminder:
+
+```text Serial Monitor — connecting
+=== Pardalote ===
+Stored networks:
+  1. Studio
+  2. HomeWiFi
+Press 'w' to configure WiFi (or connect over USB)
+Trying: Studio
+Failed.
+Press 'w' to configure WiFi (or connect over USB)
+Trying: HomeWiFi
+```
+
+Press `w` at any time to stop and open the configuration menu. Connecting stays paused while you're in the menu. When you exit with `x`, it starts again from the first network.
 
 ## After connecting
 

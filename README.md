@@ -92,7 +92,7 @@ Password: ********
 Saved: YourWiFiName
 > x
 ```
-Credentials survive re-uploads and power cycles. Up to 5 networks can be stored — useful for moving between locations. Press `w` within 5 seconds of any boot to update them.
+Credentials survive re-uploads and power cycles. Up to 5 networks can be stored — useful for moving between locations. Press `w` in the Serial Monitor at any point while the board is trying to connect to update them.
 
 **Both options together**
 

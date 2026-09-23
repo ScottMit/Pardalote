@@ -16,7 +16,7 @@ Pardalote versions **two things independently**:
   between any JS build and any firmware build. The JS side checks it on
   connect and reports a MAJOR mismatch on the `error` channel.
 
-## [Unreleased]
+## [1.2.0] — 2026-09-23
 
 - **Reshape a gesture as it plays — `scale` · `speed` · `crop`.** Any gesture can be
   amplitude-scaled, sped up or slowed, or cropped to a slice of its timeline without
@@ -82,6 +82,13 @@ Pardalote versions **two things independently**:
   when one servo can't keep up: the whole gesture waits for its slowest channel and stays
   in formation, rather than the fast lanes running on and tearing the pose apart.
   *(All five curves + the multi-servo group barrier bench-confirmed on ST servos.)*
+- **WiFi connect no longer waits at boot, and retries forever.** The 5-second
+  "press `w`" window is gone: the board starts connecting straight away, trying each
+  network (secrets.h, then EEPROM) for 10 s and looping back to the first one
+  indefinitely instead of stopping in the config menu. Press `w` at any point during
+  connecting to open the menu. Connecting stays paused until you exit with `x`, then
+  restarts from the first network. A board that boots before its router is ready now
+  joins once the network is up, with no one at the keyboard.
 
 ## [1.1.0] — 2026-08-17
 
