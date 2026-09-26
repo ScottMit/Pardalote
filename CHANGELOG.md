@@ -16,6 +16,23 @@ Pardalote versions **two things independently**:
   between any JS build and any firmware build. The JS side checks it on
   connect and reports a MAJOR mismatch on the `error` channel.
 
+## [Unreleased]
+
+- **Pin writes are safe in a draw loop — `digitalWrite()` joins the write throttle.**
+  A changed `digitalWrite()` value still goes out immediately (so a short pulse is
+  never lost), but writing the **same** value again — `digitalWrite()` or
+  `analogWrite()` — is now re-sent at most every 250 ms per pin. A draw loop that
+  writes a pin every frame drops from ~60 messages/s (plus a board echo of each) to
+  ~4, while still re-asserting the browser's value if the board sketch or another
+  browser changed the pin. Tune with the new `setWriteRepeat(ms)` (`0` = send every
+  repeat). `analogWrite()`'s 20 ms change-coalescing is unchanged.
+- **No write backlog on reconnect.** While disconnected, `digitalWrite()` /
+  `analogWrite()` only record the latest value per pin instead of queueing every
+  call; the reconnect replay sends each pin's value once. Previously a draw loop
+  queued ~60 writes per offline second and flushed them as one burst on reconnect,
+  which could starve the board's heartbeat reply and drop the link again. The replay
+  now also restores `analogWrite()` duties (it used to restore only digital levels).
+
 ## [1.2.0] — 2026-09-23
 
 - **Reshape a gesture as it plays — `scale` · `speed` · `crop`.** Any gesture can be

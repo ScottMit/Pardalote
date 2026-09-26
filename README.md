@@ -474,7 +474,7 @@ Every warning and error in the library funnels through the `'warn'` / `'error'` 
 
 Reconnection is automatic with exponential backoff and continues for as long as the page is open. You don't need to do anything. The first ten attempts are logged in the console; after that the library falls quiet — subscribe to the `'reconnecting'` event for per-attempt updates.
 
-Calling `connect()` again — for example, to switch to a different Arduino's IP — starts a fresh session: pin modes, polled reads, and write listeners from the previous board are cleared so they aren't replayed onto the new hardware. Each registered extension is reset to its just-constructed state, so any attached servos, initialised strips, IMU calibration, camera streams, and so on are released — call `attach()` / `init()` again inside the new `on('ready')` handler. Event listeners attached with `on('change', …)` etc. survive, as do user-tuned settings like `setWriteThrottle`, `setWriteThreshold`, `setQuality`. Silent auto-reconnect to the same Arduino preserves all of that state as before.
+Calling `connect()` again — for example, to switch to a different Arduino's IP — starts a fresh session: pin modes, polled reads, and write listeners from the previous board are cleared so they aren't replayed onto the new hardware. Each registered extension is reset to its just-constructed state, so any attached servos, initialised strips, IMU calibration, camera streams, and so on are released — call `attach()` / `init()` again inside the new `on('ready')` handler. Event listeners attached with `on('change', …)` etc. survive, as do user-tuned settings like `setWriteThrottle`, `setWriteThreshold`, `setWriteRepeat`, `setQuality`. Silent auto-reconnect to the same Arduino preserves all of that state as before.
 
 ### Pin modes
 
@@ -495,6 +495,8 @@ arduino.digitalWrite(13, HIGH);
 arduino.digitalWrite(13, LOW);
 arduino.analogWrite(9, 128);   // PWM, 0–255
 ```
+
+Writes are safe to call on every frame of a draw loop. A changed value goes out straight away (rapid PWM changes coalesce every 20 ms, latest value wins); writing the same value again is re-sent at most every 250 ms per pin. Tune with `setWriteThrottle()`, `setWriteThreshold()` and `setWriteRepeat()`. While disconnected, writes aren't queued — each pin's latest value is sent once on reconnect.
 
 ### Reading pins
 

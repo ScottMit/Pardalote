@@ -20,7 +20,7 @@ arduino.connect('192.168.1.42', 8081);                   // custom port
 arduino.connect('192.168.1.42', { key: 'robot-arm-3' }); // board requires a key
 ```
 
-Calling `connect()` (or `connectSerial()`) again starts a fresh session: pin modes, polled reads, and write listeners from the previous board are cleared. Each registered extension is reset to its just-constructed state, so attached servos, initialised strips, IMU calibration and camera streams are released — call `attach()` / `init()` again inside the new `on('ready')` handler. Event listeners attached with `on('change', …)` etc. survive, as do user-tuned settings like `setWriteThrottle`, `setWriteThreshold` and `setQuality`.
+Calling `connect()` (or `connectSerial()`) again starts a fresh session: pin modes, polled reads, and write listeners from the previous board are cleared. Each registered extension is reset to its just-constructed state, so attached servos, initialised strips, IMU calibration and camera streams are released — call `attach()` / `init()` again inside the new `on('ready')` handler. Event listeners attached with `on('change', …)` etc. survive, as do user-tuned settings like `setWriteThrottle`, `setWriteThreshold`, `setWriteRepeat` and `setQuality`.
 
 ### Connection keys
 

@@ -34,6 +34,10 @@ Sets a digital output pin high or low.
 | `pin` | number \| string | The pin to write. |
 | `value` | constant | `HIGH` or `LOW`. |
 
+A **change** is sent immediately, so even a quick pulse reaches the board. Writing the **same value again** is rate-limited: it's re-sent at most every 250 ms per pin. That makes it safe to call `digitalWrite()` on every frame of a draw loop — 60 identical writes a second become about 4 messages — while still re-asserting your value if the board sketch or another browser changes the pin. Tune it with [`setWriteRepeat()`](#setwritethrottle--setwritethreshold--setwriterepeat).
+
+While the board is disconnected, writes aren't queued. The latest value on each pin is remembered and sent once when the connection comes back.
+
 ## analogWrite()
 
 Writes a PWM value to a pin.
@@ -45,20 +49,26 @@ Writes a PWM value to a pin.
 | `pin` | number \| string | The pin to write. |
 | `value` | number | Duty cycle, `0`–`255`. |
 
-Writes are **rate-limited per pin** so you can safely drive `analogWrite()` from a slider or a draw loop: the first write goes out immediately, and rapid follow-ups are coalesced into a single send that carries the latest value — the resting value is never lost. The default window is 20 ms (~50 writes/s per pin), which is imperceptible on ESP32 and keeps the slower UNO R4 WiFi from being flooded off the socket. Tune it with `setWriteThrottle()` / `setWriteThreshold()`, or pass `0` to `setWriteThrottle()` to send every value.
+Writes are **rate-limited per pin** so you can safely drive `analogWrite()` from a slider or a draw loop:
 
-## setWriteThrottle() / setWriteThreshold()
+- **Changes:** the first write goes out immediately, and rapid follow-ups are coalesced into a single send that carries the latest value — the resting value is never lost. The default window is 20 ms (~50 changes/s per pin), which is imperceptible on ESP32 and keeps the slower UNO R4 WiFi from being flooded off the socket.
+- **Repeats:** writing the same duty again is re-sent at most every 250 ms, the same rule as [`digitalWrite()`](#digitalwrite).
 
-Rate-limits outgoing PWM writes — the outbound counterpart to `setReadInterval()`. Useful when `analogWrite()` is driven from mouse movement or a draw loop, and essential for keeping the UNO R4 WiFi responsive under a fast slider.
+While the board is disconnected, writes aren't queued; the latest duty on each pin is sent once when the connection comes back.
 
-<div class="sig">arduino.<span class="fn">setWriteThrottle</span>(ms) · arduino.<span class="fn">setWriteThreshold</span>(value)</div>
+## setWriteThrottle() / setWriteThreshold() / setWriteRepeat()
 
-| Parameter | Type | Description |
+Rate-limit outgoing pin writes — the outbound counterpart to `setReadInterval()`. Useful when `digitalWrite()` or `analogWrite()` is driven from mouse movement or a draw loop, and essential for keeping the UNO R4 WiFi — or an ESP32 busy streaming camera video — responsive.
+
+<div class="sig">arduino.<span class="fn">setWriteThrottle</span>(ms) · arduino.<span class="fn">setWriteThreshold</span>(value) · arduino.<span class="fn">setWriteRepeat</span>(ms)</div>
+
+| Method | Applies to | Description |
 |---|---|---|
-| `ms` | number | Minimum ms between PWM sends on a pin. Default `20`. `0` = off (send every value). |
-| `value` | number | Minimum duty change worth sending. Default `0` (send all). |
+| `setWriteThrottle(ms)` | `analogWrite()` | Minimum ms between duty **changes** on a pin; faster changes coalesce, latest value wins. Default `20`. `0` = off (send every change). |
+| `setWriteThreshold(value)` | `analogWrite()` | Minimum duty change worth sending. Default `0` (send all). |
+| `setWriteRepeat(ms)` | both | Minimum ms between re-sends of an **unchanged** value on a pin. Default `250`. `0` = off (send every repeat). |
 
-Both apply to every `analogWrite()` pin and are chainable.
+All three apply to every pin and are chainable. `digitalWrite()` changes are never throttled.
 
 ## analogRead()
 

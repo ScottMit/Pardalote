@@ -86,7 +86,7 @@ SIDEBAR = """<aside class="ref-nav">
   <a href="pins.html#pinmode">pinMode()</a>
   <a href="pins.html#digitalwrite">digitalWrite()</a>
   <a href="pins.html#analogwrite">analogWrite()</a>
-  <a href="pins.html#setwritethrottle--setwritethreshold">setWriteThrottle() / setWriteThreshold()</a>
+  <a href="pins.html#setwritethrottle--setwritethreshold--setwriterepeat">setWriteThrottle() / setWriteThreshold() / setWriteRepeat()</a>
   <a href="pins.html#analogread">analogRead()</a>
   <a href="pins.html#digitalread">digitalRead()</a>
   <a href="pins.html#setreadinterval--setreadthreshold">setReadInterval() / setReadThreshold()</a>
