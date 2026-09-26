@@ -160,9 +160,9 @@ Everything (rows, keyframes, shapes, connection) is remembered per browser.</p>
 <h2 id="export--and-import">Export — and import</h2>
 <p>Four code panels below the timeline. For each language, the <strong>gesture</strong> panel is the
 definition (one segment array per output) and is <strong>editable</strong>; the <strong>example use</strong> panel
-beside it is a read-only, full runnable program that plays that definition — setup,
-connection (or <code>setup()</code>/<code>loop()</code>) and all. Switched-off rows are omitted, matching what
-<strong>play</strong> sends.</p>
+beside it is a read-only, <strong>self-contained</strong> runnable program — it includes the gesture data
+inline plus setup and connection (or <code>setup()</code>/<code>loop()</code>), so you can copy that one panel and
+run it as-is. Switched-off rows are omitted, matching what <strong>play</strong> sends.</p>
 <p><strong>It's two-way.</strong> Edit the numbers in a gesture panel — or paste in a definition you saved
 earlier — and <strong>click away</strong>: the timeline rebuilds from it, and every other panel (and the
 other language) regenerates to match. So you can bring an already-authored gesture back in and
@@ -172,11 +172,11 @@ row (set its ID after), and a lane you remove drops that row. If the code can't 
 timeline is left untouched and the panel reverts.</p>
 <ul>
 <li><strong>JavaScript</strong> — a <strong><code>gesture</code></strong> object (one segment array per output, keyed by your
-<code>arduino.add(name, …)</code> names). The example connects, attaches, and plays it with
-<code>arduino.gesture(gesture, { absolute: true })</code> — copy both panels for a complete program.</li>
+<code>arduino.add(name, …)</code> names). The example includes that object, connects, attaches, and
+plays it with <code>arduino.gesture(gesture, { absolute: true })</code>.</li>
 <li><strong>C++</strong> (board-side) — the gesture as <code>static const PardaloteSeg …Segs[]</code> schedules in flash;
-the example is a full sketch (<code>setup()</code>/<code>loop()</code>, <code>attach()</code>) that plays them with
-<code>Pardalote.gesture().add(…).play()</code> (or <code>Pardalote&lt;Type&gt;.gesture(id, segs, count)</code> for one output).</li>
+the example is a full sketch (<code>setup()</code>/<code>loop()</code>, <code>attach()</code>) that includes those arrays and
+plays them with <code>Pardalote.gesture().add(…).play()</code> (or <code>Pardalote&lt;Type&gt;.gesture(id, segs, count)</code> for one output).</li>
 </ul>
 <p>Editing <strong>either</strong> language's definition rewrites the timeline — and the other language follows.</p>
 <h2 id="how-it-works">How it works</h2>

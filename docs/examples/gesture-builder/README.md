@@ -72,9 +72,9 @@ Everything (rows, keyframes, shapes, connection) is remembered per browser.
 
 Four code panels below the timeline. For each language, the **gesture** panel is the
 definition (one segment array per output) and is **editable**; the **example use** panel
-beside it is a read-only, full runnable program that plays that definition — setup,
-connection (or `setup()`/`loop()`) and all. Switched-off rows are omitted, matching what
-**play** sends.
+beside it is a read-only, **self-contained** runnable program — it includes the gesture data
+inline plus setup and connection (or `setup()`/`loop()`), so you can copy that one panel and
+run it as-is. Switched-off rows are omitted, matching what **play** sends.
 
 **It's two-way.** Edit the numbers in a gesture panel — or paste in a definition you saved
 earlier — and **click away**: the timeline rebuilds from it, and every other panel (and the
@@ -85,11 +85,11 @@ row (set its ID after), and a lane you remove drops that row. If the code can't 
 timeline is left untouched and the panel reverts.
 
 - **JavaScript** — a **`gesture`** object (one segment array per output, keyed by your
-  `arduino.add(name, …)` names). The example connects, attaches, and plays it with
-  `arduino.gesture(gesture, { absolute: true })` — copy both panels for a complete program.
+  `arduino.add(name, …)` names). The example includes that object, connects, attaches, and
+  plays it with `arduino.gesture(gesture, { absolute: true })`.
 - **C++** (board-side) — the gesture as `static const PardaloteSeg …Segs[]` schedules in flash;
-  the example is a full sketch (`setup()`/`loop()`, `attach()`) that plays them with
-  `Pardalote.gesture().add(…).play()` (or `Pardalote<Type>.gesture(id, segs, count)` for one output).
+  the example is a full sketch (`setup()`/`loop()`, `attach()`) that includes those arrays and
+  plays them with `Pardalote.gesture().add(…).play()` (or `Pardalote<Type>.gesture(id, segs, count)` for one output).
 
 Editing **either** language's definition rewrites the timeline — and the other language follows.
 

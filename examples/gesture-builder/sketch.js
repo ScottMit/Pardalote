@@ -242,8 +242,8 @@ function generateJsDef() {
     L.push('};');
     return L.join('\n');
 }
-// Usage (read-only): a full runnable program that plays the `gesture` defined above —
-// setup, connection and all, so it drops straight into a project.
+// Usage (read-only): a full, SELF-CONTAINED runnable program — it includes the gesture data
+// inline (same block as the definition panel) plus setup and connection, so it copies-and-runs.
 function generateJsUse() {
     const lanes = laneList();
     if (!lanes.length) return '// add keyframes to a row';
@@ -251,9 +251,11 @@ function generateJsUse() {
                                 : rw.type === 'stepper' ? `arduino.${id}.attach(${rw.step}, ${rw.dir}, ${rw.en})`
                                 :                         `arduino.${id}.attach(${rw.id}, 'ST')`;
     const L = [];
-    L.push('// Full example — plays the `gesture` above. Outputs: ' + lanes.map(a => `${a.id} = ${descStr(a.rw)}`).join(', '));
+    L.push('// Full example — copy, paste, and run. Outputs: ' + lanes.map(a => `${a.id} = ${descStr(a.rw)}`).join(', '));
     L.push('const arduino = new Arduino();');
     lanes.forEach(a => L.push(`arduino.add('${a.id}', new ${TYPE(a.rw).cls}());`));
+    L.push('');
+    L.push(generateJsDef());   // the gesture data, inline (same block as the definition panel)
     L.push('');
     L.push("arduino.on('ready', () => {");
     lanes.forEach(a => {
@@ -294,7 +296,8 @@ function generateInoDef() {
     });
     return L.join('\n');
 }
-// Usage (read-only): a full runnable sketch that plays the …Segs[] arrays defined above.
+// Usage (read-only): a full, SELF-CONTAINED runnable sketch — it includes the …Segs[] arrays
+// inline (same block as the definition panel) plus setup()/loop(), so it copies-and-runs.
 function generateInoUse() {
     const lanes = laneList();
     if (!lanes.length) return '// add keyframes to a row';
@@ -302,11 +305,13 @@ function generateInoUse() {
                                     : rw.type === 'stepper' ? `"${id}", ${rw.step}, ${rw.dir}, ${rw.en}`
                                     :                         `"${id}", ${rw.id}`;
     const L = [];
-    L.push('// Full sketch — plays the …Segs[] arrays above. Outputs: ' + lanes.map(a => `${a.id} = ${descStr(a.rw)}`).join(', '));
+    L.push('// Full sketch — copy, paste, and run. Outputs: ' + lanes.map(a => `${a.id} = ${descStr(a.rw)}`).join(', '));
     L.push('#include <Pardalote.h>');
     [...new Set(lanes.map(a => CPP[a.rw.type].include))].forEach(inc => L.push(`#include <${inc}>`));
     L.push('');
     L.push(`int ${lanes.map(a => a.id).join(', ')};   // logical ids from attach()`);
+    L.push('');
+    L.push(generateInoDef());   // the gesture data, inline (same block as the definition panel)
     L.push('');
     L.push('// Play the gesture — from a button, a sensor, any input.');
     L.push('void playGesture() {');
