@@ -44,7 +44,7 @@
   <a href="pins.html#pinmode">pinMode()</a>
   <a href="pins.html#digitalwrite">digitalWrite()</a>
   <a href="pins.html#analogwrite">analogWrite()</a>
-  <a href="pins.html#setwritethrottle--setwritethreshold">setWriteThrottle() / setWriteThreshold()</a>
+  <a href="pins.html#setwritethrottle--setwritethreshold--setwriterepeat">setWriteThrottle() / setWriteThreshold() / setWriteRepeat()</a>
   <a href="pins.html#analogread">analogRead()</a>
   <a href="pins.html#digitalread">digitalRead()</a>
   <a href="pins.html#setreadinterval--setreadthreshold">setReadInterval() / setReadThreshold()</a>
@@ -104,7 +104,7 @@
 <li><strong>Keep your <code>loop()</code> tight.</strong> The UNO R4 WiFi's WebSocket stack (WiFiS3 + arduinoWebSockets) is sensitive to how often it is serviced. Anything that blocks or slows the loop — a <code>delay()</code>, a long computation, a busy blocking peripheral — starves the WebSocket of servicing, and the connection stalls, drops, or churns &quot;client connection lost / new client&quot; and reconnects. A single blocking <code>delay(100)</code> in <code>loop()</code> is enough to trigger it. (See <a href="https://github.com/Links2004/arduinoWebSockets/issues/909">arduinoWebSockets issue #909</a>.)</li>
 <li>The symptom is often <strong>indirect</strong>. For example, dragging an <code>analogWrite()</code> PWM slider may lag and then drop the socket — not because <code>analogWrite()</code> is slow, but because something else in the loop is blocking long enough that the extra slider traffic can't be serviced in time. Fix the blocking, not the slider.</li>
 <li>Fixes: remove <code>delay()</code> calls from <code>loop()</code>; move slow work off the hot path; if you must do something lengthy, call <code>Pardalote.run()</code> (which services the WebSocket) periodically while it runs. The ESP32 is far less sensitive to this.</li>
-<li>As a smaller, defensive measure, Pardalote also throttles PWM writes by default (a leading write goes out immediately, rapid follow-ups coalesce into one send carrying the final value) so a slider can't flood the loop with parse work. If you've set <code>setWriteThrottle(0)</code>, raise it — <code>arduino.setWriteThrottle(20)</code> caps the rate to ~50/s per pin; <code>arduino.setWriteThreshold(4)</code> skips sub-4 duty changes.</li>
+<li>As a smaller, defensive measure, Pardalote also rate-limits pin writes by default so a slider or draw loop can't flood the loop with parse work. PWM changes coalesce (a leading write goes out immediately, rapid follow-ups coalesce into one send carrying the final value), and writing an unchanged value — <code>digitalWrite()</code> or <code>analogWrite()</code> — is re-sent at most every 250 ms. If you've set <code>setWriteThrottle(0)</code> or <code>setWriteRepeat(0)</code>, raise them — <code>arduino.setWriteThrottle(20)</code> caps PWM changes to ~50/s per pin; <code>arduino.setWriteThreshold(4)</code> skips sub-4 duty changes; <code>arduino.setWriteRepeat(250)</code> restores the repeat limit.</li>
 </ul>
 <h2 id="connectserial-cant-find-or-open-the-port">&quot;connectSerial() can't find or open the port&quot;</h2>
 <ul>
@@ -136,7 +136,12 @@
 </ul>
 <p>Once PSRAM is detected the camera double-buffers in PSRAM and <code>setResolution()</code> works normally.</p>
 <h2 id="camera-framesize_hd-gives-cam_hal-fb-ovf--neterr_incomplete_chunked_encoding-even-with-psram-on">&quot;Camera: <code>FRAMESIZE_HD</code> gives <code>cam_hal: FB-OVF</code> / <code>net::ERR_INCOMPLETE_CHUNKED_ENCODING</code> even with PSRAM on&quot;</h2>
-<p>The largest frame sizes push the sensor's data rate hard, and the 16:9 HD mode is the flakiest — some modules (the XIAO's OV2640 among them) can't sustain it and drop frames, which surfaces in the browser console as <code>net::ERR_INCOMPLETE_CHUNKED_ENCODING</code>. Pardalote now rides out the occasional dropped frame rather than closing the stream, but a size that overflows <em>every</em> frame is the sensor's ceiling, not a bug. <strong>Step down to <code>FRAMESIZE_SVGA</code> (800×600)</strong> — it streams reliably on the XIAO.</p>
+<p><code>FB-OVF</code> means a JPEG frame was bigger than the buffer the camera driver set aside for it, so the frame was dropped; in the browser console that shows as <code>net::ERR_INCOMPLETE_CHUNKED_ENCODING</code>. The driver sizes those buffers once, when the camera starts. Older Pardalote versions started the camera at the requested resolution, which left too little room for HD frames (or for a bigger size chosen after <code>attach()</code>). <strong>Update the Pardalote Arduino library</strong>: it now reserves room for frames up to 1600×1200 on boards with PSRAM, and HD streams on the XIAO ESP32S3. Older versions also sent the wrong frame size on ESP32 core 3.x (asking for HD gave 800×600), so earlier reports of which sizes work may be off by a size or two. If you still see <code>FB-OVF</code>, check that PSRAM is enabled (see above), then step down a size.</p>
+<h2 id="camera-the-video-stays-blank-in-a-second-window-or-tab">&quot;Camera: the video stays blank in a second window or tab&quot;</h2>
+<p>The board sends <strong>one video stream at a time</strong>. While another page is streaming, a second page's stream doesn't fail, it just waits, so its canvas stays blank with no error. The browser console shows a warning when this happens:</p>
+<pre><code>another page is already streaming from this camera. The board sends one video stream at a time, so this page&#x27;s video will stay blank until that page is closed.
+</code></pre>
+<p>Close the other window or tab (or stop its stream with <code>detach()</code>) and the waiting page starts streaming by itself — no reload needed. Snapshots aren't affected — <code>snapshot()</code> has its own server and works while another page streams.</p>
 <h2 id="neopixels-dont-light-up">&quot;NeoPixels don't light up&quot;</h2>
 <ul>
 <li>Verify the pixel type: <code>NEO_GRB</code> works for most WS2812B strips, <code>NEO_RGB</code> for some others</li>

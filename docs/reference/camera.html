@@ -44,7 +44,7 @@
   <a href="pins.html#pinmode">pinMode()</a>
   <a href="pins.html#digitalwrite">digitalWrite()</a>
   <a href="pins.html#analogwrite">analogWrite()</a>
-  <a href="pins.html#setwritethrottle--setwritethreshold">setWriteThrottle() / setWriteThreshold()</a>
+  <a href="pins.html#setwritethrottle--setwritethreshold--setwriterepeat">setWriteThrottle() / setWriteThreshold() / setWriteRepeat()</a>
   <a href="pins.html#analogread">analogRead()</a>
   <a href="pins.html#digitalread">digitalRead()</a>
   <a href="pins.html#setreadinterval--setreadthreshold">setReadInterval() / setReadThreshold()</a>
@@ -118,6 +118,10 @@
 <td><code>CAMERA_MODEL_ESP32S3_EYE</code></td>
 </tr>
 <tr>
+<td>Freenove ESP32-S3-WROOM CAM</td>
+<td><code>CAMERA_MODEL_ESP32S3_EYE</code> (same camera pins)</td>
+</tr>
+<tr>
 <td>Espressif ESP-EYE</td>
 <td><code>CAMERA_MODEL_ESP_EYE</code></td>
 </tr>
@@ -171,6 +175,7 @@
 </tr>
 </tbody>
 </table>
+<p><strong>Freenove ESP32-S3-WROOM CAM:</strong> set Tools → PSRAM → <code>OPI PSRAM</code>. The board has two USB-C ports — on the one marked <strong>UART</strong>, set Tools → USB CDC On Boot → <strong>Disabled</strong>; on the one marked <strong>USB</strong>, set it to <strong>Enabled</strong> (the wrong setting shows only the boot banner in the Serial Monitor, with no WiFi <code>w</code> menu). Some of these boards ship a GC0308 camera, which can't make JPEGs in hardware: Pardalote encodes its frames in software instead (Serial prints <code>No hardware JPEG — encoding in software</code>), so keep it at <code>FRAMESIZE_QVGA</code> or <code>FRAMESIZE_HVGA</code> for a usable frame rate.</p>
 <p>Examples below assume:</p>
 <div class="code-ex"><span class="lang-badge lang-js">JS</span><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;cam&#39;</span><span class="p">,</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">Camera</span><span class="p">());</span>
 </code></pre></div>
@@ -234,12 +239,13 @@
 </tr>
 <tr>
 <td><code>FRAMESIZE_HD</code></td>
-<td>1280×720 — see note</td>
+<td>1280×720</td>
 </tr>
 </tbody>
 </table>
 <p>Call it before or after <code>attach()</code> — either way the chosen size is applied once the stream starts, and it persists across reconnects.</p>
-<p><code>FRAMESIZE_HD</code> and the other largest sizes push the sensor hard; the 16:9 HD mode can trip <code>cam_hal: FB-OVF</code> on some modules (the XIAO's OV2640 among them) and drop the stream. If you hit that, step down to <code>FRAMESIZE_SVGA</code> (800×600), which streams reliably on the XIAO. See <a href="troubleshooting.html#camera-framesize_hd-gives-cam_hal-fb-ovf--neterr_incomplete_chunked_encoding-even-with-psram-on">Troubleshooting</a>.</p>
+<p>With PSRAM, the board sets aside room for frames up to 1600×1200 when the camera starts (about 770 KB of PSRAM), so switching to a bigger size while streaming, or a very detailed scene at high quality, still fits. The exception is a sensor without hardware JPEG (such as the GC0308): its frame size is fixed when the camera starts, so a new size takes effect on the next <code>attach()</code> (for example after a page reload), not mid-stream.</p>
+<p><code>FRAMESIZE_HD</code> streams on the XIAO ESP32S3's OV2640, including when you switch to it mid-stream. The largest sizes need PSRAM and push the sensor hard. If a size drops frames (<code>cam_hal: FB-OVF</code> in the Serial Monitor), first update the Pardalote Arduino library — older versions left too little buffer room for large frames — then step down a size. See <a href="troubleshooting.html#camera-framesize_hd-gives-cam_hal-fb-ovf--neterr_incomplete_chunked_encoding-even-with-psram-on">Troubleshooting</a>.</p>
 <h2 id="setquality">setQuality()</h2>
 <p>JPEG compression level.</p>
 <div class="sig sig-js">arduino.cam.<span class="fn">setQuality</span>(quality)</div>
@@ -306,6 +312,8 @@
 
 <span class="kd">function</span><span class="w"> </span><span class="nx">draw</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
 <span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nx">camEl</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nx">camEl</span><span class="p">.</span><span class="nx">width</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="nx">camEl</span><span class="p">.</span><span class="nx">elt</span><span class="p">.</span><span class="nx">naturalWidth</span><span class="p">;</span><span class="w">    </span><span class="c1">// p5 records the size of the first frame only;</span>
+<span class="w">        </span><span class="nx">camEl</span><span class="p">.</span><span class="nx">height</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">camEl</span><span class="p">.</span><span class="nx">elt</span><span class="p">.</span><span class="nx">naturalHeight</span><span class="p">;</span><span class="w">   </span><span class="c1">// keep it current across resolution changes</span>
 <span class="w">        </span><span class="nx">image</span><span class="p">(</span><span class="nx">camEl</span><span class="p">,</span><span class="w"> </span><span class="mf">0</span><span class="p">,</span><span class="w"> </span><span class="mf">0</span><span class="p">,</span><span class="w"> </span><span class="nx">width</span><span class="p">,</span><span class="w"> </span><span class="nx">height</span><span class="p">);</span><span class="w">  </span><span class="c1">// draw MJPEG frame to canvas</span>
 <span class="w">        </span><span class="nx">loadPixels</span><span class="p">();</span><span class="w">                        </span><span class="c1">// pixels[] available for manipulation</span>
 <span class="w">    </span><span class="p">}</span>
@@ -326,11 +334,12 @@
 <td>MJPEG stream</td>
 </tr>
 <tr>
-<td><code>http://&lt;ip&gt;:&lt;port&gt;/snapshot</code></td>
-<td>Single JPEG</td>
+<td><code>http://&lt;ip&gt;:&lt;port+1&gt;/snapshot</code></td>
+<td>Single JPEG, answered even while a stream is running.</td>
 </tr>
 </tbody>
 </table>
+<p><code>snapshot()</code> builds these URLs for you. Snapshots have a web server of their own on the next port (<code>attach(82)</code> → <code>83</code>; if that's the WebSocket's <code>81</code>, the one after), because the board's stream server is busy for the whole time a stream is open — a snapshot on the stream's port would wait until the stream closed. <code>/snapshot</code> also still answers on the stream port, for older versions of the JS library, but only while no stream is running.</p>
 <h2 id="state-snapshot">State snapshot</h2>
 <div class="sig sig-js">arduino.cam.<span class="fn">getState</span>()</div>
 <p><strong>Returns</strong> <code>{ logicalId, port, streamUrl, snapshotUrl, framesize, quality }</code>.</p>

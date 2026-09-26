@@ -195,7 +195,7 @@ Original bench order was **ESP32 first** (known rig), then **R4 WiFi** (native U
 
 ---
 
-## I. Camera (browser-only, ESP32-only, HTTP/WiFi) — ✅ confirmed working (Seeed XIAO ESP32S3 Sense, 2026-08)
+## I. Camera (browser-only, ESP32-only, HTTP/WiFi) — ✅ confirmed working (Seeed XIAO ESP32S3 Sense 2026-08; ESP32 Wrover + Freenove ESP32-S3 CAM 2026-09)
 
 - [x] **I.1 Stream** — camera-stream example connects over HTTP and shows live frames on ESP32; behaves independently of the WebSocket/serial control channel (camera stays WiFi-only). *(No sketch-attach path by design.)* **✅ Confirmed on the XIAO ESP32S3 Sense (2026-08) — see the results log below.**
 
@@ -433,8 +433,89 @@ documented in `troubleshooting.md` + `camera.md`.
   here. A size that overflows *every* frame is the sensor's limit, not a bug.
 
 Still open on the camera: **sketch-created camera is deliberately not built**
-(singleton, ESP32-only — see the sketch-attach note below); other camera boards
-(WROVER-KIT, AI-Thinker, etc.) remain structural-only.
+(singleton, ESP32-only — see the sketch-attach note below); camera boards other
+than the XIAO, the ESP32 Wrover and the Freenove ESP32-S3 (below) — AI-Thinker,
+ESP-EYE, M5Stack, etc. — remain structural-only.
+
+### ✅ More camera boards confirmed (2026-09)
+- **ESP32 Wrover camera board + XIAO ESP32S3 Sense — `camera-posenet` (2026-09-15).**
+  ml5 PoseNet on the MJPEG stream at VGA. Needed one fix: keypoints were drawn with
+  no confidence filter, so low-score joints scattered and jittered; the example now
+  skips keypoints/bones below `MIN_CONFIDENCE = 0.2`.
+- **Freenove ESP32-S3-WROOM CAM (FNK0085) — stream + ml5 handPose (2026-09-24).**
+  Camera module labelled **"DC-03 08-V1"** — most likely a **GC0308**, which has
+  **no hardware JPEG**: it first failed with `camera: JPEG format is not supported on
+  this sensor` / `[Camera] Init failed: 0x106`. Now works through the new
+  **RGB565 + software-JPEG fallback** in `PardaloteCamera.h` (the same approach as
+  Freenove's own examples). Board setup:
+  - `#define CAMERA_MODEL_ESP32S3_EYE` — the Freenove camera pinout is identical.
+  - Tools → PSRAM → **`OPI PSRAM`**.
+  - The board has **two USB-C ports**. On the **CH343 "UART"** port, USB CDC On Boot
+    must be **Disabled** (Enabled shows only the ROM boot banner, no `w` menu); the
+    native **"USB"** port needs it **Enabled**.
+  - Keep to **QVGA/HVGA**: every frame is JPEG-encoded in software, and the GC0308
+    tops out at VGA.
+  *Still to record:* the `[Camera] Sensor:` line from Serial (to confirm GC0308) and
+  the resolution used for handPose.
+- **Pin-write rate control — XIAO, 2026-09-24.** A p5 `draw()` writing `digitalWrite()`
+  every frame alongside a VGA stream on an iPhone hotspot used to drop the WebSocket
+  in a loop (pong timeouts; queued offline writes flushed as a burst on reconnect).
+  With the new rules (changes sent at once, repeats ≤ 1 per 250 ms, offline writes
+  recorded not queued) the same sketch is stable, and the
+  `adc_io_to_channel(29): invalid gpio number` spam seen during the drops did not recur.
+- **Snapshot during a stream — XIAO, 2026-09-24.** `snapshot()` used to hang until the
+  stream page closed: the HTTP server runs every handler in one task and the stream
+  handler never returns. Fixed with a separate snapshot server on the stream port + 1;
+  **confirmed:** snapshots now return while a stream is running.
+- **Second-window stream warning — XIAO, 2026-09-24.** Same single-task cause: a second
+  page's stream just waits, blank, with no error. The board now reports its active
+  streams on `attach()` and the JS warns on a page's first `attach()`. **Confirmed:**
+  the warning appears in the second window, and that window starts streaming by itself
+  once the first is closed.
+- **⚠️ Frame sizes were wrong on ESP32 core 3.x — found 2026-09-26 (XIAO).** The JS sends
+  each `FRAMESIZE_*` as a number and the firmware passed it straight to the camera
+  driver, but core 3.x's driver list has two extra sizes (`128X128`, `320X320`), so
+  every size above QQVGA came out one or two places off: `QVGA` → 240×240,
+  `VGA` → 400×296, `SVGA` → 480×320, `HD` → 800×600. Found via a black band after a
+  mid-stream QVGA→VGA switch (p5 had recorded the first frame as 240×240, then
+  400×296 frames arrived). **Every earlier camera result labelled with a size ran
+  at the wrong size** — including the 2026-08 "HD FB-OVF / SVGA reliable" note
+  (really 800×600 / 480×320) and the PoseNet/handPose "VGA" runs (really 400×296).
+  Fixed: the firmware now maps the JS codes to driver sizes by name
+  (`_fromWireSize`). **✅ Confirmed on the XIAO (2026-09-26):** `FRAMESIZE_VGA` now
+  streams 640×480 and `FRAMESIZE_HD` 1280×720.
+- **JPEG buffers sized for the largest frame — XIAO, 2026-09-26.** The camera now starts
+  at UXGA (on PSRAM, hardware-JPEG sensors) and then switches to the requested size.
+  Tested *before* the frame-size fix, so what ran as "VGA" and "HD" was really
+  400×296 and 800×600: both streamed cleanly. **✅ Re-tested after the fix
+  (2026-09-26):** started at QVGA, switched mid-stream to real VGA and then real
+  HD — both stream with no `FB-OVF` and no errors on Serial or in the browser.
+  (Before this change a QVGA start left ~15 KB buffers, too small for either.)
+- **Black band after a mid-stream resolution change (p5 `image()`).** `createImg()`
+  records the image's size from the first frame only; when a new size with a
+  different shape arrives, `image()` draws it short and leaves a band. The
+  camera-stream example and doc snippets now copy `naturalWidth/Height` into the
+  element before `image()`. **✅ Confirmed (2026-09-26):** after QVGA → VGA → HD
+  (a 4:3 → 16:9 shape change) p5's recorded size matches the frame
+  (`[1280, 720, 1280, 720]`), so the picture fills the canvas.
+- **⚠️ Wrover camera "died" — caused by a sketch driving GPIO 21 (2026-09-26).** A test
+  sketch with `LEDpin = 21` (`pinMode(21, OUTPUT)` + `digitalWrite()`) was run against the
+  ESP32 Wrover, where **GPIO 21 is the camera's XCLK**. The OV2640 lost its clock: every
+  frame failed (`[Camera] Frame capture failed repeatedly`), the control bus NACKed
+  (`sccb-ng: SCCB_Write Failed addr:0x30 … ret:259`), and the bus then stayed stuck across
+  resets and re-flashes (Espressif's CameraWebServer also failed: `i2c.master: probe device
+  timeout` → `Detected camera not supported`) — the WROVER_KIT camera has no reset pin, so
+  only a full power-off clears it. After unplugging, the Wrover streams again with the
+  current firmware (including the start-big buffers). **No firmware fault.** Camera pins on
+  WROVER_KIT: 4, 5, 18, 19, 21, 22, 23, 25, 26, 27, 34, 35, 36, 39 — nothing may drive them.
+  A camera-pin guard (refusing browser pin commands on camera pins) was considered and
+  **rejected**: users can misuse pins against their hardware in countless ways, and
+  Pardalote doesn't try to police board-specific pin conflicts.
+- **Wrover + camera-posenet at a genuine 640×480 — no lag (2026-09-26).** With the current
+  firmware (frame-size mapping, start-big buffers) the Wrover runs PoseNet at real VGA
+  smoothly. The freeze-and-catch-up seen on 2026-09-24 (then really 400×296, older
+  firmware) is gone; its cause was never isolated — note the camera driver's frame
+  warnings are compiled out of core 3.3.11, so silent drops can't be ruled out for that run.
 
 **Still to confirm on real hardware** (items above are done; these remain — see the
 Phase 0–11 bench log for what the 2026-07 ESP32 run already cleared):

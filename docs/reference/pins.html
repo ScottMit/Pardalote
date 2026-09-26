@@ -44,7 +44,7 @@
   <a href="pins.html#pinmode">pinMode()</a>
   <a href="pins.html#digitalwrite">digitalWrite()</a>
   <a href="pins.html#analogwrite">analogWrite()</a>
-  <a href="pins.html#setwritethrottle--setwritethreshold">setWriteThrottle() / setWriteThreshold()</a>
+  <a href="pins.html#setwritethrottle--setwritethreshold--setwriterepeat">setWriteThrottle() / setWriteThreshold() / setWriteRepeat()</a>
   <a href="pins.html#analogread">analogRead()</a>
   <a href="pins.html#digitalread">digitalRead()</a>
   <a href="pins.html#setreadinterval--setreadthreshold">setReadInterval() / setReadThreshold()</a>
@@ -149,6 +149,8 @@
 </tr>
 </tbody>
 </table>
+<p>A <strong>change</strong> is sent immediately, so even a quick pulse reaches the board. Writing the <strong>same value again</strong> is rate-limited: it's re-sent at most every 250 ms per pin. That makes it safe to call <code>digitalWrite()</code> on every frame of a draw loop — 60 identical writes a second become about 4 messages — while still re-asserting your value if the board sketch or another browser changes the pin. Tune it with <a href="#setwritethrottle--setwritethreshold--setwriterepeat"><code>setWriteRepeat()</code></a>.</p>
+<p>While the board is disconnected, writes aren't queued. The latest value on each pin is remembered and sent once when the connection comes back.</p>
 <h2 id="analogwrite">analogWrite()</h2>
 <p>Writes a PWM value to a pin.</p>
 <div class="sig sig-js">arduino.<span class="fn">analogWrite</span>(pin, value)</div>
@@ -173,32 +175,42 @@
 </tr>
 </tbody>
 </table>
-<p>Writes are <strong>rate-limited per pin</strong> so you can safely drive <code>analogWrite()</code> from a slider or a draw loop: the first write goes out immediately, and rapid follow-ups are coalesced into a single send that carries the latest value — the resting value is never lost. The default window is 20 ms (~50 writes/s per pin), which is imperceptible on ESP32 and keeps the slower UNO R4 WiFi from being flooded off the socket. Tune it with <code>setWriteThrottle()</code> / <code>setWriteThreshold()</code>, or pass <code>0</code> to <code>setWriteThrottle()</code> to send every value.</p>
-<h2 id="setwritethrottle--setwritethreshold">setWriteThrottle() / setWriteThreshold()</h2>
-<p>Rate-limits outgoing PWM writes — the outbound counterpart to <code>setReadInterval()</code>. Useful when <code>analogWrite()</code> is driven from mouse movement or a draw loop, and essential for keeping the UNO R4 WiFi responsive under a fast slider.</p>
-<div class="sig sig-js">arduino.<span class="fn">setWriteThrottle</span>(ms) · arduino.<span class="fn">setWriteThreshold</span>(value)</div>
+<p>Writes are <strong>rate-limited per pin</strong> so you can safely drive <code>analogWrite()</code> from a slider or a draw loop:</p>
+<ul>
+<li><strong>Changes:</strong> the first write goes out immediately, and rapid follow-ups are coalesced into a single send that carries the latest value — the resting value is never lost. The default window is 20 ms (~50 changes/s per pin), which is imperceptible on ESP32 and keeps the slower UNO R4 WiFi from being flooded off the socket.</li>
+<li><strong>Repeats:</strong> writing the same duty again is re-sent at most every 250 ms, the same rule as <a href="#digitalwrite"><code>digitalWrite()</code></a>.</li>
+</ul>
+<p>While the board is disconnected, writes aren't queued; the latest duty on each pin is sent once when the connection comes back.</p>
+<h2 id="setwritethrottle--setwritethreshold--setwriterepeat">setWriteThrottle() / setWriteThreshold() / setWriteRepeat()</h2>
+<p>Rate-limit outgoing pin writes — the outbound counterpart to <code>setReadInterval()</code>. Useful when <code>digitalWrite()</code> or <code>analogWrite()</code> is driven from mouse movement or a draw loop, and essential for keeping the UNO R4 WiFi — or an ESP32 busy streaming camera video — responsive.</p>
+<div class="sig sig-js">arduino.<span class="fn">setWriteThrottle</span>(ms) · arduino.<span class="fn">setWriteThreshold</span>(value) · arduino.<span class="fn">setWriteRepeat</span>(ms)</div>
 <table>
 <thead>
 <tr>
-<th>Parameter</th>
-<th>Type</th>
+<th>Method</th>
+<th>Applies to</th>
 <th>Description</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>ms</code></td>
-<td>number</td>
-<td>Minimum ms between PWM sends on a pin. Default <code>20</code>. <code>0</code> = off (send every value).</td>
+<td><code>setWriteThrottle(ms)</code></td>
+<td><code>analogWrite()</code></td>
+<td>Minimum ms between duty <strong>changes</strong> on a pin; faster changes coalesce, latest value wins. Default <code>20</code>. <code>0</code> = off (send every change).</td>
 </tr>
 <tr>
-<td><code>value</code></td>
-<td>number</td>
+<td><code>setWriteThreshold(value)</code></td>
+<td><code>analogWrite()</code></td>
 <td>Minimum duty change worth sending. Default <code>0</code> (send all).</td>
+</tr>
+<tr>
+<td><code>setWriteRepeat(ms)</code></td>
+<td>both</td>
+<td>Minimum ms between re-sends of an <strong>unchanged</strong> value on a pin. Default <code>250</code>. <code>0</code> = off (send every repeat).</td>
 </tr>
 </tbody>
 </table>
-<p>Both apply to every <code>analogWrite()</code> pin and are chainable.</p>
+<p>All three apply to every pin and are chainable. <code>digitalWrite()</code> changes are never throttled.</p>
 <h2 id="analogread">analogRead()</h2>
 <p>Reads the value of an analog pin. The first call starts a periodic poll on the Arduino; every later call returns the cached value instantly — so it's safe to call on every frame of a draw loop with no extra network traffic.</p>
 <div class="sig sig-js">arduino.<span class="fn">analogRead</span>(pin, [interval], [threshold])</div>

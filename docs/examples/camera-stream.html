@@ -120,6 +120,10 @@
 
 <span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nx">camEl</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
 <span class="w">        </span><span class="k">try</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="c1">// p5 remembers the image&#39;s size from the stream&#39;s FIRST frame; keep</span>
+<span class="w">            </span><span class="c1">// it current, or a resolution change leaves a band at the bottom.</span>
+<span class="w">            </span><span class="nx">camEl</span><span class="p">.</span><span class="nx">width</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="nx">camEl</span><span class="p">.</span><span class="nx">elt</span><span class="p">.</span><span class="nx">naturalWidth</span><span class="p">;</span>
+<span class="w">            </span><span class="nx">camEl</span><span class="p">.</span><span class="nx">height</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">camEl</span><span class="p">.</span><span class="nx">elt</span><span class="p">.</span><span class="nx">naturalHeight</span><span class="p">;</span>
 <span class="w">            </span><span class="nx">image</span><span class="p">(</span><span class="nx">camEl</span><span class="p">,</span><span class="w"> </span><span class="mf">0</span><span class="p">,</span><span class="w"> </span><span class="mf">0</span><span class="p">,</span><span class="w"> </span><span class="nx">width</span><span class="p">,</span><span class="w"> </span><span class="nx">height</span><span class="p">);</span>
 <span class="w">        </span><span class="p">}</span><span class="w"> </span><span class="k">catch</span><span class="w"> </span><span class="p">(</span><span class="nx">e</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
 <span class="w">            </span><span class="c1">// img entered broken state (stream dropped) — clear and show placeholder</span>
@@ -224,14 +228,14 @@ HTTP      :82  ──── MJPEG stream ──→  &lt;img src=&quot;http://ip:
 <li>On <code>ready</code>, <code>arduino.cam.attach(CAMERA_PORT)</code> sends a <code>CMD_CAMERA_INIT</code> frame to the Arduino over the WebSocket. The Arduino initialises the camera hardware and starts an HTTP server on the requested port.</li>
 <li>The Arduino echoes the confirmed port back. The Camera extension sets an <code>&lt;img&gt;</code> element's <code>src</code> to <code>http://&lt;ip&gt;:&lt;port&gt;/stream</code> and emits the <code>stream</code> event.</li>
 <li>The browser fetches the MJPEG stream directly over HTTP — the WebSocket is only used for the initial handshake and any subsequent control commands (resolution, quality).</li>
-<li>In <code>draw()</code>, <code>image(camEl, 0, 0, width, height)</code> renders the current frame to the p5.js canvas.</li>
+<li>In <code>draw()</code>, <code>image(camEl, 0, 0, width, height)</code> renders the current frame to the p5.js canvas. Just before it, the sketch copies the frame's real size into <code>camEl.width</code> / <code>camEl.height</code>: p5 records an image's size only when its first frame loads, so without this a resolution change leaves a black band at the bottom.</li>
 </ol>
 <hr />
 <h2 id="adjusting-the-stream">Adjusting the stream</h2>
 <div class="code-ex"><span class="lang-badge lang-js">JS</span><pre><code><span class="c1">// Resolution — call before or after attach()</span>
 <span class="nx">arduino</span><span class="p">.</span><span class="nx">cam</span><span class="p">.</span><span class="nx">setResolution</span><span class="p">(</span><span class="nx">FRAMESIZE_QVGA</span><span class="p">);</span><span class="w">   </span><span class="c1">// 320×240  ← default</span>
 <span class="nx">arduino</span><span class="p">.</span><span class="nx">cam</span><span class="p">.</span><span class="nx">setResolution</span><span class="p">(</span><span class="nx">FRAMESIZE_VGA</span><span class="p">);</span><span class="w">    </span><span class="c1">// 640×480</span>
-<span class="nx">arduino</span><span class="p">.</span><span class="nx">cam</span><span class="p">.</span><span class="nx">setResolution</span><span class="p">(</span><span class="nx">FRAMESIZE_HD</span><span class="p">);</span><span class="w">     </span><span class="c1">// 1280×720 — see Troubleshooting</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">cam</span><span class="p">.</span><span class="nx">setResolution</span><span class="p">(</span><span class="nx">FRAMESIZE_HD</span><span class="p">);</span><span class="w">     </span><span class="c1">// 1280×720</span>
 
 <span class="c1">// JPEG quality: 0 = best image / highest bandwidth</span>
 <span class="c1">//              63 = worst image / lowest bandwidth</span>
@@ -280,7 +284,7 @@ HTTP      :82  ──── MJPEG stream ──→  &lt;img src=&quot;http://ip:
 <span class="c1">// revoke when done to free memory:</span>
 <span class="nx">URL</span><span class="p">.</span><span class="nx">revokeObjectURL</span><span class="p">(</span><span class="nx">url</span><span class="p">);</span>
 </code></pre></div>
-<p>The snapshot is served from <code>http://&lt;ip&gt;:&lt;port&gt;/snapshot</code> — a separate endpoint from the stream.</p>
+<p>The snapshot is served from <code>http://&lt;ip&gt;:&lt;port+1&gt;/snapshot</code> — its own small web server on the next port (83 for this example), so it answers even while the stream is running.</p>
 <hr />
 <h2 id="pixel-manipulation">Pixel manipulation</h2>
 <p>Because the camera HTTP server sends <code>Access-Control-Allow-Origin: *</code>, p5.js can read pixel data from the stream:</p>
@@ -291,6 +295,8 @@ HTTP      :82  ──── MJPEG stream ──→  &lt;img src=&quot;http://ip:
 
 <span class="kd">function</span><span class="w"> </span><span class="nx">draw</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
 <span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nx">camEl</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nx">camEl</span><span class="p">.</span><span class="nx">width</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="nx">camEl</span><span class="p">.</span><span class="nx">elt</span><span class="p">.</span><span class="nx">naturalWidth</span><span class="p">;</span><span class="w">   </span><span class="c1">// keep p5&#39;s idea of the size current</span>
+<span class="w">        </span><span class="nx">camEl</span><span class="p">.</span><span class="nx">height</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">camEl</span><span class="p">.</span><span class="nx">elt</span><span class="p">.</span><span class="nx">naturalHeight</span><span class="p">;</span>
 <span class="w">        </span><span class="nx">image</span><span class="p">(</span><span class="nx">camEl</span><span class="p">,</span><span class="w"> </span><span class="mf">0</span><span class="p">,</span><span class="w"> </span><span class="mf">0</span><span class="p">,</span><span class="w"> </span><span class="nx">width</span><span class="p">,</span><span class="w"> </span><span class="nx">height</span><span class="p">);</span>
 <span class="w">        </span><span class="nx">loadPixels</span><span class="p">();</span>
 <span class="w">        </span><span class="c1">// pixels[] is now available — RGBA values for every canvas pixel</span>
@@ -330,7 +336,7 @@ HTTP      :82  ──── MJPEG stream ──→  &lt;img src=&quot;http://ip:
 </ul>
 <p><strong><code>FRAMESIZE_HD</code> stutters or drops the stream (<code>cam_hal: FB-OVF</code> / <code>net::ERR_INCOMPLETE_CHUNKED_ENCODING</code>)</strong></p>
 <ul>
-<li>The largest sizes push the sensor's data rate hard, and HD's 16:9 mode is the flakiest — some modules (the XIAO's OV2640 among them) can't sustain it and drop frames, which shows in the browser console as <code>net::ERR_INCOMPLETE_CHUNKED_ENCODING</code>. Pardalote now rides out the occasional dropped frame rather than closing the stream, but a size that overflows <em>every</em> frame is the sensor's ceiling, not a bug. Step down to <strong><code>FRAMESIZE_SVGA</code> (800×600)</strong>, which streams reliably on the XIAO.</li>
+<li><code>FB-OVF</code> means a frame was bigger than the buffer the camera driver set aside for it, so it was dropped (the browser console shows <code>net::ERR_INCOMPLETE_CHUNKED_ENCODING</code>). Older Pardalote versions left too little room for HD frames. <strong>Update the Pardalote Arduino library</strong>: it now reserves room for frames up to 1600×1200 on boards with PSRAM, and HD streams on the XIAO ESP32S3. If it still happens, check PSRAM is enabled (above), then step down a size (e.g. <strong><code>FRAMESIZE_SVGA</code></strong>, 800×600).</li>
 </ul>
 <p><strong>XIAO ESP32S3 won't connect to WiFi</strong></p>
 <ul>
@@ -339,6 +345,10 @@ HTTP      :82  ──── MJPEG stream ──→  &lt;img src=&quot;http://ip:
 <p><strong>Canvas size doesn't match stream</strong></p>
 <ul>
 <li>The canvas size and stream resolution are independent. <code>image(camEl, 0, 0, width, height)</code> scales the stream to fill the canvas. Adjust <code>createCanvas()</code> dimensions to match your desired aspect ratio.</li>
+</ul>
+<p><strong>Black band at the bottom after changing resolution</strong></p>
+<ul>
+<li>p5's <code>createImg()</code> records the image's size once, from the stream's first frame. When a new resolution arrives with a different shape, <code>image()</code> still uses the old size and the picture no longer fills the canvas. Copy the real size in before drawing: <code>camEl.width = camEl.elt.naturalWidth; camEl.height = camEl.elt.naturalHeight;</code> (the example does this).</li>
 </ul>
 <p><strong>Only one browser can receive the stream at a time</strong></p>
 <ul>

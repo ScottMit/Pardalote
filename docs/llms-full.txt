@@ -292,7 +292,7 @@ arduino.connect('192.168.1.42', 8081);                   // custom port
 arduino.connect('192.168.1.42', { key: 'robot-arm-3' }); // board requires a key
 ```
 
-Calling `connect()` (or `connectSerial()`) again starts a fresh session: pin modes, polled reads, and write listeners from the previous board are cleared. Each registered extension is reset to its just-constructed state, so attached servos, initialised strips, IMU calibration and camera streams are released — call `attach()` / `init()` again inside the new `on('ready')` handler. Event listeners attached with `on('change', …)` etc. survive, as do user-tuned settings like `setWriteThrottle`, `setWriteThreshold` and `setQuality`.
+Calling `connect()` (or `connectSerial()`) again starts a fresh session: pin modes, polled reads, and write listeners from the previous board are cleared. Each registered extension is reset to its just-constructed state, so attached servos, initialised strips, IMU calibration and camera streams are released — call `attach()` / `init()` again inside the new `on('ready')` handler. Event listeners attached with `on('change', …)` etc. survive, as do user-tuned settings like `setWriteThrottle`, `setWriteThreshold`, `setWriteRepeat` and `setQuality`.
 
 ### Connection keys
 
@@ -444,6 +444,10 @@ Sets a digital output pin high or low.
 | `pin` | number \| string | The pin to write. |
 | `value` | constant | `HIGH` or `LOW`. |
 
+A **change** is sent immediately, so even a quick pulse reaches the board. Writing the **same value again** is rate-limited: it's re-sent at most every 250 ms per pin. That makes it safe to call `digitalWrite()` on every frame of a draw loop — 60 identical writes a second become about 4 messages — while still re-asserting your value if the board sketch or another browser changes the pin. Tune it with [`setWriteRepeat()`](#setwritethrottle--setwritethreshold--setwriterepeat).
+
+While the board is disconnected, writes aren't queued. The latest value on each pin is remembered and sent once when the connection comes back.
+
 ## analogWrite()
 
 Writes a PWM value to a pin.
@@ -455,20 +459,26 @@ Writes a PWM value to a pin.
 | `pin` | number \| string | The pin to write. |
 | `value` | number | Duty cycle, `0`–`255`. |
 
-Writes are **rate-limited per pin** so you can safely drive `analogWrite()` from a slider or a draw loop: the first write goes out immediately, and rapid follow-ups are coalesced into a single send that carries the latest value — the resting value is never lost. The default window is 20 ms (~50 writes/s per pin), which is imperceptible on ESP32 and keeps the slower UNO R4 WiFi from being flooded off the socket. Tune it with `setWriteThrottle()` / `setWriteThreshold()`, or pass `0` to `setWriteThrottle()` to send every value.
+Writes are **rate-limited per pin** so you can safely drive `analogWrite()` from a slider or a draw loop:
 
-## setWriteThrottle() / setWriteThreshold()
+- **Changes:** the first write goes out immediately, and rapid follow-ups are coalesced into a single send that carries the latest value — the resting value is never lost. The default window is 20 ms (~50 changes/s per pin), which is imperceptible on ESP32 and keeps the slower UNO R4 WiFi from being flooded off the socket.
+- **Repeats:** writing the same duty again is re-sent at most every 250 ms, the same rule as [`digitalWrite()`](#digitalwrite).
 
-Rate-limits outgoing PWM writes — the outbound counterpart to `setReadInterval()`. Useful when `analogWrite()` is driven from mouse movement or a draw loop, and essential for keeping the UNO R4 WiFi responsive under a fast slider.
+While the board is disconnected, writes aren't queued; the latest duty on each pin is sent once when the connection comes back.
 
-`arduino.setWriteThrottle(ms) · arduino.setWriteThreshold(value)`
+## setWriteThrottle() / setWriteThreshold() / setWriteRepeat()
 
-| Parameter | Type | Description |
+Rate-limit outgoing pin writes — the outbound counterpart to `setReadInterval()`. Useful when `digitalWrite()` or `analogWrite()` is driven from mouse movement or a draw loop, and essential for keeping the UNO R4 WiFi — or an ESP32 busy streaming camera video — responsive.
+
+`arduino.setWriteThrottle(ms) · arduino.setWriteThreshold(value) · arduino.setWriteRepeat(ms)`
+
+| Method | Applies to | Description |
 |---|---|---|
-| `ms` | number | Minimum ms between PWM sends on a pin. Default `20`. `0` = off (send every value). |
-| `value` | number | Minimum duty change worth sending. Default `0` (send all). |
+| `setWriteThrottle(ms)` | `analogWrite()` | Minimum ms between duty **changes** on a pin; faster changes coalesce, latest value wins. Default `20`. `0` = off (send every change). |
+| `setWriteThreshold(value)` | `analogWrite()` | Minimum duty change worth sending. Default `0` (send all). |
+| `setWriteRepeat(ms)` | both | Minimum ms between re-sends of an **unchanged** value on a pin. Default `250`. `0` = off (send every repeat). |
 
-Both apply to every `analogWrite()` pin and are chainable.
+All three apply to every pin and are chainable. `digitalWrite()` changes are never throttled.
 
 ## analogRead()
 
@@ -2736,6 +2746,7 @@ Board define names match the ESP CameraWebServer example:
 | AI-Thinker ESP32-CAM | `CAMERA_MODEL_AI_THINKER` |
 | Seeed Studio XIAO ESP32S3 Sense | `CAMERA_MODEL_XIAO_ESP32S3` |
 | Espressif ESP32-S3-EYE | `CAMERA_MODEL_ESP32S3_EYE` |
+| Freenove ESP32-S3-WROOM CAM | `CAMERA_MODEL_ESP32S3_EYE` (same camera pins) |
 | Espressif ESP-EYE | `CAMERA_MODEL_ESP_EYE` |
 | M5Stack PSRAM | `CAMERA_MODEL_M5STACK_PSRAM` |
 | M5Stack V2 PSRAM | `CAMERA_MODEL_M5STACK_V2_PSRAM` |
@@ -2749,6 +2760,8 @@ Board define names match the ESP CameraWebServer example:
 | ESP32-S2 CAM Board | `CAMERA_MODEL_ESP32S2_CAM_BOARD` |
 | DFRobot FireBeetle 2 ESP32-S3 | `CAMERA_MODEL_DFRobot_FireBeetle2_ESP32S3` |
 | DFRobot Romeo ESP32-S3 | `CAMERA_MODEL_DFRobot_Romeo_ESP32S3` |
+
+**Freenove ESP32-S3-WROOM CAM:** set Tools → PSRAM → `OPI PSRAM`. The board has two USB-C ports — on the one marked **UART**, set Tools → USB CDC On Boot → **Disabled**; on the one marked **USB**, set it to **Enabled** (the wrong setting shows only the boot banner in the Serial Monitor, with no WiFi `w` menu). Some of these boards ship a GC0308 camera, which can't make JPEGs in hardware: Pardalote encodes its frames in software instead (Serial prints `No hardware JPEG — encoding in software`), so keep it at `FRAMESIZE_QVGA` or `FRAMESIZE_HVGA` for a usable frame rate.
 
 Examples below assume:
 
@@ -2789,11 +2802,13 @@ Frame size, using constants that match the ESP32 camera `framesize_t` enum.
 | `FRAMESIZE_HVGA` | 480×320 |
 | `FRAMESIZE_VGA` | 640×480 |
 | `FRAMESIZE_SVGA` | 800×600 |
-| `FRAMESIZE_HD` | 1280×720 — see note |
+| `FRAMESIZE_HD` | 1280×720 |
 
 Call it before or after `attach()` — either way the chosen size is applied once the stream starts, and it persists across reconnects.
 
-`FRAMESIZE_HD` and the other largest sizes push the sensor hard; the 16:9 HD mode can trip `cam_hal: FB-OVF` on some modules (the XIAO's OV2640 among them) and drop the stream. If you hit that, step down to `FRAMESIZE_SVGA` (800×600), which streams reliably on the XIAO. See Troubleshooting.
+With PSRAM, the board sets aside room for frames up to 1600×1200 when the camera starts (about 770 KB of PSRAM), so switching to a bigger size while streaming, or a very detailed scene at high quality, still fits. The exception is a sensor without hardware JPEG (such as the GC0308): its frame size is fixed when the camera starts, so a new size takes effect on the next `attach()` (for example after a page reload), not mid-stream.
+
+`FRAMESIZE_HD` streams on the XIAO ESP32S3's OV2640, including when you switch to it mid-stream. The largest sizes need PSRAM and push the sensor hard. If a size drops frames (`cam_hal: FB-OVF` in the Serial Monitor), first update the Pardalote Arduino library — older versions left too little buffer room for large frames — then step down a size. See Troubleshooting.
 
 ## setQuality()
 
@@ -2844,6 +2859,8 @@ arduino.cam.on('stream', ({ url }) => {
 
 function draw() {
     if (camEl) {
+        camEl.width  = camEl.elt.naturalWidth;    // p5 records the size of the first frame only;
+        camEl.height = camEl.elt.naturalHeight;   // keep it current across resolution changes
         image(camEl, 0, 0, width, height);  // draw MJPEG frame to canvas
         loadPixels();                        // pixels[] available for manipulation
     }
@@ -2857,7 +2874,9 @@ function draw() {
 | Endpoint | Description |
 |---|---|
 | `http://<ip>:<port>/stream` | MJPEG stream |
-| `http://<ip>:<port>/snapshot` | Single JPEG |
+| `http://<ip>:<port+1>/snapshot` | Single JPEG, answered even while a stream is running. |
+
+`snapshot()` builds these URLs for you. Snapshots have a web server of their own on the next port (`attach(82)` → `83`; if that's the WebSocket's `81`, the one after), because the board's stream server is busy for the whole time a stream is open — a snapshot on the stream's port would wait until the stream closed. `/snapshot` also still answers on the stream port, for older versions of the JS library, but only while no stream is running.
 
 ## State snapshot
 
@@ -3060,7 +3079,7 @@ An early `E (…) MSPI Timing: Failed to allocate dummy cacheline for PSRAM` lin
 - **Keep your `loop()` tight.** The UNO R4 WiFi's WebSocket stack (WiFiS3 + arduinoWebSockets) is sensitive to how often it is serviced. Anything that blocks or slows the loop — a `delay()`, a long computation, a busy blocking peripheral — starves the WebSocket of servicing, and the connection stalls, drops, or churns "client connection lost / new client" and reconnects. A single blocking `delay(100)` in `loop()` is enough to trigger it. (See [arduinoWebSockets issue #909](https://github.com/Links2004/arduinoWebSockets/issues/909).)
 - The symptom is often **indirect**. For example, dragging an `analogWrite()` PWM slider may lag and then drop the socket — not because `analogWrite()` is slow, but because something else in the loop is blocking long enough that the extra slider traffic can't be serviced in time. Fix the blocking, not the slider.
 - Fixes: remove `delay()` calls from `loop()`; move slow work off the hot path; if you must do something lengthy, call `Pardalote.run()` (which services the WebSocket) periodically while it runs. The ESP32 is far less sensitive to this.
-- As a smaller, defensive measure, Pardalote also throttles PWM writes by default (a leading write goes out immediately, rapid follow-ups coalesce into one send carrying the final value) so a slider can't flood the loop with parse work. If you've set `setWriteThrottle(0)`, raise it — `arduino.setWriteThrottle(20)` caps the rate to ~50/s per pin; `arduino.setWriteThreshold(4)` skips sub-4 duty changes.
+- As a smaller, defensive measure, Pardalote also rate-limits pin writes by default so a slider or draw loop can't flood the loop with parse work. PWM changes coalesce (a leading write goes out immediately, rapid follow-ups coalesce into one send carrying the final value), and writing an unchanged value — `digitalWrite()` or `analogWrite()` — is re-sent at most every 250 ms. If you've set `setWriteThrottle(0)` or `setWriteRepeat(0)`, raise them — `arduino.setWriteThrottle(20)` caps PWM changes to ~50/s per pin; `arduino.setWriteThreshold(4)` skips sub-4 duty changes; `arduino.setWriteRepeat(250)` restores the repeat limit.
 
 ## "connectSerial() can't find or open the port"
 
@@ -3110,7 +3129,17 @@ Once PSRAM is detected the camera double-buffers in PSRAM and `setResolution()` 
 
 ## "Camera: `FRAMESIZE_HD` gives `cam_hal: FB-OVF` / `net::ERR_INCOMPLETE_CHUNKED_ENCODING` even with PSRAM on"
 
-The largest frame sizes push the sensor's data rate hard, and the 16:9 HD mode is the flakiest — some modules (the XIAO's OV2640 among them) can't sustain it and drop frames, which surfaces in the browser console as `net::ERR_INCOMPLETE_CHUNKED_ENCODING`. Pardalote now rides out the occasional dropped frame rather than closing the stream, but a size that overflows *every* frame is the sensor's ceiling, not a bug. **Step down to `FRAMESIZE_SVGA` (800×600)** — it streams reliably on the XIAO.
+`FB-OVF` means a JPEG frame was bigger than the buffer the camera driver set aside for it, so the frame was dropped; in the browser console that shows as `net::ERR_INCOMPLETE_CHUNKED_ENCODING`. The driver sizes those buffers once, when the camera starts. Older Pardalote versions started the camera at the requested resolution, which left too little room for HD frames (or for a bigger size chosen after `attach()`). **Update the Pardalote Arduino library**: it now reserves room for frames up to 1600×1200 on boards with PSRAM, and HD streams on the XIAO ESP32S3. Older versions also sent the wrong frame size on ESP32 core 3.x (asking for HD gave 800×600), so earlier reports of which sizes work may be off by a size or two. If you still see `FB-OVF`, check that PSRAM is enabled (see above), then step down a size.
+
+## "Camera: the video stays blank in a second window or tab"
+
+The board sends **one video stream at a time**. While another page is streaming, a second page's stream doesn't fail, it just waits, so its canvas stays blank with no error. The browser console shows a warning when this happens:
+
+```
+another page is already streaming from this camera. The board sends one video stream at a time, so this page's video will stay blank until that page is closed.
+```
+
+Close the other window or tab (or stop its stream with `detach()`) and the waiting page starts streaming by itself — no reload needed. Snapshots aren't affected — `snapshot()` has its own server and works while another page streams.
 
 ## "NeoPixels don't light up"
 
@@ -5103,7 +5132,7 @@ HTTP      :82  ──── MJPEG stream ──→  <img src="http://ip:82/strea
 2. On `ready`, `arduino.cam.attach(CAMERA_PORT)` sends a `CMD_CAMERA_INIT` frame to the Arduino over the WebSocket. The Arduino initialises the camera hardware and starts an HTTP server on the requested port.
 3. The Arduino echoes the confirmed port back. The Camera extension sets an `<img>` element's `src` to `http://<ip>:<port>/stream` and emits the `stream` event.
 4. The browser fetches the MJPEG stream directly over HTTP — the WebSocket is only used for the initial handshake and any subsequent control commands (resolution, quality).
-5. In `draw()`, `image(camEl, 0, 0, width, height)` renders the current frame to the p5.js canvas.
+5. In `draw()`, `image(camEl, 0, 0, width, height)` renders the current frame to the p5.js canvas. Just before it, the sketch copies the frame's real size into `camEl.width` / `camEl.height`: p5 records an image's size only when its first frame loads, so without this a resolution change leaves a black band at the bottom.
 
 ---
 
@@ -5113,7 +5142,7 @@ HTTP      :82  ──── MJPEG stream ──→  <img src="http://ip:82/strea
 // Resolution — call before or after attach()
 arduino.cam.setResolution(FRAMESIZE_QVGA);   // 320×240  ← default
 arduino.cam.setResolution(FRAMESIZE_VGA);    // 640×480
-arduino.cam.setResolution(FRAMESIZE_HD);     // 1280×720 — see Troubleshooting
+arduino.cam.setResolution(FRAMESIZE_HD);     // 1280×720
 
 // JPEG quality: 0 = best image / highest bandwidth
 //              63 = worst image / lowest bandwidth
@@ -5144,7 +5173,7 @@ const url = await arduino.cam.snapshot();
 URL.revokeObjectURL(url);
 ```
 
-The snapshot is served from `http://<ip>:<port>/snapshot` — a separate endpoint from the stream.
+The snapshot is served from `http://<ip>:<port+1>/snapshot` — its own small web server on the next port (83 for this example), so it answers even while the stream is running.
 
 ---
 
@@ -5160,6 +5189,8 @@ arduino.cam.on('stream', ({ url }) => {
 
 function draw() {
     if (camEl) {
+        camEl.width  = camEl.elt.naturalWidth;   // keep p5's idea of the size current
+        camEl.height = camEl.elt.naturalHeight;
         image(camEl, 0, 0, width, height);
         loadPixels();
         // pixels[] is now available — RGBA values for every canvas pixel
@@ -5198,13 +5229,16 @@ Note: `loadPixels()` on every frame is CPU-intensive. For heavy processing, cons
 - **ESP32 WROVER:** PSRAM is enabled automatically by the "ESP32 Wrover Module" board, so there's no PSRAM menu to set. If the Serial Monitor shows `esp_psram: SPI SRAM memory test fail … writes failed`, PSRAM *is* enabled but the module's chip is failing its power-on test — usually marginal power or a faulty module. Try a full power-cycle with a different USB cable/port, drop **Tools → Flash Frequency → 40 MHz**, and if it persists use a different WROVER (that PSRAM chip is likely bad).
 
 **`FRAMESIZE_HD` stutters or drops the stream (`cam_hal: FB-OVF` / `net::ERR_INCOMPLETE_CHUNKED_ENCODING`)**
-- The largest sizes push the sensor's data rate hard, and HD's 16:9 mode is the flakiest — some modules (the XIAO's OV2640 among them) can't sustain it and drop frames, which shows in the browser console as `net::ERR_INCOMPLETE_CHUNKED_ENCODING`. Pardalote now rides out the occasional dropped frame rather than closing the stream, but a size that overflows *every* frame is the sensor's ceiling, not a bug. Step down to **`FRAMESIZE_SVGA` (800×600)**, which streams reliably on the XIAO.
+- `FB-OVF` means a frame was bigger than the buffer the camera driver set aside for it, so it was dropped (the browser console shows `net::ERR_INCOMPLETE_CHUNKED_ENCODING`). Older Pardalote versions left too little room for HD frames. **Update the Pardalote Arduino library**: it now reserves room for frames up to 1600×1200 on boards with PSRAM, and HD streams on the XIAO ESP32S3. If it still happens, check PSRAM is enabled (above), then step down a size (e.g. **`FRAMESIZE_SVGA`**, 800×600).
 
 **XIAO ESP32S3 won't connect to WiFi**
 - The Sense board has a u.FL connector for an external antenna. If the antenna switch is set to external and nothing is plugged in, the radio has no antenna and cannot connect. Either attach an external antenna or move the antenna switch to the internal position.
 
 **Canvas size doesn't match stream**
 - The canvas size and stream resolution are independent. `image(camEl, 0, 0, width, height)` scales the stream to fill the canvas. Adjust `createCanvas()` dimensions to match your desired aspect ratio.
+
+**Black band at the bottom after changing resolution**
+- p5's `createImg()` records the image's size once, from the stream's first frame. When a new resolution arrives with a different shape, `image()` still uses the old size and the picture no longer fills the canvas. Copy the real size in before drawing: `camEl.width = camEl.elt.naturalWidth; camEl.height = camEl.elt.naturalHeight;` (the example does this).
 
 **Only one browser can receive the stream at a time**
 - This is a fundamental limitation of the ESP32 camera driver. The camera's `esp_camera_fb_get()` function is single-consumer by design — only one HTTP client can receive MJPEG frames at a time. A second browser connecting will see a black screen and will only get the feed once the first disconnects. This behaviour is identical to Espressif's own CameraWebServer example. Multi-client streaming requires a dedicated FreeRTOS task that owns the camera, copies each frame to a shared PSRAM buffer, and fans it out to all connected clients — this is not currently implemented in Pardalote.
