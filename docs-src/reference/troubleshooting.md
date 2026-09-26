@@ -73,7 +73,17 @@ Once PSRAM is detected the camera double-buffers in PSRAM and `setResolution()` 
 
 ## "Camera: `FRAMESIZE_HD` gives `cam_hal: FB-OVF` / `net::ERR_INCOMPLETE_CHUNKED_ENCODING` even with PSRAM on"
 
-The largest frame sizes push the sensor's data rate hard, and the 16:9 HD mode is the flakiest — some modules (the XIAO's OV2640 among them) can't sustain it and drop frames, which surfaces in the browser console as `net::ERR_INCOMPLETE_CHUNKED_ENCODING`. Pardalote now rides out the occasional dropped frame rather than closing the stream, but a size that overflows *every* frame is the sensor's ceiling, not a bug. **Step down to `FRAMESIZE_SVGA` (800×600)** — it streams reliably on the XIAO.
+`FB-OVF` means a JPEG frame was bigger than the buffer the camera driver set aside for it, so the frame was dropped; in the browser console that shows as `net::ERR_INCOMPLETE_CHUNKED_ENCODING`. The driver sizes those buffers once, when the camera starts. Older Pardalote versions started the camera at the requested resolution, which left too little room for HD frames (or for a bigger size chosen after `attach()`). **Update the Pardalote Arduino library**: it now reserves room for frames up to 1600×1200 on boards with PSRAM, and HD streams on the XIAO ESP32S3. Older versions also sent the wrong frame size on ESP32 core 3.x (asking for HD gave 800×600), so earlier reports of which sizes work may be off by a size or two. If you still see `FB-OVF`, check that PSRAM is enabled (see above), then step down a size.
+
+## "Camera: the video stays blank in a second window or tab"
+
+The board sends **one video stream at a time**. While another page is streaming, a second page's stream doesn't fail, it just waits, so its canvas stays blank with no error. The browser console shows a warning when this happens:
+
+```
+another page is already streaming from this camera. The board sends one video stream at a time, so this page's video will stay blank until that page is closed.
+```
+
+Close the other window or tab (or stop its stream with `detach()`) and the waiting page starts streaming by itself — no reload needed. Snapshots aren't affected — `snapshot()` has its own server and works while another page streams.
 
 ## "NeoPixels don't light up"
 

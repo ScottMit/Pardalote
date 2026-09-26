@@ -1525,6 +1525,8 @@ arduino.cam.on('stream', ({ url }) => {
 
 function draw() {
     if (camEl) {
+        camEl.width  = camEl.elt.naturalWidth;    // p5 records the size of the first frame only;
+        camEl.height = camEl.elt.naturalHeight;   // keep it current across resolution changes
         image(camEl, 0, 0, width, height);  // draw MJPEG frame to canvas
         loadPixels();                        // pixels[] available for manipulation
     }
@@ -1571,12 +1573,14 @@ arduino.cam.on('snapshot', ({ url, blob }) => { ... });
 
 #### HTTP endpoints
 
-Once `attach()` is called, the Arduino serves two endpoints on the chosen port:
+Once `attach()` is called, the Arduino serves the stream on the chosen port and snapshots on the next one:
 
 | Endpoint | Description |
 |---|---|
 | `http://<ip>:<port>/stream` | MJPEG stream |
-| `http://<ip>:<port>/snapshot` | Single JPEG |
+| `http://<ip>:<port+1>/snapshot` | Single JPEG, answered even while a stream is running |
+
+Snapshots get their own small web server because the stream server is busy for as long as a stream is open. If `port + 1` is the WebSocket's `81`, the snapshot server takes the port after. `snapshot()` handles all of this.
 
 #### Events and API
 

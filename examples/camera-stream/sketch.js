@@ -45,6 +45,10 @@ function draw() {
 
     if (camEl) {
         try {
+            // p5 remembers the image's size from the stream's FIRST frame; keep
+            // it current, or a resolution change leaves a band at the bottom.
+            camEl.width  = camEl.elt.naturalWidth;
+            camEl.height = camEl.elt.naturalHeight;
             image(camEl, 0, 0, width, height);
         } catch (e) {
             // img entered broken state (stream dropped) — clear and show placeholder

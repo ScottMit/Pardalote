@@ -90,7 +90,7 @@ HTTP      :82  ──── MJPEG stream ──→  <img src="http://ip:82/strea
 2. On `ready`, `arduino.cam.attach(CAMERA_PORT)` sends a `CMD_CAMERA_INIT` frame to the Arduino over the WebSocket. The Arduino initialises the camera hardware and starts an HTTP server on the requested port.
 3. The Arduino echoes the confirmed port back. The Camera extension sets an `<img>` element's `src` to `http://<ip>:<port>/stream` and emits the `stream` event.
 4. The browser fetches the MJPEG stream directly over HTTP — the WebSocket is only used for the initial handshake and any subsequent control commands (resolution, quality).
-5. In `draw()`, `image(camEl, 0, 0, width, height)` renders the current frame to the p5.js canvas.
+5. In `draw()`, `image(camEl, 0, 0, width, height)` renders the current frame to the p5.js canvas. Just before it, the sketch copies the frame's real size into `camEl.width` / `camEl.height`: p5 records an image's size only when its first frame loads, so without this a resolution change leaves a black band at the bottom.
 
 ---
 
@@ -100,7 +100,7 @@ HTTP      :82  ──── MJPEG stream ──→  <img src="http://ip:82/strea
 // Resolution — call before or after attach()
 arduino.cam.setResolution(FRAMESIZE_QVGA);   // 320×240  ← default
 arduino.cam.setResolution(FRAMESIZE_VGA);    // 640×480
-arduino.cam.setResolution(FRAMESIZE_HD);     // 1280×720 — see Troubleshooting
+arduino.cam.setResolution(FRAMESIZE_HD);     // 1280×720
 
 // JPEG quality: 0 = best image / highest bandwidth
 //              63 = worst image / lowest bandwidth
@@ -131,7 +131,7 @@ const url = await arduino.cam.snapshot();
 URL.revokeObjectURL(url);
 ```
 
-The snapshot is served from `http://<ip>:<port>/snapshot` — a separate endpoint from the stream.
+The snapshot is served from `http://<ip>:<port+1>/snapshot` — its own small web server on the next port (83 for this example), so it answers even while the stream is running.
 
 ---
 
@@ -147,6 +147,8 @@ arduino.cam.on('stream', ({ url }) => {
 
 function draw() {
     if (camEl) {
+        camEl.width  = camEl.elt.naturalWidth;   // keep p5's idea of the size current
+        camEl.height = camEl.elt.naturalHeight;
         image(camEl, 0, 0, width, height);
         loadPixels();
         // pixels[] is now available — RGBA values for every canvas pixel
@@ -185,13 +187,16 @@ Note: `loadPixels()` on every frame is CPU-intensive. For heavy processing, cons
 - **ESP32 WROVER:** PSRAM is enabled automatically by the "ESP32 Wrover Module" board, so there's no PSRAM menu to set. If the Serial Monitor shows `esp_psram: SPI SRAM memory test fail … writes failed`, PSRAM *is* enabled but the module's chip is failing its power-on test — usually marginal power or a faulty module. Try a full power-cycle with a different USB cable/port, drop **Tools → Flash Frequency → 40 MHz**, and if it persists use a different WROVER (that PSRAM chip is likely bad).
 
 **`FRAMESIZE_HD` stutters or drops the stream (`cam_hal: FB-OVF` / `net::ERR_INCOMPLETE_CHUNKED_ENCODING`)**
-- The largest sizes push the sensor's data rate hard, and HD's 16:9 mode is the flakiest — some modules (the XIAO's OV2640 among them) can't sustain it and drop frames, which shows in the browser console as `net::ERR_INCOMPLETE_CHUNKED_ENCODING`. Pardalote now rides out the occasional dropped frame rather than closing the stream, but a size that overflows *every* frame is the sensor's ceiling, not a bug. Step down to **`FRAMESIZE_SVGA` (800×600)**, which streams reliably on the XIAO.
+- `FB-OVF` means a frame was bigger than the buffer the camera driver set aside for it, so it was dropped (the browser console shows `net::ERR_INCOMPLETE_CHUNKED_ENCODING`). Older Pardalote versions left too little room for HD frames. **Update the Pardalote Arduino library**: it now reserves room for frames up to 1600×1200 on boards with PSRAM, and HD streams on the XIAO ESP32S3. If it still happens, check PSRAM is enabled (above), then step down a size (e.g. **`FRAMESIZE_SVGA`**, 800×600).
 
 **XIAO ESP32S3 won't connect to WiFi**
 - The Sense board has a u.FL connector for an external antenna. If the antenna switch is set to external and nothing is plugged in, the radio has no antenna and cannot connect. Either attach an external antenna or move the antenna switch to the internal position.
 
 **Canvas size doesn't match stream**
 - The canvas size and stream resolution are independent. `image(camEl, 0, 0, width, height)` scales the stream to fill the canvas. Adjust `createCanvas()` dimensions to match your desired aspect ratio.
+
+**Black band at the bottom after changing resolution**
+- p5's `createImg()` records the image's size once, from the stream's first frame. When a new resolution arrives with a different shape, `image()` still uses the old size and the picture no longer fills the canvas. Copy the real size in before drawing: `camEl.width = camEl.elt.naturalWidth; camEl.height = camEl.elt.naturalHeight;` (the example does this).
 
 **Only one browser can receive the stream at a time**
 - This is a fundamental limitation of the ESP32 camera driver. The camera's `esp_camera_fb_get()` function is single-consumer by design — only one HTTP client can receive MJPEG frames at a time. A second browser connecting will see a black screen and will only get the feed once the first disconnects. This behaviour is identical to Espressif's own CameraWebServer example. Multi-client streaming requires a dedicated FreeRTOS task that owns the camera, copies each frame to a shared PSRAM buffer, and fans it out to all connected clients — this is not currently implemented in Pardalote.

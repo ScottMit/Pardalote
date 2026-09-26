@@ -22,6 +22,7 @@ Board define names match the ESP CameraWebServer example:
 | AI-Thinker ESP32-CAM | `CAMERA_MODEL_AI_THINKER` |
 | Seeed Studio XIAO ESP32S3 Sense | `CAMERA_MODEL_XIAO_ESP32S3` |
 | Espressif ESP32-S3-EYE | `CAMERA_MODEL_ESP32S3_EYE` |
+| Freenove ESP32-S3-WROOM CAM | `CAMERA_MODEL_ESP32S3_EYE` (same camera pins) |
 | Espressif ESP-EYE | `CAMERA_MODEL_ESP_EYE` |
 | M5Stack PSRAM | `CAMERA_MODEL_M5STACK_PSRAM` |
 | M5Stack V2 PSRAM | `CAMERA_MODEL_M5STACK_V2_PSRAM` |
@@ -35,6 +36,8 @@ Board define names match the ESP CameraWebServer example:
 | ESP32-S2 CAM Board | `CAMERA_MODEL_ESP32S2_CAM_BOARD` |
 | DFRobot FireBeetle 2 ESP32-S3 | `CAMERA_MODEL_DFRobot_FireBeetle2_ESP32S3` |
 | DFRobot Romeo ESP32-S3 | `CAMERA_MODEL_DFRobot_Romeo_ESP32S3` |
+
+**Freenove ESP32-S3-WROOM CAM:** set Tools → PSRAM → `OPI PSRAM`. The board has two USB-C ports — on the one marked **UART**, set Tools → USB CDC On Boot → **Disabled**; on the one marked **USB**, set it to **Enabled** (the wrong setting shows only the boot banner in the Serial Monitor, with no WiFi `w` menu). Some of these boards ship a GC0308 camera, which can't make JPEGs in hardware: Pardalote encodes its frames in software instead (Serial prints `No hardware JPEG — encoding in software`), so keep it at `FRAMESIZE_QVGA` or `FRAMESIZE_HVGA` for a usable frame rate.
 
 Examples below assume:
 
@@ -75,11 +78,13 @@ Frame size, using constants that match the ESP32 camera `framesize_t` enum.
 | `FRAMESIZE_HVGA` | 480×320 |
 | `FRAMESIZE_VGA` | 640×480 |
 | `FRAMESIZE_SVGA` | 800×600 |
-| `FRAMESIZE_HD` | 1280×720 — see note |
+| `FRAMESIZE_HD` | 1280×720 |
 
 Call it before or after `attach()` — either way the chosen size is applied once the stream starts, and it persists across reconnects.
 
-`FRAMESIZE_HD` and the other largest sizes push the sensor hard; the 16:9 HD mode can trip `cam_hal: FB-OVF` on some modules (the XIAO's OV2640 among them) and drop the stream. If you hit that, step down to `FRAMESIZE_SVGA` (800×600), which streams reliably on the XIAO. See [Troubleshooting](troubleshooting.html#camera-framesize_hd-gives-cam_hal-fb-ovf--neterr_incomplete_chunked_encoding-even-with-psram-on).
+With PSRAM, the board sets aside room for frames up to 1600×1200 when the camera starts (about 770 KB of PSRAM), so switching to a bigger size while streaming, or a very detailed scene at high quality, still fits. The exception is a sensor without hardware JPEG (such as the GC0308): its frame size is fixed when the camera starts, so a new size takes effect on the next `attach()` (for example after a page reload), not mid-stream.
+
+`FRAMESIZE_HD` streams on the XIAO ESP32S3's OV2640, including when you switch to it mid-stream. The largest sizes need PSRAM and push the sensor hard. If a size drops frames (`cam_hal: FB-OVF` in the Serial Monitor), first update the Pardalote Arduino library — older versions left too little buffer room for large frames — then step down a size. See [Troubleshooting](troubleshooting.html#camera-framesize_hd-gives-cam_hal-fb-ovf--neterr_incomplete_chunked_encoding-even-with-psram-on).
 
 ## setQuality()
 
@@ -130,6 +135,8 @@ arduino.cam.on('stream', ({ url }) => {
 
 function draw() {
     if (camEl) {
+        camEl.width  = camEl.elt.naturalWidth;    // p5 records the size of the first frame only;
+        camEl.height = camEl.elt.naturalHeight;   // keep it current across resolution changes
         image(camEl, 0, 0, width, height);  // draw MJPEG frame to canvas
         loadPixels();                        // pixels[] available for manipulation
     }
@@ -143,7 +150,9 @@ function draw() {
 | Endpoint | Description |
 |---|---|
 | `http://<ip>:<port>/stream` | MJPEG stream |
-| `http://<ip>:<port>/snapshot` | Single JPEG |
+| `http://<ip>:<port+1>/snapshot` | Single JPEG, answered even while a stream is running. |
+
+`snapshot()` builds these URLs for you. Snapshots have a web server of their own on the next port (`attach(82)` → `83`; if that's the WebSocket's `81`, the one after), because the board's stream server is busy for the whole time a stream is open — a snapshot on the stream's port would wait until the stream closed. `/snapshot` also still answers on the stream port, for older versions of the JS library, but only while no stream is running.
 
 ## State snapshot
 

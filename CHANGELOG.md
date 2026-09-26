@@ -32,6 +32,44 @@ Pardalote versions **two things independently**:
   queued ~60 writes per offline second and flushed them as one burst on reconnect,
   which could starve the board's heartbeat reply and drop the link again. The replay
   now also restores `analogWrite()` duties (it used to restore only digital levels).
+- **Camera: `snapshot()` works while a stream is running.** The board's web server
+  runs one request at a time and a stream never finishes, so a snapshot on the
+  stream's port waited until the stream closed (and failed if the page closed).
+  Snapshots now have their own small server on the next port (`attach(82)` → `83`,
+  stepping over the WebSocket's `81`), as in Espressif's CameraWebServer. The board
+  reports the port when you `attach()`; mixed versions still work — older JS keeps
+  using the stream port (still blocked mid-stream), and new JS on older firmware
+  falls back to it.
+- **Camera: `setResolution()` gave the wrong size on ESP32 core 3.x.** The JS sends
+  each `FRAMESIZE_*` as a number, which the firmware passed straight to the camera
+  driver. The driver in core 3.x added two sizes (`128X128`, `320X320`) that shift
+  its numbering, so every size above QQVGA came out one or two places off —
+  `FRAMESIZE_VGA` streamed 400×296, `FRAMESIZE_HD` 800×600. The firmware now maps each
+  code to the driver's size by name, so all JS versions get the size they ask for.
+  Update the Arduino library; no sketch changes needed.
+- **Camera example: no black band after a resolution change.** p5's `createImg()`
+  records an image's size from its first frame only, so after switching to a size
+  with a different shape `image()` left a black band at the bottom. The
+  camera-stream example (and the doc snippets) now copy the frame's real size into
+  the element before drawing.
+- **Camera: JPEG frame buffers sized for the largest frame.** The camera driver
+  sizes each JPEG buffer once, at start-up, at width × height ÷ 5 of the start-up
+  resolution, so a later `setResolution()` to a bigger size, or a detailed scene at
+  high quality, could overflow it and drop frames (`cam_hal: FB-OVF`). With PSRAM
+  and a hardware-JPEG sensor, the camera now starts at 1600×1200 (UXGA) and then
+  switches to the requested size, as Espressif's CameraWebServer does, reserving
+  ~770 KB of PSRAM. Software-JPEG sensors and boards without PSRAM are unchanged.
+- **Camera: a console warning when another page is already streaming.** The board
+  sends one stream at a time, so a second window's video used to stay blank with no
+  explanation. The board now reports how many streams it's serving when you
+  `attach()`, and the JS warns on a page's first `attach()` if one is already
+  running. (Older firmware reports nothing, so no warning.)
+- **Camera: sensors without hardware JPEG now stream.** Some ESP32 camera boards
+  (e.g. Freenove ESP32-S3 CAM) ship a GC2145 / GC0308 sensor that can't output JPEG,
+  which failed with `Init failed: 0x106`. `PardaloteCamera.h` now falls back to RGB565
+  and JPEG-encodes each frame in software — the browser sees the same MJPEG stream.
+  Serial names the detected sensor. Software encoding is slower, so keep those boards
+  at QVGA/HVGA; OV2640/OV3660/OV5640 boards are unaffected.
 
 ## [1.2.0] — 2026-09-23
 
