@@ -18,6 +18,8 @@ Pardalote versions **two things independently**:
 
 ## [Unreleased]
 
+## [1.3.0] — 2026-09-26
+
 - **Pin writes are safe in a draw loop — `digitalWrite()` joins the write throttle.**
   A changed `digitalWrite()` value still goes out immediately (so a short pulse is
   never lost), but writing the **same** value again — `digitalWrite()` or
