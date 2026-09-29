@@ -87,9 +87,13 @@ browser and the board just plays the gestures it's sent, on whatever outputs it 
 <p>This is a <strong>tool</strong> — no code editing. Open <code>index.html</code> and:</p>
 <ol>
 <li>Connect (WiFi IP or <strong>USB</strong>) — the button turns green when it's up.</li>
-<li>For each row, <strong>click its gutter summary</strong> to open the settings dialog — pick the
-output type and set its pins (ID / Pin / STEP·DIR·EN). Add or remove rows with the
-<strong>+ / −</strong> buttons in the gutter.</li>
+<li>For each row, <strong>click its gutter summary</strong> (<strong>⚙ Unassigned</strong> on a new row) to open the
+settings dialog — pick the output type and enter its pins (ID / Pin / STEP·DIR·EN). Add or
+remove rows with the <strong>+ / −</strong> buttons in the gutter. New rows start <strong>unassigned</strong> and the
+fields start <strong>blank</strong> — the tool never guesses which pin or ID your hardware is on. Until
+a row is fully set up it's held <strong>off</strong> (its <strong>on</strong> box is locked) and never talks to the
+board — you can still sketch its motion (on a 0–100 % scale, converted when you pick a
+type). Fill in the last field and it switches <strong>on</strong>.</li>
 <li>Build the motion on the timeline:</li>
 </ol>
 <table>
@@ -162,13 +166,14 @@ Everything (rows, keyframes, shapes, connection) is remembered per browser.</p>
 definition (one segment array per output) and is <strong>editable</strong>; the <strong>example use</strong> panel
 beside it is a read-only, <strong>self-contained</strong> runnable program — it includes the gesture data
 inline plus setup and connection (or <code>setup()</code>/<code>loop()</code>), so you can copy that one panel and
-run it as-is. Switched-off rows are omitted, matching what <strong>play</strong> sends.</p>
+run it as-is. Switched-off rows (including ones whose output isn't set up yet) are omitted, matching what
+<strong>play</strong> sends.</p>
 <p><strong>It's two-way.</strong> Edit the numbers in a gesture panel — or paste in a definition you saved
 earlier — and <strong>click away</strong>: the timeline rebuilds from it, and every other panel (and the
 other language) regenerates to match. So you can bring an already-authored gesture back in and
 keep editing it visually. The definition is the source of truth: each lane matches an existing
-row by name (keeping its output type / pins / limits), a lane you add becomes a new bus-servo
-row (set its ID after), and a lane you remove drops that row. If the code can't be read, the
+row by name (keeping its output type / pins / limits), a lane you add becomes a new <strong>unassigned</strong>
+row (its values kept as written — pick its output after), and a lane you remove drops that row. If the code can't be read, the
 timeline is left untouched and the panel reverts.</p>
 <ul>
 <li><strong>JavaScript</strong> — a <strong><code>gesture</code></strong> object (one segment array per output, keyed by your

@@ -308,6 +308,8 @@ main { position: relative; }   /* anchor the row context-menu */
 }
 .rl-output:hover { text-decoration: underline; }
 .rl-output::before { content: "⚙ "; font-weight: 400; color: var(--grey); }
+/* no output yet (unassigned) or a blank pin/ID (incomplete) — a prompt to set it up, not a status */
+.rl-output.unassigned, .rl-output.incomplete { color: var(--orange); font-weight: 400; font-style: italic; }
 .rl-deg  { margin-top: 4px; font-family: var(--mono); font-size: 11px; color: var(--grey); }
 .rl-deg.live    { color: var(--teal); }
 .rl-deg.missing { color: var(--red); }
@@ -315,6 +317,8 @@ main { position: relative; }   /* anchor the row context-menu */
 .rl-ctrls { display: flex; align-items: center; gap: 6px; margin-top: 5px; }
 .rl-on    { display: flex; align-items: center; gap: 3px; font-size: 11px; color: var(--ink-soft); cursor: pointer; user-select: none; }
 .rl-on input { width: 13px; height: 13px; margin: 0; accent-color: var(--teal); cursor: pointer; }
+/* locked off — the row has no output / a blank pin yet, so it can't be switched on */
+.rl-on.locked, .rl-on.locked input { color: var(--hair); cursor: not-allowed; }
 .rl-free  {
     height: 20px; padding: 0 8px;
     font-family: 'Poppins', system-ui, sans-serif; font-size: 11px; font-weight: 600;

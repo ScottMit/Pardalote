@@ -51,6 +51,18 @@ structurally verified unless a bench entry says otherwise.
 
 ## What's built this session
 
+- **Gesture Builder — unassigned rows, blank pins (2026-09-29).** New rows (+, and new lanes
+  from pasted code) are type **`unassigned`** (0–100 % axis; `pct` flag, pasted lanes keep RAW
+  values + stretched axis and are NOT rescaled when a type is picked). Connection fields are
+  **null/blank** until entered (EN keeps −1 = none); bus ID blank too. `isBound(rw)` = real type
+  + all fields set; `act(r)` is the single gate for every hardware path (play/scrub/jump/drag/
+  free/pose/readout); `ensureActuator` makes nothing for unbound rows; `releaseRow` detaches on
+  retype / field clear / cancel. Bus config sent once per connection (firmware re-begins the
+  serial on every BUS_CONFIG). **Unbound rows are forced OFF** with the on-box locked (`syncRowOn`); they
+  switch ON the moment the last field is filled (a user-off bound row stays off on a pin edit).
+  Being off, they drop out of both code panels via `laneList`. Legacy saves: rows with no `type` still load as bus servos. Headless-verified
+  (fake board frame log); **visuals + bench pending (Scott).**
+
 > **Note:** this file spans several sessions. The **bus-servo streaming
 > interpolator entry immediately below** is the most recent work, then the
 > Gesture Builder multi-output entry, then the `arduino.gesture()`
@@ -1232,6 +1244,39 @@ it. See `src/internal/defs.h`.
 ## Loose ends (deferred, in rough priority)
 
 _Resolved items (bugs fixed on the bench) have moved to [BENCH-TESTS.md](BENCH-TESTS.md); the numbering keeps its gaps (0b, the old `0.`) so existing references still line up. Only open/deferred work remains below._
+
+00. **Multi-PWM-servo bug on ESP32-C5 + follow-ups (2026-09-29).** Scott saw 3 PWM servos
+   (3 rows, 3 pins) in the Gesture Builder ALL follow row 1's keys on an **ESP32-C5**; could
+   NOT reproduce on an ESP32 Wrover (2 servos). Headless repro (real page + fake board) shows
+   the browser frames are correct — each servo its own id/pin/lane. **Fixed so far (step 1):**
+   the builder no longer invents hardware — new/pasted rows are **unassigned**, connection
+   fields start **blank**, and a row only touches the board once bound (see the Gesture
+   Builder unassigned-rows entry). **Still open, one at a time:**
+   - (2) ✅ **DONE (builder):** deleting a row (or pasting a def with fewer lanes) left the tail
+     `seqN` attached — now `releaseTail()`; rebind releases ALL shifted rows before binding any
+     (one-at-a-time put row r on a pin row r+1 still held, whose detach then freed it — ESP32
+     LEDC detaches by pin); onReady detaches unbound/tail names the library replayed on reconnect.
+     Same leak pattern remains in **coordinated-motion** (type swap re-`add()`s without detach) —
+     to be fixed by the library `remove()`/replace-cleanup in (3), not in that example.
+   - (3) ✅ **DONE (library + firmware, released 1.4.0):** `add()` allocates the lowest free id
+     **per deviceId** (board-created ids are in the same list, so skipped); `_nextId` gone.
+     New `arduino.remove(name)`: `_release()` (default `detach()` if attached; NeoPixel blanks via
+     CLEAR+SHOW — no teardown cmd) → `_reset()` → unregister + drop from groups → `ext.arduino`
+     swapped for an inert Proxy that warns once (a stale ref can't drive the id's new owner).
+     Refuses `_sharedFromBoard` objects. `add()` over an existing name calls `remove()` first
+     (fixes coordinated-motion's type-swap leak with no example change). `static maxInstances`
+     per class mirrors firmware MAX_* → `add()` warns past it. Firmware: PWM servo detach (and a
+     changed attach) clears `_moving`/`_segCount` — a reused id no longer resumes the old gesture.
+     Verified: 20 Node unit checks on the bundle, headless builder (12 retypes → ids stay 0–2,
+     delete) + coordinated-motion swap frames, stub-compile clean. **Bench pending.**
+   - (4) **Board keeps browser-attached servos after disconnect.** Much less harmful since (3):
+     ids are now deterministic, so a reload re-attaches the SAME slot to the same pin. Revisit. Options: firmware detach
+     browser-owned on last disconnect / builder detaches unclaimed announced ids / document.
+   - **C5 hypothesis (unverified — needs the C5 back):** ESP32Servo 3.2.1 gives the C5 only
+     **6 LEDC channels** (vs 16 on classic ESP32). Leaked attachments (2–4) can exhaust them;
+     core 3.3.x `ledcAttachChannel` on an already-used channel ATTACHES THE NEW PIN TO THAT
+     SAME CHANNEL → pins mirror one signal = the symptom. Also core refuses a 2nd LEDC attach on
+     a pin already attached ("Pin N is already attached to LEDC"). Check Serial for those logs.
 
 0a. **Surface "Unknown extension deviceId" to the browser (2026-08, DX).** When
    the board gets a frame for a device with no registered extension,

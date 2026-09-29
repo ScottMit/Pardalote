@@ -21,7 +21,29 @@ arduino.on('ready', () => {
 });
 ```
 
-Each extension automatically gets a logical ID based on its type. Multiple instances of the same type are supported.
+Each extension automatically gets a **logical id** — its slot number on the board, counted **per type** from 0 (the first servo is servo 0 and the first stepper is stepper 0, whatever else the page adds). Multiple instances of the same type are supported, up to the board's slot count for that type:
+
+| Type | Instances at once |
+|---|---|
+| Servo | 8 |
+| Stepper | 6 |
+| Bus servo | 16 |
+| NeoPixel, Ultrasonic, Encoder | 4 each |
+| IMU | 2 |
+
+Adding one more than the board holds prints a warning — the board would ignore it.
+
+### remove()
+
+`arduino.remove(name)` is the inverse of `add()`: it releases the device on the board (detaches it, freeing its pin, bus ID or PWM channel), drops it from any groups, and frees its logical id for the next `add()` to reuse. Use it when a page changes what hardware it drives while running:
+
+```javascript sketch.js — swap a servo for a stepper
+arduino.remove('arm');                    // detach the servo on the board
+arduino.add('arm', new Stepper());        // a new stepper takes its place
+arduino.arm.attach(2, 3);
+```
+
+`add()` with a name that's already in use does the `remove()` for you, so the two lines above can be just the `add()`. The removed object is left **inert** — calling anything on it warns and sends nothing, because its old id may now belong to another device. Objects the **sketch** created (see below) belong to the sketch and can't be removed from the browser.
 
 ## Script loading order
 
@@ -91,7 +113,7 @@ void setup() {
 
 | Object | `scan()` returns | `read(id)` returns | `id` is |
 |---|---|---|---|
-| `PardaloteServo` | attached servo ids | angle (0–180) | logical id (`arduino.add()` order, or returned by sketch `attach`) |
+| `PardaloteServo` | attached servo ids | angle (0–180) | logical id (the browser's per-type slot, or returned by sketch `attach`) |
 | `PardaloteStepper` | attached stepper ids | position (steps) | logical id |
 | `PardaloteBusServo` | responding **hardware** ids on the bus (discovery) | position (counts) | logical id (returned by `attach`) |
 

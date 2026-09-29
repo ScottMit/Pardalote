@@ -1,5 +1,5 @@
 // ==============================================================
-// pardalote.js 1.3.0 — DISTRIBUTION BUNDLE. DO NOT EDIT.
+// pardalote.js 1.4.0 — DISTRIBUTION BUNDLE. DO NOT EDIT.
 // https://github.com/ScottMit/Pardalote
 // Copyright (C) 2026 Scott Mitchell — GPL-3.0-or-later. See LICENSE.
 //
@@ -19,7 +19,7 @@
 // Product version — the release humans see. Canonical copy lives in
 // package.json; mirrored here so a page can ask at runtime
 // (Arduino.version). The wire protocol versions independently below.
-const PARDALOTE_VERSION = '1.3.0';
+const PARDALOTE_VERSION = '1.4.0';
 
 // Wire-protocol MAJOR this build speaks — compared against the
 // firmware's HELLO. A mismatch means the two sides cannot talk.
@@ -985,6 +985,34 @@ class Extension {
     // switch sessions. Preserve user-tuned configuration. Default is a no-op;
     // extensions override as needed.
     _reset() {}
+
+    // Let go of this instance's board hardware — called by arduino.remove()
+    // (and by add() replacing a name) BEFORE its logical id is freed for
+    // reuse. Default: detach() if the extension has one and is attached.
+    // Extensions with no detach override (e.g. NeoPixel blanks its strip).
+    _release() {
+        if (typeof this.detach === 'function' && this.isAttached !== false) this.detach();
+    }
+
+    // How many instances of this device the board can hold at once — its
+    // firmware slot table size (MAX_SERVOS etc.). Logical ids are slot
+    // indexes, 0 … maxInstances−1. Subclasses set it; undefined = no cap known.
+    static maxInstances = undefined;
+}
+
+// A removed extension's `arduino` is swapped for this inert stand-in, so a
+// stale reference (a variable, a closure, a pending timer) can't drive
+// whatever actuator now owns its freed id. Every call warns once, sends nothing.
+function _removedArduino(ext) {
+    let warned = false;
+    const noop = () => {
+        if (!warned) {
+            warned = true;
+            console.warn(`${ext.constructor.name} '${ext._name}': it was removed (arduino.remove) — ` +
+                         `nothing is sent. Create a new one with arduino.add().`);
+        }
+    };
+    return new Proxy({}, { get: () => noop });
 }
 
 // -------------------------------------------------------------------
@@ -1214,7 +1242,6 @@ class Arduino {
         this._extensions  = {};
         this._extByDevice = new Map();
         this._available   = new Set();  // deviceIds announced by Arduino
-        this._nextId      = 0;
 
         // Actuator groups, keyed by name (see group())
         this._groups      = {};
@@ -2176,24 +2203,77 @@ class Arduino {
     // Extension registration
     // -------------------------------------------------------------------
     add(name, extension) {
-        extension.arduino  = this;
-        // Skip ids already held by board-created objects (they allocate from
-        // the top of the range down; add() from 0 up — this guard only
-        // matters once the two meet).
-        const taken = new Set();
-        this._extByDevice.forEach(list => list.forEach(e => {
-            if (e._sharedFromBoard) taken.add(e.logicalId);
-        }));
-        while (taken.has(this._nextId)) this._nextId++;
-        extension.logicalId = this._nextId++;
-        extension._name = name;
-        this._extensions[name] = extension;
-        this[name] = extension;  // shorthand: arduino.servo
+        if (this._extensions[name] === extension) return this;   // already registered under this name
+        // Replacing a name (e.g. swapping a servo for a stepper) releases the
+        // old instance first — its hardware is detached and its id freed.
+        if (this._extensions[name]) this.remove(name);
 
         const deviceId = extension.constructor.deviceId;
+        const cls      = extension.constructor;
         if (!this._extByDevice.has(deviceId)) this._extByDevice.set(deviceId, []);
-        this._extByDevice.get(deviceId).push(extension);
+        const list = this._extByDevice.get(deviceId);
 
+        // Logical ids are the board's slot indexes FOR THIS DEVICE TYPE
+        // (servo 0 and stepper 0 are different slots), so allocate per
+        // deviceId: the lowest id no live instance of this type holds.
+        // Board-created objects are in the same list (they allocate from the
+        // top of the range down; add() from 0 up), so they're skipped too.
+        // Ids freed by remove() are reused — a page that swaps actuators
+        // never walks off the end of the board's table.
+        const taken = new Set(list.map(e => e.logicalId));
+        let id = 0;
+        while (taken.has(id)) id++;
+        if (cls.maxInstances !== undefined && id >= cls.maxInstances) {
+            this._notify('warn', `${cls.name} '${name}'`,
+                `the board holds at most ${cls.maxInstances} ${cls.name} instances at once — ` +
+                `this one (id ${id}) will be ignored by the board. arduino.remove() one you no longer need.`);
+        }
+
+        extension.arduino   = this;
+        extension.logicalId = id;
+        extension._name     = name;
+        this._extensions[name] = extension;
+        this[name] = extension;  // shorthand: arduino.servo
+        list.push(extension);
+
+        return this;
+    }
+
+    // -------------------------------------------------------------------
+    // remove(name)
+    // The inverse of add(): let go of the extension's hardware on the board
+    // (detach — freeing its pin / bus ID / PWM channel), drop it from any
+    // group, and unregister it so its logical id can be reused by a later
+    // add(). The removed object is left inert: any further call on it warns
+    // and sends nothing (its old id may now belong to another actuator).
+    //   arduino.remove('elbow');
+    // Objects the SKETCH created (PardaloteServo.attach("pan", 9) → arduino.pan)
+    // belong to the sketch — remove() refuses those.
+    // -------------------------------------------------------------------
+    remove(name) {
+        const ext = this._extensions[name];
+        if (!ext) { this._notify('warn', 'remove', `no extension named '${name}'`); return this; }
+        if (ext._sharedFromBoard) {
+            this._notify('warn', ext._label(),
+                `created by the Arduino sketch — it can't be removed from the browser (change the sketch instead)`);
+            return this;
+        }
+
+        ext._release();   // detach on the board while it still holds its id
+        ext._reset();     // cancel pending writes / sweeps, settle awaiters
+
+        delete this._extensions[name];
+        if (this[name] === ext) delete this[name];
+        const list = this._extByDevice.get(ext.constructor.deviceId);
+        if (list) { const i = list.indexOf(ext); if (i >= 0) list.splice(i, 1); }
+        for (const g of Object.values(this._groups)) {
+            for (const [key, m] of Object.entries(g.members)) {
+                if (m === ext) { delete g.members[key]; delete g._commanded[key]; }
+            }
+            g._lastMoved = g._lastMoved.filter(m => m !== ext);
+        }
+
+        ext.arduino = _removedArduino(ext);
         return this;
     }
 
@@ -2928,6 +3008,7 @@ const MAX_SERVO_SEGMENTS = 16;
 
 class Servo extends Extension {
     static deviceId = DEVICE_SERVO;
+    static maxInstances = 8;   // board slot table (MAX_SERVOS in PardaloteServo.h)
 
     constructor() {
         super();
@@ -3728,6 +3809,7 @@ const BUSSERVO_MODE_WHEEL    = 1;
 
 class BusServo extends Extension {
     static deviceId = DEVICE_BUSSERVO;
+    static maxInstances = 16;   // board slot table (MAX_BUS_SERVOS in PardaloteBusServo.h)
 
     constructor() {
         super();
@@ -4580,6 +4662,7 @@ const STEPPER_FULL4WIRE = 4;   // 4 coil pins
 
 class Stepper extends Extension {
     static deviceId = DEVICE_STEPPER;
+    static maxInstances = 6;   // board slot table (MAX_STEPPERS in PardaloteStepper.h)
 
     constructor() {
         super();
@@ -5433,6 +5516,7 @@ const NEO_KHZ400 = 0x0100;
 
 class NeoPixel extends Extension {
     static deviceId = DEVICE_NEO_PIXEL;
+    static maxInstances = 4;   // board slot table (MAX_STRIPS in PardaloteNeoPixel.h)
 
     constructor() {
         super();
@@ -5481,6 +5565,15 @@ class NeoPixel extends Extension {
         this._clearPending();
         this._lastShowTime       = 0;
         this._announcedByArduino = false;
+    }
+
+    // arduino.remove() — the protocol has no strip teardown, so blank the LEDs
+    // (clear + show, sent directly — no throttle). A later add() reusing this
+    // id re-INITs the slot, which replaces the strip on the board cleanly.
+    _release() {
+        if (this.pin === -1) return;
+        this.arduino.send([encodeFrame(CMD_NEO_CLEAR, DEVICE_NEO_PIXEL, [this.logicalId]),
+                           encodeFrame(CMD_NEO_SHOW,  DEVICE_NEO_PIXEL, [this.logicalId])]);
     }
 
     _clearPending() {
@@ -5865,6 +5958,7 @@ const INCH = 1;
 
 class Ultrasonic extends Extension {
     static deviceId = DEVICE_ULTRASONIC;
+    static maxInstances = 4;   // board slot table (MAX_ULTRASONIC in PardaloteUltrasonic.h)
 
     constructor() {
         super();
@@ -6170,6 +6264,7 @@ const IMU_MODELS = {
 
 class IMU extends Extension {
     static deviceId = DEVICE_IMU;
+    static maxInstances = 2;   // board slot table (MAX_IMUS in PardaloteIMU.h)
 
     // -------------------------------------------------------------------
     // constructor(model?)
@@ -6593,6 +6688,7 @@ const CMD_ENCODER_SET_POSITION = 0x5B;
 
 class Encoder extends Extension {
     static deviceId = DEVICE_ENCODER;
+    static maxInstances = 4;   // board slot table (MAX_ENCODERS in PardaloteEncoder.h)
 
     constructor() {
         super();

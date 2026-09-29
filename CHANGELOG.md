@@ -18,6 +18,29 @@ Pardalote versions **two things independently**:
 
 ## [Unreleased]
 
+## [1.4.0] — 2026-09-29
+
+- **Logical ids are per device type and get reused — no more "invalid id" after a few
+  `add()`s.** Ids used to come from one counter shared by every extension type and were
+  never freed, while the board's slot tables are per type and small (8 servos, 6 steppers…).
+  A page with a few sensors before its servos, or one that swapped actuators while running,
+  quickly handed out a servo id the board silently ignored. Now each type counts from 0 and
+  takes the lowest free id, and `add()` warns when you exceed the board's slots.
+  *Compatibility:* a browser-created actuator's id is now its position **among its own
+  type**, not among every `add()`. A board sketch that hard-coded such an id (e.g.
+  `PardaloteServo.read(1)` for a servo added after an ultrasonic) may need the new number.
+  Ids of sketch-created objects are unchanged.
+- **New `arduino.remove(name)`** — detaches the device on the board (freeing its pin / bus
+  ID / PWM channel), drops it from groups, and frees its id. `add()` over a name already in
+  use now does this first, so swapping a servo for a stepper no longer leaves the servo
+  attached. A removed object is inert (warns, sends nothing). Sketch-created objects can't
+  be removed from the browser.
+- **Firmware: detaching a PWM servo clears its running gesture / timed move.** Before, it only
+  paused while detached and resumed on whatever servo next attached to that slot.
+- **Gesture Builder:** new rows start **unassigned** with **blank** pins / IDs (never guessed)
+  and are held off until set up; deleting rows or retyping them releases their hardware; rows
+  are re-bound in an order that never puts two outputs on one pin.
+
 ## [1.3.0] — 2026-09-26
 
 - **Pin writes are safe in a draw loop — `digitalWrite()` joins the write throttle.**

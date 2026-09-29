@@ -10,7 +10,9 @@
 // a <circle>, each segment a <path> — inside a natively-scrollable pane, with a
 // fixed gutter column of row labels and editable ID fields beside it.
 //
-//   • + / − buttons in each row's gutter → add a row below / delete the row
+//   • + / − buttons in each row's gutter → add a row below / delete the row. New rows
+//     are UNASSIGNED: click "⚙ Unassigned" to pick the output type and enter its pins /
+//     ID (never guessed). A row only touches the board once it's fully set up.
 //   • double-click a lane to ADD a keyframe; drag a keyframe to set its
 //     angle (up/down) and time (left/right)
 //   • right-click a segment → set its shape (easing curve)
@@ -38,10 +40,12 @@ const PXMS = 0.15;                          // px per ms — FIXED (5 s ≈ 750 
 // class, the value unit + default range, the connection fields shown in the gutter,
 // how to attach/hold/free/read/write it, and whether hand-posing (needs live feedback)
 // is available. Values in each row's `points` are in that output's native unit.
+// Connection fields start BLANK (null) — the builder never guesses hardware pins/IDs.
+// A row only touches the board once it's BOUND: a real type with every field filled in.
 const OUTPUT_TYPES = {
     busservo: {
         label: 'Bus servo', cls: 'BusServo', unit: 'counts', defMax: 4095,
-        fields: [{ key: 'id', label: 'ID', def: 1, min: 1, max: 253, w: 43 }],
+        fields: [{ key: 'id', label: 'ID', min: 1, max: 253, w: 43 }],
         make:   () => new BusServo(),
         attach: (s, rw) => s.attach(rw.id, 'ST'),
         canFree: () => true, hasFeedback: true, freeOnConnect: true,
@@ -52,7 +56,7 @@ const OUTPUT_TYPES = {
     },
     servo: {
         label: 'PWM servo', cls: 'Servo', unit: '°', defMax: 180,
-        fields: [{ key: 'pin', label: 'Pin', def: 9, min: 0, max: 99, w: 43 }],
+        fields: [{ key: 'pin', label: 'Pin', min: 0, max: 99, w: 43 }],
         make:   () => new Servo(),
         attach: (s, rw) => s.attach(rw.pin),
         canFree: () => false, hasFeedback: false, freeOnConnect: false,
@@ -61,9 +65,9 @@ const OUTPUT_TYPES = {
     },
     stepper: {
         label: 'Stepper', cls: 'Stepper', unit: 'steps', defMax: 2000,
-        fields: [{ key: 'step', label: 'STEP', def: 2, min: 0, max: 99, w: 34 },
-                 { key: 'dir',  label: 'DIR',  def: 3, min: 0, max: 99, w: 34 },
-                 { key: 'en',   label: 'EN',   def: -1, min: -1, max: 99, w: 34 }],
+        fields: [{ key: 'step', label: 'STEP', min: 0, max: 99, w: 34 },
+                 { key: 'dir',  label: 'DIR',  min: 0, max: 99, w: 34 },
+                 { key: 'en',   label: 'EN',   min: -1, max: 99, w: 34 }],   // −1 = no EN pin (a real choice, not a guess)
         make:   () => new Stepper(),
         attach: (s, rw) => s.attach(rw.step, rw.dir, rw.en),
         canFree: (rw) => rw.en !== -1, hasFeedback: false, freeOnConnect: false,
@@ -72,8 +76,18 @@ const OUTPUT_TYPES = {
         cur:   (s) => s.position,
         write: (s, v) => s.moveTo(v),
     },
+    // No hardware yet — the row is a sketch of motion on a neutral 0–100 % axis. Picking a
+    // real type rescales its keys into that type's units (see setOutputType).
+    unassigned: {
+        label: 'Unassigned', cls: null, unit: '%', defMax: 100,
+        fields: [],
+        canFree: () => false, hasFeedback: false, freeOnConnect: false,
+    },
 };
-const TYPE = (rw) => OUTPUT_TYPES[rw.type] || OUTPUT_TYPES.busservo;
+const TYPE = (rw) => OUTPUT_TYPES[rw.type] || OUTPUT_TYPES.unassigned;
+// Bound = a real output type with every connection field filled in. Only bound rows get an
+// actuator, get attached, or are driven (play / scrub / jump / live drag / free / pose).
+const isBound = (rw) => rw.type !== 'unassigned' && TYPE(rw).fields.every(f => rw[f.key] != null);
 
 // --- Saved settings (browser localStorage) -----------------------------
 // Tool store (gestures + bus pins). The connection (IP / transport) is
@@ -82,9 +96,9 @@ const STORE = 'pardalote-gesture-builder';
 const DEFAULTS = {
     rx: 18, tx: 19,
     total: DEFAULT_TOTAL, headTime: 0,
-    rows: [
-        { id: 1, points: [ { t: 0, v: 2048, curve: 'easeInOut' }, { t: 2200, v: 3300, curve: 'easeOut' }, { t: 4600, v: 900, curve: 'linear' } ] },
-        { id: 2, points: [ { t: 0, v: 2048, curve: 'easeOut' }, { t: 1500, v: 1200, curve: 'easeIn' }, { t: 3400, v: 3000, curve: 'easeInOut' }, { t: 4600, v: 2048, curve: 'linear' } ] },
+    rows: [   // demo motion on unassigned rows (0–100 %) — pick each row's output to drive hardware
+        { type: 'unassigned', points: [ { t: 0, v: 50, curve: 'easeInOut' }, { t: 2200, v: 81, curve: 'easeOut' }, { t: 4600, v: 22, curve: 'linear' } ] },
+        { type: 'unassigned', points: [ { t: 0, v: 50, curve: 'easeOut' }, { t: 1500, v: 29, curve: 'easeIn' }, { t: 3400, v: 73, curve: 'easeInOut' }, { t: 4600, v: 50, curve: 'linear' } ] },
     ],
 };
 const saved = { ...DEFAULTS, ...(JSON.parse(localStorage.getItem(STORE) || '{}')) };
@@ -157,40 +171,49 @@ const svgH = () => RULER_H + rows.length * (ROW_H + ROW_GAP);
 
 // Drag ceiling: bus servos/PWM have a real physical max; steppers are open-ended
 // (default max is just a starting point — drag past it).
-const hardMax = (rw) => rw.type === 'stepper' ? 1000000 : TYPE(rw).defMax;
+// A raw (pasted) unassigned lane is open-ended too — its units aren't known yet.
+const hardMax = (rw) => (rw.type === 'stepper' || (rw.type === 'unassigned' && !rw.pct)) ? 1000000 : TYPE(rw).defMax;
+// A new row is UNASSIGNED: no type, no pins, no ID — it never touches the board until the
+// user picks its output. It starts OFF (and can't be switched on) until it's bound. `pct` marks its keys as 0–100 % (rescaled when a type is picked);
+// a lane pasted from code carries raw values instead (pct false — see applyParsedLanes).
 function defaultRow() {
-    return { type: 'busservo', id: 1, pin: 9, step: 2, dir: 3, en: -1, name: '', on: true, min: 0, max: 4095,
-             points: [ { t: 0, v: 2048, curve: 'linear' }, { t: DEFAULT_TOTAL, v: 2048, curve: 'linear' } ] };
+    return { type: 'unassigned', id: null, pin: null, step: null, dir: null, en: -1, name: '', on: false, min: 0, max: 100, pct: true,
+             points: [ { t: 0, v: 50, curve: 'linear' }, { t: DEFAULT_TOTAL, v: 50, curve: 'linear' } ] };
 }
+// null/blank connection field stays null (blank); anything else is clamped to range.
+function optInt(v, lo, hi) { return (v == null || v === '') ? null : clampInt(v, lo, hi); }
 function normaliseRows(list) {
     const arr = (Array.isArray(list) ? list : []).slice(0, MAX_ROWS).map(r => {
-        const type = OUTPUT_TYPES[r.type] ? r.type : 'busservo';
-        const t = OUTPUT_TYPES[type], hMax = (type === 'stepper') ? 1000000 : t.defMax;
+        // A row saved with NO type predates output types — those were all bus servos.
+        const type = r.type == null ? 'busservo' : (OUTPUT_TYPES[r.type] ? r.type : 'unassigned');
+        const pct = type === 'unassigned' && r.pct !== false;
+        const t = OUTPUT_TYPES[type], hMax = (type === 'stepper' || (type === 'unassigned' && !pct)) ? 1000000 : t.defMax;
         const lo = clampInt(r.min == null ? 0 : r.min, 0, hMax);
         const hi = clampInt(r.max == null ? t.defMax : r.max, 0, hMax);
         let min = Math.min(lo, hi), max = Math.max(lo, hi);
         if (max - min < 1) { min = 0; max = t.defMax; }   // never let the axis collapse
         return {
-            type,
-            id:   clampInt(r.id   == null ? 1  : r.id,   1, 253),
-            pin:  clampInt(r.pin  == null ? 9  : r.pin,  0, 99),
-            step: clampInt(r.step == null ? 2  : r.step, 0, 99),
-            dir:  clampInt(r.dir  == null ? 3  : r.dir,  0, 99),
-            en:   clampInt(r.en   == null ? -1 : r.en,  -1, 99),
+            type, pct,
+            id:   optInt(r.id,   1, 253),
+            pin:  optInt(r.pin,  0, 99),
+            step: optInt(r.step, 0, 99),
+            dir:  optInt(r.dir,  0, 99),
+            en:   clampInt(r.en == null ? -1 : r.en, -1, 99),
             name: typeof r.name === 'string' ? r.name.slice(0, 40) : '',   // '' = use the "Output N" default
-            on: r.on !== false,   // included in playback (default on)
+            on: r.on !== false,   // included in playback (default on) — forced off below if unbound
             min, max,
             points: (Array.isArray(r.points) ? r.points : []).slice(0, MAX_POINTS)
                 .map(p => ({ t: clamp(Math.round(+p.t || 0), 0, TMAX), v: clamp(Math.round(+p.v || 0), min, max), curve: CURVES.includes(p.curve) ? p.curve : 'linear' }))
                 .sort((a, b) => a.t - b.t),
         };
     });
+    arr.forEach(rw => { if (!isBound(rw)) rw.on = false; });   // no output / blank pin → off
     return arr.length ? arr : [defaultRow()];
 }
 function persist() {
     if (!rxTxLocked) { saved.rx = int(rxEl.value); saved.tx = int(txEl.value); }
     saved.total = TOTAL; saved.headTime = headTime;
-    saved.rows = rows.map(r => ({ type: r.type, id: r.id, pin: r.pin, step: r.step, dir: r.dir, en: r.en, name: r.name || '', on: r.on !== false, min: r.min, max: r.max, points: r.points.map(p => ({ t: p.t, v: p.v, curve: p.curve })) }));
+    saved.rows = rows.map(r => ({ type: r.type, pct: r.pct, id: r.id, pin: r.pin, step: r.step, dir: r.dir, en: r.en, name: r.name || '', on: r.on !== false, min: r.min, max: r.max, points: r.points.map(p => ({ t: p.t, v: p.v, curve: p.curve })) }));
     localStorage.setItem(STORE, JSON.stringify(saved));
     updateCode();
 }
@@ -225,13 +248,15 @@ function laneList() {
 const descStr = (rw) => rw.type === 'servo'   ? `pin ${rw.pin}`
                       : rw.type === 'stepper' ? `STEP ${rw.step}/DIR ${rw.dir}/EN ${rw.en}`
                       :                         `ID ${rw.id}`;
+// With no active lanes, say WHY: rows with keys but no output set up (they're held off).
+const noLanesMsg = (what) => rows.some(rw => !isBound(rw) && rw.points.length)
+    ? `// set up a row's output (click its ⚙ setting) to get ${what}` : '// add keyframes to a row';
 
 // --- JavaScript panels -------------------------------------------------
 // Definition (EDITABLE): just the data — one segment array per lane, keyed by the lane name.
 // Edit or paste it and click away to rebuild the timeline (applyDefEdit). No comments/exec so
 // it round-trips cleanly.
-function generateJsDef() {
-    const lanes = laneList();
+function generateJsDef(lanes = laneList()) {
     if (!lanes.length) return 'const gesture = {\n};';
     const L = ['const gesture = {'];
     lanes.forEach((a, i) => {
@@ -246,7 +271,7 @@ function generateJsDef() {
 // inline (same block as the definition panel) plus setup and connection, so it copies-and-runs.
 function generateJsUse() {
     const lanes = laneList();
-    if (!lanes.length) return '// add keyframes to a row';
+    if (!lanes.length) return noLanesMsg('runnable code');
     const attachStr = (id, rw) => rw.type === 'servo'   ? `arduino.${id}.attach(${rw.pin})`
                                 : rw.type === 'stepper' ? `arduino.${id}.attach(${rw.step}, ${rw.dir}, ${rw.en})`
                                 :                         `arduino.${id}.attach(${rw.id}, 'ST')`;
@@ -255,7 +280,7 @@ function generateJsUse() {
     L.push('const arduino = new Arduino();');
     lanes.forEach(a => L.push(`arduino.add('${a.id}', new ${TYPE(a.rw).cls}());`));
     L.push('');
-    L.push(generateJsDef());   // the gesture data, inline (same block as the definition panel)
+    L.push(generateJsDef(lanes));   // the gesture data, inline (same block as the definition panel)
     L.push('');
     L.push("arduino.on('ready', () => {");
     lanes.forEach(a => {
@@ -285,8 +310,7 @@ const CPP = {
 };
 // Definition (EDITABLE): the PardaloteSeg[] arrays — one per lane, named <id>Segs. Each segment
 // is { curve, duration-ms, value } (absolute). Edit/paste + click away to rebuild the timeline.
-function generateInoDef() {
-    const lanes = laneList();
+function generateInoDef(lanes = laneList()) {
     if (!lanes.length) return '// add keyframes to a row';
     const L = [];
     lanes.forEach(a => {
@@ -300,7 +324,7 @@ function generateInoDef() {
 // inline (same block as the definition panel) plus setup()/loop(), so it copies-and-runs.
 function generateInoUse() {
     const lanes = laneList();
-    if (!lanes.length) return '// add keyframes to a row';
+    if (!lanes.length) return noLanesMsg('a runnable sketch');
     const cppAttachArgs = (id, rw) => rw.type === 'servo'   ? `"${id}", ${rw.pin}`
                                     : rw.type === 'stepper' ? `"${id}", ${rw.step}, ${rw.dir}, ${rw.en}`
                                     :                         `"${id}", ${rw.id}`;
@@ -311,7 +335,7 @@ function generateInoUse() {
     L.push('');
     L.push(`int ${lanes.map(a => a.id).join(', ')};   // logical ids from attach()`);
     L.push('');
-    L.push(generateInoDef());   // the gesture data, inline (same block as the definition panel)
+    L.push(generateInoDef(lanes));   // the gesture data, inline (same block as the definition panel)
     L.push('');
     L.push('// Play the gesture — from a button, a sensor, any input.');
     L.push('void playGesture() {');
@@ -388,11 +412,10 @@ function segmentsToPoints(segs, min, max) {
 }
 // Rebuild the timeline from parsed lanes (def is source of truth): each lane matches an existing
 // ACTIVE row by its generated id — keeping that row's type / pins / limits — or becomes a new
-// bus-servo row. Active rows the def omits are dropped; inactive/empty rows are left untouched.
+// UNASSIGNED row. Active rows the def omits are dropped; inactive/empty rows are left untouched.
 function applyParsedLanes(lanes) {
     const byId = new Map(laneList().map(a => [a.id, a.rw]));
     const claimed = new Set();
-    let nextId = Math.min(253, Math.max(0, ...rows.map(r => r.id)) + 1);
     const out = [];
     lanes.forEach(lane => {
         const existing = byId.get(lane.key);
@@ -401,9 +424,13 @@ function applyParsedLanes(lanes) {
             existing.points = segmentsToPoints(lane.segs, existing.min, existing.max);
             if (existing.points.length) { out.push(existing); return; }
         }
-        const row = defaultRow();               // new lane → default bus-servo row (user sets its ID)
-        row.name = lane.key; row.id = Math.min(253, nextId++);
-        row.points = segmentsToPoints(lane.segs, row.min, row.max);
+        // New lane → unassigned row. Pasted values are in some output's native units (unknown
+        // here), so keep them RAW (not %): the axis stretches to fit, and picking a type later
+        // keeps the values as-is rather than rescaling them.
+        const row = defaultRow();
+        row.name = lane.key; row.pct = false;
+        row.points = segmentsToPoints(lane.segs, 0, 1000000);
+        row.max = Math.max(100, ...row.points.map(p => p.v));
         if (row.points.length) out.push(row);
     });
     // Preserve rows the def never listed (switched off or empty) — editing it shouldn't delete them.
@@ -535,13 +562,15 @@ function buildGutter() {
         const name = div('rl-name'); name.textContent = rowName(rw, r); name.title = 'click to rename';
         name.addEventListener('click', () => startRename(r, name));
         // output summary (type + connection) — click opens the settings dialog
-        const output = div('rl-output'); output.textContent = outputSummary(rw); output.title = 'output settings — type & pins';
+        const output = div('rl-output'); output.title = 'output settings — type & pins';
+        setOutputSummary(output, rw);
         output.addEventListener('click', (e) => openOutputDialog(r, e));
         const deg = div('rl-deg'); deg.textContent = '—';
         // per-output controls: "on" includes it in playback; "free" releases it (greyed when the type can't be freed)
         const ctrls = div('rl-ctrls');
         const onLbl = document.createElement('label'); onLbl.className = 'rl-on'; onLbl.title = 'include this output when you press play';
         const onChk = document.createElement('input'); onChk.type = 'checkbox'; onChk.checked = rw.on !== false;
+        if (!isBound(rw)) { onChk.disabled = true; onLbl.classList.add('locked'); onLbl.title = 'set up this output (⚙) to switch it on'; }
         onChk.addEventListener('change', () => setRowOn(r, onChk.checked));
         onLbl.append(onChk, 'on');
         const freeBtn = document.createElement('button'); freeBtn.className = 'rl-free'; freeBtn.textContent = 'free'; freeBtn.title = 'release this output so you can hand-pose it (toggle)';
@@ -657,6 +686,7 @@ function renderAll() { rows.forEach((_, r) => renderRow(r)); }
 // number changes). Up = higher. Hard-capped at [0, MAXV]; a min GAP keeps min < max.
 function startLimitDrag(e, r, which) {
     if (e.button !== 0) return;   // left-drag only (right-click opens the pose/reset menu)
+    if (rows[r].type === 'unassigned') { setStatus('limits need an output — assign one first'); return; }
     e.preventDefault(); e.stopPropagation();
     const startY = e.clientY, startVal = rows[r][which];
     const cpp = TYPE(rows[r]).defMax / (laneBot(r) - laneTop(r));   // native units per pixel (visual scale)
@@ -674,7 +704,7 @@ function startLimitDrag(e, r, which) {
         window.removeEventListener('pointerup', up);
         rows[r].points.forEach(p => p.v = clamp(p.v, rows[r].min, rows[r].max));   // keep keys in range
         renderRow(r);
-        const s = ready && arduino[servoName(r)];
+        const s = act(r);
         if (s && s.setLimits) s.setLimits(rows[r].min, rows[r].max);
         persist();
         setStatus(`${rowName(rows[r], r)} limits ${rows[r].min}–${rows[r].max} ${TYPE(rows[r]).unit}`);
@@ -682,23 +712,37 @@ function startLimitDrag(e, r, which) {
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
 }
-// Compact gutter summary of a row's output — click it to open the settings dialog.
+// Compact gutter summary of a row's output — click it to open the settings dialog. A blank
+// field shows as "?" and the line is styled as a prompt until the row is bound.
 function outputSummary(rw) {
-    const conn = rw.type === 'servo'   ? `pin ${rw.pin}`
-               : rw.type === 'stepper' ? `${rw.step}/${rw.dir}/${rw.en}`
-               :                         `ID ${rw.id}`;
+    if (rw.type === 'unassigned') return 'Unassigned';
+    const f = (v) => v == null ? '?' : v;
+    const conn = rw.type === 'servo'   ? `pin ${f(rw.pin)}`
+               : rw.type === 'stepper' ? `${f(rw.step)}/${f(rw.dir)}/${rw.en}`
+               :                         `ID ${f(rw.id)}`;
     return `${TYPE(rw).label} · ${conn}`;
 }
-function refreshOutputSummary(r) { const c = gutterCells[r]; if (c && c.output) c.output.textContent = outputSummary(rows[r]); }
+function setOutputSummary(el, rw) {
+    el.textContent = outputSummary(rw);
+    el.classList.toggle('unassigned', rw.type === 'unassigned');
+    el.classList.toggle('incomplete', rw.type !== 'unassigned' && !isBound(rw));
+}
+function refreshOutputSummary(r) { const c = gutterCells[r]; if (c && c.output) setOutputSummary(c.output, rows[r]); }
 function setOutputType(r, type) {
     const rw = rows[r];
     if (!OUTPUT_TYPES[type] || rw.type === type) return;
-    const oldDefMax = TYPE(rw).defMax, nMax = OUTPUT_TYPES[type].defMax;
-    // convert keyframes to the new unit (proportional to each type's default range)
-    rw.points.forEach(p => { p.v = clamp(Math.round(p.v / oldDefMax * nMax), 0, nMax); });
-    rw.type = type; rw.min = 0; rw.max = nMax; rw.freed = false;
-    ensureActuator(r);
-    if (ready) { const s = arduino[servoName(r)]; if (s && s.isAttached && s.detach) s.detach(); bindRow(r); }
+    const nMax = OUTPUT_TYPES[type].defMax;
+    // Convert keyframes to the new unit, proportional to each type's default range — except a
+    // RAW unassigned lane (pasted from code): its values are already native, so keep them as-is.
+    const raw = rw.type === 'unassigned' && !rw.pct;
+    const oldDefMax = TYPE(rw).defMax, wasBound = isBound(rw);
+    releaseRow(r);   // the old output lets go of its pins before the row changes type
+    rw.type = type; rw.pct = true; rw.min = 0; rw.freed = false;
+    // raw values may exceed the default range (e.g. stepper steps) — widen the axis up to the type's hard max
+    rw.max = raw ? clamp(Math.max(nMax, ...rw.points.map(p => p.v)), 1, hardMax(rw)) : nMax;
+    rw.points.forEach(p => { p.v = clamp(Math.round(raw ? p.v : p.v / oldDefMax * nMax), 0, rw.max); });
+    syncRowOn(r, wasBound);  // off until the new type's fields are all filled in
+    if (ready) bindRow(r);   // no-op until then too
     rebuildAllDom(); persist();
     if (outputDialogRow === r) renderOutputDialog();   // keep the open dialog in sync
     setStatus(`${rowName(rw, r)} → ${OUTPUT_TYPES[type].label}`);
@@ -729,9 +773,9 @@ function confirmOutputDialog() { endOutputDialog(); }   // OK — changes alread
 function cancelOutputDialog() {
     const r = outputDialogRow;
     if (r != null && outputDialogSnapshot) {
+        releaseRow(r);                    // let go of whatever the dialog attached
         rows[r] = outputDialogSnapshot;   // revert type / pins / rescaled keys / limits
-        ensureActuator(r);
-        if (ready) { const s = arduino[servoName(r)]; if (s && s.isAttached && s.detach) s.detach(); bindRow(r); }
+        if (ready) bindRow(r);
         rebuildAllDom(); persist();
     }
     endOutputDialog();
@@ -775,15 +819,20 @@ function renderOutputDialog() {
     t.fields.forEach(f => {
         const fld = div('od-field');
         const lab = document.createElement('label'); lab.textContent = f.label;
-        const inp = document.createElement('input'); inp.type = 'number'; inp.value = rw[f.key]; inp.min = f.min; inp.max = f.max;
-        inp.onchange = () => { rw[f.key] = clampInt(inp.value, f.min, f.max); inp.value = rw[f.key]; persist(); reattachRow(r); updateFreeButtons(); refreshOutputSummary(r); };
+        const inp = document.createElement('input'); inp.type = 'number'; inp.value = rw[f.key] ?? ''; inp.min = f.min; inp.max = f.max;
+        inp.placeholder = '—';   // blank until the user says which pin / ID — never guessed
+        // Clearing a field un-binds the row (reattachRow releases it); filling the last one binds it.
+        inp.onchange = () => { const wasBound = isBound(rw); rw[f.key] = optInt(inp.value.trim(), f.min, f.max); inp.value = rw[f.key] ?? ''; syncRowOn(r, wasBound); persist(); reattachRow(r); updateFreeButtons(); refreshOutputSummary(r); note.textContent = noteText(); };
         fld.append(lab, inp); fieldsRow.appendChild(fld);
     });
     dlg.appendChild(fieldsRow);
     const note = div('od-note');
-    note.textContent = t.hasFeedback ? 'Reports position — pose & free available.'
+    const noteText = () => rw.type === 'unassigned' ? 'No output yet — pick a type, then enter its pins / ID. Nothing is sent to the board until then.'
+                     : !isBound(rw)  ? 'Enter every field to connect this output — it stays off the board until then.'
+                     : t.hasFeedback ? 'Reports position — pose & free available.'
                      : rw.type === 'stepper' ? 'No position feedback. Free needs an EN pin (−1 = none).'
                      : 'No position feedback. PWM servos always hold — no free.';
+    note.textContent = noteText();
     dlg.appendChild(note);
     // OK / Cancel
     const actions = div('od-actions');
@@ -807,7 +856,8 @@ function setLimitLabels(r) {
 function startPoseLimits(r) {
     if (!TYPE(rows[r]).hasFeedback) { setStatus('pose limits needs a bus servo (live position)'); return; }
     if (!ready) { setStatus('connect the board first'); return; }
-    const s = arduino[servoName(r)];
+    const s = act(r);
+    if (!s) { setStatus('pose limits needs the output set up — click its ⚙ setting'); return; }
     if (s.present === false) { setStatus(`${rowName(rows[r], r)} not found`); return; }
     const pos = clamp(Math.round(s.position >= 0 ? s.position : MAXV / 2), 0, MAXV);
     limitPose = { row: r, min: pos, max: pos };
@@ -821,7 +871,7 @@ function commitPoseLimits() {
     if (mx - mn < 1) mx = Math.min(MAXV, mn + 1);   // never collapse the axis
     rows[r].min = mn; rows[r].max = mx;
     rows[r].points.forEach(p => p.v = clamp(p.v, mn, mx));
-    const s = arduino[servoName(r)];
+    const s = act(r);
     if (s) { s.enableTorque(); s.setLimits(mn, mx); }
     rows[r].freed = false; updateFreeButtons();
     setLimitLabels(r); renderRow(r); persist();
@@ -830,17 +880,18 @@ function commitPoseLimits() {
 function cancelPoseLimits() {
     if (!limitPose) return;
     const { row: r } = limitPose; limitPose = null;
-    const s = arduino[servoName(r)];
+    const s = act(r);
     if (s) s.enableTorque();
     rows[r].freed = false; updateFreeButtons();
     setLimitLabels(r);   // restore the unchanged values
     setStatus(`${rowName(rows[r], r)} pose limits cancelled`);
 }
 function resetLimits(r) {
+    if (rows[r].type === 'unassigned') { setStatus('limits need an output — assign one first'); return; }
     const dMax = TYPE(rows[r]).defMax;
     rows[r].min = 0; rows[r].max = dMax;
     rows[r].points.forEach(p => p.v = clamp(p.v, 0, dMax));
-    const s = ready && arduino[servoName(r)];
+    const s = act(r);
     if (s && s.clearLimits) s.clearLimits();
     setLimitLabels(r); renderRow(r); persist();
     setStatus(`${rowName(rows[r], r)} limits reset (0–${dMax})`);
@@ -1018,7 +1069,8 @@ const pointMenuItems = (r, i) => {
 function manualSet(r, i) {
     if (!TYPE(rows[r]).hasFeedback) { setStatus('pose servo needs a bus servo (live position)'); return; }
     if (!ready) { setStatus('connect the board first'); return; }
-    const s = arduino[servoName(r)];
+    const s = act(r);
+    if (!s) { setStatus('pose servo needs the output set up — click its ⚙ setting'); return; }
     if (s.present === false) { setStatus(`${rowName(rows[r], r)} not found`); return; }
     manualPt = { row: r, i, orig: rows[r].points[i].v };   // remember the value so Esc can restore it
     selectPoint(r, i);
@@ -1028,7 +1080,7 @@ function manualSet(r, i) {
 function commitManualSet() {
     if (!manualPt) return;
     const { row: r, i } = manualPt; manualPt = null;
-    const s = arduino[servoName(r)];
+    const s = act(r);
     if (s) s.enableTorque();   // re-hold at the posed angle — motor active again, not freed
     rows[r].freed = false; updateFreeButtons();
     clearSelection();   // drop the green "posing" fill AND deselect → the keyframe returns to white
@@ -1041,7 +1093,7 @@ function cancelManualSet() {
     if (!manualPt) return;
     const { row: r, i, orig } = manualPt; manualPt = null;
     rows[r].points[i].v = orig;
-    const s = arduino[servoName(r)];
+    const s = act(r);
     if (s) s.write(orig);   // re-engage torque and move back to the original angle
     rows[r].freed = false; updateFreeButtons();
     renderRow(r);
@@ -1055,8 +1107,7 @@ function cancelManualSet() {
 function addRowAt(index) {
     if (rows.length >= MAX_ROWS) { setStatus(`max ${MAX_ROWS} rows`); return; }
     index = clamp(index, 0, rows.length);
-    const nextId = Math.min(253, Math.max(0, ...rows.map(r => r.id)) + 1);
-    const row = defaultRow(); row.id = nextId; rows.splice(index, 0, row);
+    rows.splice(index, 0, defaultRow());   // unassigned — the user picks its output + pins
     afterRowChange(index, index);   // rebind from the insert down; only the new row (at index) frees
 }
 function deleteRow(index) {
@@ -1074,11 +1125,12 @@ function afterRowChange(fromIndex = 0, newIndex = -1) {
 // other re-bound row RESTORES its current freed state, so adding a row frees ONLY the new row.
 function rebindAll(fromIndex = 0, newIndex = -1) {
     if (!ready) return;
-    for (let r = fromIndex; r < rows.length; r++) {
-        const s = arduino[servoName(r)];
-        if (s && s.isAttached && s.detach) s.detach();
-        bindRow(r, r === newIndex);
-    }
+    // Release ALL shifted rows (and the tail) BEFORE binding any: rebinding one row at a time
+    // would attach row r to a pin row r+1 still holds, and row r+1's detach would then free
+    // that pin out from under it (ESP32 LEDC: one attach per pin, detach is by pin).
+    for (let r = fromIndex; r < rows.length; r++) releaseRow(r);
+    releaseTail();
+    for (let r = fromIndex; r < rows.length; r++) bindRow(r, r === newIndex);
     updateFreeButtons();
 }
 
@@ -1187,25 +1239,32 @@ window.addEventListener('resize', () => resizeSvg());
 function startPlayback(fromTime) {
     if (!ready) { setStatus('connect the board first'); return; }
     const lanes = {};   // keyed by the registered actuator name (servoName(r))
-    let maxDur = 0, active = 0;
+    let maxDur = 0, active = 0, unbound = 0;
     rows.forEach((rw, r) => {
-        if (!rw.points.length || rw.on === false) return;   // skip empty and switched-off rows
+        if (!rw.points.length) return;        // skip empty rows
+        if (!isBound(rw)) { unbound++; return; }   // no output set up (held off) — nothing to play it on
+        if (rw.on === false) return;          // switched off
+        const s = act(r);
+        if (!s) return;
         const segs = buildSegments(rw, fromTime);
         if (!segs) return;                    // no keyframes at/after the playhead
-        const s = arduino[servoName(r)];
         if (TYPE(rw).hold) TYPE(rw).hold(s); rw.freed = false;   // playing holds the output
         lanes[servoName(r)] = segs;
         maxDur = Math.max(maxDur, segs.reduce((a, b) => a + b.dur, 0));
         active++;
     });
-    if (!active) { setStatus(fromTime > 0 ? 'no keys at/after the playhead' : 'add some keys first'); return; }
+    if (!active) {
+        setStatus(unbound && !rows.some((rw, r) => act(r)) ? 'no outputs set up — click a row\'s ⚙ setting to assign one'
+                : fromTime > 0 ? 'no keys at/after the playhead' : 'add some keys first');
+        return;
+    }
     updateFreeButtons();
     scrubGroup = null;   // playing takes over from any manual scrub — drop the held group
     arduino.gesture(lanes, { absolute: true });   // one batched frame, channels start & arrive together
     playedServos = Object.keys(lanes).map(k => arduino[k]); gestureSeen = false;   // watch the board's isGesturing
     playing = true; playBase = fromTime; playStart = performance.now(); playDur = Math.max(1, maxDur);
     updateTransport();
-    setStatus(`playing ${active} servo${active === 1 ? '' : 's'} · ${playDur} ms`);
+    setStatus(`playing ${active} output${active === 1 ? '' : 's'} · ${playDur} ms` + (unbound ? ` · ${unbound} not set up, skipped` : ''));
 }
 // ▶ play — run the sequence forward from wherever the playhead is now.
 function play() { if (playing) return; startPlayback(headTime); }
@@ -1277,8 +1336,8 @@ function buildScrubGroup() {
     const members = {};
     rows.forEach((rw, r) => {
         if (rw.on === false || rw.freed === true || !rw.points.length) return;   // don't scrub a freed (hand-posed) output
-        const s = arduino[servoName(r)];
-        if (s.present === false) return;
+        const s = act(r);
+        if (!s || s.present === false) return;   // unbound / missing outputs aren't scrubbed
         members[servoName(r)] = s;
     });
     if (Object.keys(members).length) scrubGroup = arduino.group('seqScrub', members);
@@ -1307,7 +1366,7 @@ function driveMotorsTo(t) {
     const values = {};
     rows.forEach((rw, r) => {
         if (rw.on === false || rw.freed === true || !rw.points.length) return;
-        const s = arduino[servoName(r)];
+        const s = act(r);
         if (!s || s.present === false) return;
         const v = valueAtTime(rw, t);
         if (v != null) values[servoName(r)] = v;
@@ -1325,7 +1384,7 @@ function driveRowLive(r, force) {
     if (!ready) return;
     const rw = rows[r];
     if (rw.on === false || rw.freed === true || !rw.points.length) return;   // not a free/off/empty output
-    const s = arduino[servoName(r)];
+    const s = act(r);
     if (!s || s.present === false) return;
     const v = valueAtTime(rw, headTime);
     if (v == null || v === dragLastV) return;   // playhead not in this keyframe's reach → no movement
@@ -1336,10 +1395,10 @@ function driveRowLive(r, force) {
 }
 // "free" buttons are toggles — green when the servo is freed (torque off / hand-poseable).
 // `rw.freed` is live hardware state (not persisted); bindRow() frees on connect.
-const canFree = (r) => TYPE(rows[r]).canFree(rows[r]);   // PWM: never; stepper: only with an EN pin
+const canFree = (r) => isBound(rows[r]) && TYPE(rows[r]).canFree(rows[r]);   // PWM: never; stepper: only with an EN pin; unbound: never
 function setFreed(r, freed) {
-    const rw = rows[r], t = TYPE(rw), s = arduino[servoName(r)];
-    if (!canFree(r)) { rw.freed = false; return; }
+    const rw = rows[r], t = TYPE(rw), s = act(r);
+    if (!canFree(r) || !s) { rw.freed = false; return; }
     rw.freed = freed;
     if (freed) t.free(s); else t.hold(s);
 }
@@ -1371,15 +1430,31 @@ function freeAll() {
 function freeRow(r) {
     if (!canFree(r)) return;   // button is greyed for these types
     if (!ready) { setStatus('connect the board first'); return; }
-    const s = arduino[servoName(r)];
+    const s = act(r);
+    if (!s) { setStatus('connect the board first'); return; }
     if (s.present === false) { setStatus(`${rowName(rows[r], r)} not found`); return; }
     const freed = rows[r].freed !== true;
     setFreed(r, freed);
     updateFreeButtons();
     setStatus(`${rowName(rows[r], r)} ${freed ? 'freed — hand-pose it' : 'holding'}`);
 }
+// Keep "on" in step with binding: an unbound row is forced OFF (and its checkbox locked);
+// the moment its output is fully set up it switches ON. `wasBound` = state before the change.
+function syncRowOn(r, wasBound) {
+    const rw = rows[r], bound = isBound(rw);
+    if (!bound) rw.on = false; else if (!wasBound) rw.on = true;
+    const cell = document.querySelector(`.rowlabel[data-row="${r}"]`);
+    if (cell) {
+        cell.classList.toggle('off', rw.on === false);
+        const chk = cell.querySelector('.rl-on input'), lbl = cell.querySelector('.rl-on');
+        if (chk) { chk.checked = rw.on !== false; chk.disabled = !bound; }
+        if (lbl) { lbl.classList.toggle('locked', !bound); lbl.title = bound ? 'include this output when you press play' : 'set up this output (⚙) to switch it on'; }
+    }
+    if (laneGroups[r]) renderRow(r);   // dim / undim the lane
+}
 // Toggle a row in/out of playback (the gutter "on" checkbox).
 function setRowOn(r, on) {
+    if (on && !isBound(rows[r])) return;   // can't switch on a row with no output / a blank pin
     rows[r].on = on;
     document.querySelector(`.rowlabel[data-row="${r}"]`)?.classList.toggle('off', !on);
     renderRow(r);   // reflect the dimmed lane
@@ -1403,30 +1478,55 @@ function lockField(el, lock) {
     el.style.background = lock ? '#efece4' : '';
     el.style.cursor = lock ? 'not-allowed' : '';
 }
+// Bus RX/TX config is bus-wide and makes the board re-begin its serial port, so it's sent
+// ONCE per connection (by the first bus-servo bind) and again only when RX/TX change.
+let busConfigSent = false;
 function onReady() {
     applyR4Pins();
-    const busRow = rows.findIndex(rw => rw.type === 'busservo');   // bus RX/TX config is bus-wide
-    if (busRow >= 0) arduino[servoName(busRow)].configureBus(busPins());
-    rows.forEach((_, r) => bindRow(r));
+    busConfigSent = false;
+    // On (re)connect the library replays attach for every actuator still marked attached — which
+    // includes ones for rows deleted, or un-set, while disconnected. Let those go, then bind.
+    rows.forEach((rw, r) => { if (!isBound(rw)) dropName(servoName(r)); });
+    releaseTail();
+    rows.forEach((_, r) => bindRow(r));   // unassigned / incomplete rows are skipped
     ready = true; updateFreeButtons();
     setStatus(`ready — ${rows.length} output${rows.length === 1 ? '' : 's'}`);
 }
 // Make sure arduino[servoName(r)] is an instance of this row's output type (create/replace if not).
+// Unbound rows (unassigned, or a blank pin/ID) get no actuator — they never reach the board.
 function ensureActuator(r) {
-    if (!arduino) return null;
+    if (!arduino || !isBound(rows[r])) return null;
     const name = servoName(r), t = TYPE(rows[r]);
     if (!arduino[name] || arduino[name].constructor.name !== t.cls) arduino.add(name, t.make());
     return arduino[name];
 }
 function ensureAllActuators() { rows.forEach((_, r) => ensureActuator(r)); }
+// The row's live actuator — only when connected AND the row is bound. The one gate every
+// hardware path (play / scrub / jump / drag / free / pose / readout) goes through.
+function act(r) {
+    if (!ready || !rows[r] || !isBound(rows[r])) return null;
+    const s = arduino[servoName(r)];
+    return (s && s.constructor.name === TYPE(rows[r]).cls) ? s : null;
+}
+// Let go of whatever is registered under this row's name (the pins/ID it had before a change).
+function releaseRow(r) { if (ready) dropName(servoName(r)); }
+// arduino.remove() detaches it on the board AND frees its logical id for reuse, so rebinding /
+// retyping rows never walks off the end of the board's slot table.
+function dropName(name) { if (arduino && arduino[name]) arduino.remove(name); }
+// Rows are named by POSITION (seq0, seq1, …), so when the row count shrinks — a delete, or a
+// pasted definition with fewer lanes — the names past the end still hold their old outputs.
+// Remove them so their pins / IDs / PWM channels are freed on the board.
+function releaseTail() { for (let r = rows.length; r < MAX_ROWS; r++) dropName(servoName(r)); }
 // Command an output to hold at its current value (type-aware; used by stop).
-function holdHere(r) { const t = TYPE(rows[r]), s = arduino[servoName(r)]; if (s) t.write(s, t.cur(s)); }
+function holdHere(r) { const t = TYPE(rows[r]), s = act(r); if (s) t.write(s, t.cur(s)); }
 // initial=true → apply the type's connect default (bus servo frees for hand-posing). This is
 // a first connect or a genuinely new/retyped row. initial=false → RESTORE this row's current
 // freed state — used when RE-binding an already-bound row (its positional servoName shifted, or
 // the bus was reconfigured), so a rebind never force-frees a servo the user had holding torque.
 function bindRow(r, initial = true) {
     const rw = rows[r], t = TYPE(rw), s = ensureActuator(r);
+    if (!s) { rw.freed = false; return; }   // unbound — nothing to attach
+    if (rw.type === 'busservo' && !busConfigSent) { s.configureBus(busPins()); busConfigSent = true; }   // bus-wide: once, before the first bus attach
     t.attach(s, rw);
     if (initial) {
         if (t.freeOnConnect && t.free) { t.free(s); rw.freed = true; }   // bus servo: free on connect for hand-posing
@@ -1439,7 +1539,7 @@ function bindRow(r, initial = true) {
     if (rw.min > 0 || rw.max < t.defMax) s.setLimits(rw.min, rw.max);
     if (t.hasFeedback) s.read(150);                                  // only bus servos report position
 }
-function reattachRow(r) { if (!ready) return; const s = arduino[servoName(r)]; if (s && s.detach) s.detach(); ensureActuator(r); bindRow(r, false); }
+function reattachRow(r) { if (!ready) return; releaseRow(r); bindRow(r, false); }
 
 // -------------------------------------------------------------------
 // Live update loop — degrees / markers / playhead / edge auto-scroll
@@ -1447,7 +1547,7 @@ function reattachRow(r) { if (!ready) return; const s = arduino[servoName(r)]; i
 function tick() {
     rows.forEach((rw, r) => {
         const cell = gutterCells[r]; if (!cell) return;
-        const s = arduino && arduino[servoName(r)];
+        const s = act(r);
         const v = (ready && s) ? Number(TYPE(rw).cur(s)) : NaN;   // native value: counts / degrees / steps
         if (ready && s && s.present !== false && Number.isFinite(v)) {
             cell.deg.textContent = Math.round(v); cell.deg.className = 'rl-deg live';
@@ -1459,7 +1559,7 @@ function tick() {
     });
     // manual set: the keyframe's angle follows the hand-moved servo
     if (manualPt) {
-        const s = arduino[servoName(manualPt.row)];
+        const s = act(manualPt.row);
         if (s && s.present !== false && s.position >= 0) {
             rows[manualPt.row].points[manualPt.i].v = clamp(Math.round(s.position), rows[manualPt.row].min, rows[manualPt.row].max);
             renderRow(manualPt.row);
@@ -1467,7 +1567,7 @@ function tick() {
     }
     // pose limits: capture the range swept by the hand-moved servo (labels only, live)
     if (limitPose) {
-        const s = arduino[servoName(limitPose.row)];
+        const s = act(limitPose.row);
         if (s && s.present !== false && s.position >= 0) {
             const p = Math.round(s.position);
             if (p < limitPose.min) limitPose.min = p;
@@ -1526,7 +1626,7 @@ function setStatus(s) { statusEl.textContent = 'info: ' + s; }
 // Wire up controls + boot
 // -------------------------------------------------------------------
 rxEl.value = saved.rx; txEl.value = saved.tx;
-const applyPins = () => { persist(); if (ready) { const b = rows.findIndex(rw => rw.type === 'busservo'); if (b >= 0) arduino[servoName(b)].configureBus(busPins()); rows.forEach((_, i) => reattachRow(i)); } };
+const applyPins = () => { persist(); if (ready) { busConfigSent = false; rows.forEach((_, i) => reattachRow(i)); } };   // bindRow re-sends the bus config
 rxEl.onchange = applyPins; txEl.onchange = applyPins;
 
 $('toStart').onclick = goToStart;

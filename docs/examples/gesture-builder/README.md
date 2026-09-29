@@ -43,9 +43,13 @@ browser and the board just plays the gestures it's sent, on whatever outputs it 
 This is a **tool** — no code editing. Open `index.html` and:
 
 1. Connect (WiFi IP or **USB**) — the button turns green when it's up.
-2. For each row, **click its gutter summary** to open the settings dialog — pick the
-   output type and set its pins (ID / Pin / STEP·DIR·EN). Add or remove rows with the
-   **+ / −** buttons in the gutter.
+2. For each row, **click its gutter summary** (**⚙ Unassigned** on a new row) to open the
+   settings dialog — pick the output type and enter its pins (ID / Pin / STEP·DIR·EN). Add or
+   remove rows with the **+ / −** buttons in the gutter. New rows start **unassigned** and the
+   fields start **blank** — the tool never guesses which pin or ID your hardware is on. Until
+   a row is fully set up it's held **off** (its **on** box is locked) and never talks to the
+   board — you can still sketch its motion (on a 0–100 % scale, converted when you pick a
+   type). Fill in the last field and it switches **on**.
 3. Build the motion on the timeline:
 
 | Action | What it does |
@@ -74,14 +78,15 @@ Four code panels below the timeline. For each language, the **gesture** panel is
 definition (one segment array per output) and is **editable**; the **example use** panel
 beside it is a read-only, **self-contained** runnable program — it includes the gesture data
 inline plus setup and connection (or `setup()`/`loop()`), so you can copy that one panel and
-run it as-is. Switched-off rows are omitted, matching what **play** sends.
+run it as-is. Switched-off rows (including ones whose output isn't set up yet) are omitted, matching what
+**play** sends.
 
 **It's two-way.** Edit the numbers in a gesture panel — or paste in a definition you saved
 earlier — and **click away**: the timeline rebuilds from it, and every other panel (and the
 other language) regenerates to match. So you can bring an already-authored gesture back in and
 keep editing it visually. The definition is the source of truth: each lane matches an existing
-row by name (keeping its output type / pins / limits), a lane you add becomes a new bus-servo
-row (set its ID after), and a lane you remove drops that row. If the code can't be read, the
+row by name (keeping its output type / pins / limits), a lane you add becomes a new **unassigned**
+row (its values kept as written — pick its output after), and a lane you remove drops that row. If the code can't be read, the
 timeline is left untouched and the panel reverts.
 
 - **JavaScript** — a **`gesture`** object (one segment array per output, keyed by your

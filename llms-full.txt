@@ -925,7 +925,29 @@ arduino.on('ready', () => {
 });
 ```
 
-Each extension automatically gets a logical ID based on its type. Multiple instances of the same type are supported.
+Each extension automatically gets a **logical id** — its slot number on the board, counted **per type** from 0 (the first servo is servo 0 and the first stepper is stepper 0, whatever else the page adds). Multiple instances of the same type are supported, up to the board's slot count for that type:
+
+| Type | Instances at once |
+|---|---|
+| Servo | 8 |
+| Stepper | 6 |
+| Bus servo | 16 |
+| NeoPixel, Ultrasonic, Encoder | 4 each |
+| IMU | 2 |
+
+Adding one more than the board holds prints a warning — the board would ignore it.
+
+### remove()
+
+`arduino.remove(name)` is the inverse of `add()`: it releases the device on the board (detaches it, freeing its pin, bus ID or PWM channel), drops it from any groups, and frees its logical id for the next `add()` to reuse. Use it when a page changes what hardware it drives while running:
+
+```javascript sketch.js — swap a servo for a stepper
+arduino.remove('arm');                    // detach the servo on the board
+arduino.add('arm', new Stepper());        // a new stepper takes its place
+arduino.arm.attach(2, 3);
+```
+
+`add()` with a name that's already in use does the `remove()` for you, so the two lines above can be just the `add()`. The removed object is left **inert** — calling anything on it warns and sends nothing, because its old id may now belong to another device. Objects the **sketch** created (see below) belong to the sketch and can't be removed from the browser.
 
 ## Script loading order
 
@@ -995,7 +1017,7 @@ void setup() {
 
 | Object | `scan()` returns | `read(id)` returns | `id` is |
 |---|---|---|---|
-| `PardaloteServo` | attached servo ids | angle (0–180) | logical id (`arduino.add()` order, or returned by sketch `attach`) |
+| `PardaloteServo` | attached servo ids | angle (0–180) | logical id (the browser's per-type slot, or returned by sketch `attach`) |
 | `PardaloteStepper` | attached stepper ids | position (steps) | logical id |
 | `PardaloteBusServo` | responding **hardware** ids on the bus (discovery) | position (counts) | logical id (returned by `attach`) |
 
@@ -4361,9 +4383,13 @@ browser and the board just plays the gestures it's sent, on whatever outputs it 
 This is a **tool** — no code editing. Open `index.html` and:
 
 1. Connect (WiFi IP or **USB**) — the button turns green when it's up.
-2. For each row, **click its gutter summary** to open the settings dialog — pick the
-   output type and set its pins (ID / Pin / STEP·DIR·EN). Add or remove rows with the
-   **+ / −** buttons in the gutter.
+2. For each row, **click its gutter summary** (**⚙ Unassigned** on a new row) to open the
+   settings dialog — pick the output type and enter its pins (ID / Pin / STEP·DIR·EN). Add or
+   remove rows with the **+ / −** buttons in the gutter. New rows start **unassigned** and the
+   fields start **blank** — the tool never guesses which pin or ID your hardware is on. Until
+   a row is fully set up it's held **off** (its **on** box is locked) and never talks to the
+   board — you can still sketch its motion (on a 0–100 % scale, converted when you pick a
+   type). Fill in the last field and it switches **on**.
 3. Build the motion on the timeline:
 
 | Action | What it does |
@@ -4392,14 +4418,15 @@ Four code panels below the timeline. For each language, the **gesture** panel is
 definition (one segment array per output) and is **editable**; the **example use** panel
 beside it is a read-only, **self-contained** runnable program — it includes the gesture data
 inline plus setup and connection (or `setup()`/`loop()`), so you can copy that one panel and
-run it as-is. Switched-off rows are omitted, matching what **play** sends.
+run it as-is. Switched-off rows (including ones whose output isn't set up yet) are omitted, matching what
+**play** sends.
 
 **It's two-way.** Edit the numbers in a gesture panel — or paste in a definition you saved
 earlier — and **click away**: the timeline rebuilds from it, and every other panel (and the
 other language) regenerates to match. So you can bring an already-authored gesture back in and
 keep editing it visually. The definition is the source of truth: each lane matches an existing
-row by name (keeping its output type / pins / limits), a lane you add becomes a new bus-servo
-row (set its ID after), and a lane you remove drops that row. If the code can't be read, the
+row by name (keeping its output type / pins / limits), a lane you add becomes a new **unassigned**
+row (its values kept as written — pick its output after), and a lane you remove drops that row. If the code can't be read, the
 timeline is left untouched and the panel reverts.
 
 - **JavaScript** — a **`gesture`** object (one segment array per output, keyed by your

@@ -101,7 +101,45 @@
 <span class="w">    </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">sonar</span><span class="p">.</span><span class="nx">attach</span><span class="p">(</span><span class="mf">7</span><span class="p">,</span><span class="w"> </span><span class="mf">8</span><span class="p">);</span>
 <span class="p">});</span>
 </code></pre></div>
-<p>Each extension automatically gets a logical ID based on its type. Multiple instances of the same type are supported.</p>
+<p>Each extension automatically gets a <strong>logical id</strong> — its slot number on the board, counted <strong>per type</strong> from 0 (the first servo is servo 0 and the first stepper is stepper 0, whatever else the page adds). Multiple instances of the same type are supported, up to the board's slot count for that type:</p>
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>Instances at once</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Servo</td>
+<td>8</td>
+</tr>
+<tr>
+<td>Stepper</td>
+<td>6</td>
+</tr>
+<tr>
+<td>Bus servo</td>
+<td>16</td>
+</tr>
+<tr>
+<td>NeoPixel, Ultrasonic, Encoder</td>
+<td>4 each</td>
+</tr>
+<tr>
+<td>IMU</td>
+<td>2</td>
+</tr>
+</tbody>
+</table>
+<p>Adding one more than the board holds prints a warning — the board would ignore it.</p>
+<h3 id="remove">remove()</h3>
+<p><code>arduino.remove(name)</code> is the inverse of <code>add()</code>: it releases the device on the board (detaches it, freeing its pin, bus ID or PWM channel), drops it from any groups, and frees its logical id for the next <code>add()</code> to reuse. Use it when a page changes what hardware it drives while running:</p>
+<div class="code-ex"><span class="lang-badge lang-js">JS</span><div class="bar">sketch.js — swap a servo for a stepper</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">remove</span><span class="p">(</span><span class="s1">&#39;arm&#39;</span><span class="p">);</span><span class="w">                    </span><span class="c1">// detach the servo on the board</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;arm&#39;</span><span class="p">,</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">Stepper</span><span class="p">());</span><span class="w">        </span><span class="c1">// a new stepper takes its place</span>
+<span class="nx">arduino</span><span class="p">.</span><span class="nx">arm</span><span class="p">.</span><span class="nx">attach</span><span class="p">(</span><span class="mf">2</span><span class="p">,</span><span class="w"> </span><span class="mf">3</span><span class="p">);</span>
+</code></pre></div>
+<p><code>add()</code> with a name that's already in use does the <code>remove()</code> for you, so the two lines above can be just the <code>add()</code>. The removed object is left <strong>inert</strong> — calling anything on it warns and sends nothing, because its old id may now belong to another device. Objects the <strong>sketch</strong> created (see below) belong to the sketch and can't be removed from the browser.</p>
 <h2 id="script-loading-order">Script loading order</h2>
 <p><code>pardalote.js</code> is the all-in-one bundle — core plus every device extension — so a single script tag is all you need, loaded before your sketch:</p>
 <div class="code-ex"><div class="bar">index.html — script loading order</div><pre><code><span class="p">&lt;</span><span class="nt">script</span> <span class="na">src</span><span class="o">=</span><span class="s">&quot;pardalote.js&quot;</span><span class="p">&gt;&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
@@ -162,7 +200,7 @@
 <td><code>PardaloteServo</code></td>
 <td>attached servo ids</td>
 <td>angle (0–180)</td>
-<td>logical id (<code>arduino.add()</code> order, or returned by sketch <code>attach</code>)</td>
+<td>logical id (the browser's per-type slot, or returned by sketch <code>attach</code>)</td>
 </tr>
 <tr>
 <td><code>PardaloteStepper</code></td>
