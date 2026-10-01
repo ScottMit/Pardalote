@@ -118,6 +118,7 @@
 </tbody>
 </table>
 <p>The one exception is the <strong>UNO R4 Minima</strong> — it has no radio, so every <code>begin()</code> form starts the serial transport.</p>
+<p>Only the first call counts. If <code>begin()</code> appears twice, for example after combining two example sketches, the extra call is ignored and the Serial Monitor shows <code>[Pardalote] begin() was called more than once — ignoring the extra call</code>. Running the startup twice would restart WiFi and destabilise the connection.</p>
 <p>In serial mode, <code>Serial.print</code> from your sketch still works — the output travels between protocol messages and appears in the browser as the <a href="connecting.html#connectserial"><code>'log'</code> event</a> (and in the Serial Monitor as usual when the browser isn't connected). Don't <code>Serial.write</code> raw binary; text is fine.</p>
 <h2 id="pardaloterequirekey">Pardalote.requireKey()</h2>
 <p>Optional. Call <strong>before</strong> <code>begin()</code> to require a <strong>connection key</strong> — only browsers that pass the same key to <a href="connecting.html#connection-keys"><code>connect(ip, { key })</code></a> or <a href="connecting.html#connection-keys"><code>connectSerial({ key })</code></a> get in. It works over <strong>both</strong> transports and composes with every <code>begin()</code> form.</p>

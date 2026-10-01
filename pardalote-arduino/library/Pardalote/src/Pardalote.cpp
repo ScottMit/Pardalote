@@ -34,7 +34,17 @@ PardaloteClass::PardaloteClass() {
 // WiFi with the listen off; begin(PARDALOTE_SERIAL) is USB only. One
 // exception (Scott's call): on a board with no radio (UNO R4 Minima) every
 // form starts serial — the only transport the hardware can have.
+// A second begin() — easy to paste in when combining example sketches —
+// would rerun the whole startup (another WiFi.begin(), a second WebSocket
+// server start…) and destabilise the connection. Ignore it, loudly.
+bool PardaloteClass::_beginAgain() {
+    if (!_begun) return false;
+    Serial.println(F("[Pardalote] begin() was called more than once — ignoring the extra call"));
+    return true;
+}
+
 void PardaloteClass::begin() {
+    if (_beginAgain()) return;
 #ifdef PARDALOTE_NO_WIFI
     _beginSerial();
     Serial.println(F("[Pardalote] (no WiFi on this board — serial transport started)"));
@@ -45,6 +55,7 @@ void PardaloteClass::begin() {
 }
 
 void PardaloteClass::begin(int transport) {
+    if (_beginAgain()) return;
     if (transport == PARDALOTE_SERIAL) { _beginSerial(); return; }
 #ifdef PARDALOTE_NO_WIFI
     _beginSerial();

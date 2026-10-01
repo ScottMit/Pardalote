@@ -23,6 +23,8 @@ Starts Pardalote. Call once in `setup()`. Three forms:
 
 The one exception is the **UNO R4 Minima** — it has no radio, so every `begin()` form starts the serial transport.
 
+Only the first call counts. If `begin()` appears twice, for example after combining two example sketches, the extra call is ignored and the Serial Monitor shows `[Pardalote] begin() was called more than once — ignoring the extra call`. Running the startup twice would restart WiFi and destabilise the connection.
+
 In serial mode, `Serial.print` from your sketch still works — the output travels between protocol messages and appears in the browser as the [`'log'` event](connecting.html#connectserial) (and in the Serial Monitor as usual when the browser isn't connected). Don't `Serial.write` raw binary; text is fine.
 
 ## Pardalote.requireKey()

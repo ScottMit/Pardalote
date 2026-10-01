@@ -338,6 +338,7 @@ private:
     // begin(PARDALOTE_WIFI) leaves it false (no USB listen).
     bool _serialListen = false;
     bool _begun = false;   // a begin() form has run — requireKey() too late now
+    bool _beginAgain();    // true (and warns) if begin() already ran
     bool _rebootAnnounced = false;   // CMD_REBOOT sent once per boot (see _announceReboot)
     // Listen-window auth state for the prospective serial client (kept apart
     // from _authed[], whose slots belong to WS clients while WiFi is active).

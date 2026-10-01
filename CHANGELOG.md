@@ -18,6 +18,11 @@ Pardalote versions **two things independently**:
 
 ## [Unreleased]
 
+- **A second `Pardalote.begin()` is ignored, with a warning.** Pasting two example
+  sketches together easily leaves two `begin()` calls; the second used to rerun the whole
+  startup (another `WiFi.begin()`, a second WebSocket server start) and destabilise the
+  connection. The Serial Monitor now says `begin() was called more than once — ignoring
+  the extra call`.
 - **Fewer false disconnects.** The browser's heartbeat used to give up after one late
   reply (pings every 3 s, dead after 5 s with no pong), so a slow link — a phone hotspot,
   a weak signal — or a page that froze for a few seconds (a heavy ML model, a busy
