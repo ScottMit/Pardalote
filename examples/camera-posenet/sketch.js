@@ -1,14 +1,14 @@
 // ==============================================================
-// Camera PoseNet — p5.js + Pardalote
-// Runs ml5.js PoseNet on the MJPEG video streamed from an ESP32 camera,
-// instead of a local webcam (createCapture). There's no pin to set — the
-// camera's stream port is fixed by the firmware.
+// Camera Pose — p5.js + Pardalote
+// Runs Google MediaPipe Pose Landmarker on the MJPEG video streamed from an
+// ESP32 camera, instead of a local webcam (createCapture). There's no pin to
+// set — the camera's stream port is fixed by the firmware.
 //
 // The only real difference vs. a webcam: the video arrives as a cross-origin
-// MJPEG <img>. PoseNet has to READ pixels from it, so the <img> is loaded with
+// MJPEG <img>. MediaPipe has to READ pixels from it, so the <img> is loaded with
 // crossOrigin='anonymous' — which works because PardaloteCamera.h serves
 // Access-Control-Allow-Origin: *. The stream is HTTP-direct to the board's IP,
-// so PoseNet video needs a WiFi connection.
+// so pose video needs a WiFi connection.
 //
 // The on-page Board controls (WiFi / USB, remembered IP, Connect) live in
 // connect.js — this file is just the lesson.
@@ -23,29 +23,44 @@ const CAMERA_PORT = 82;
 const FRAME_SIZE = FRAMESIZE_VGA;   // 640×480 — matches the canvas
 
 // Flip the image left-to-right. A webcam selfie is usually mirrored.
-const MIRROR = true;
+// (Not called MIRROR — p5 already defines a MIRROR constant.)
+const MIRROR_VIDEO = true;
 
-// PoseNet always reports all 17 keypoints every frame, even ones it can't
-// actually see (occluded joints, or anything when the figure is small/far).
-// Those come back with a near-zero score and jitter around at random — so we
-// only draw keypoints (and skeleton bones) the model is at least this sure of.
-const MIN_CONFIDENCE = 0.2;
+// Pose model: 'lite' (fastest), 'full', or 'heavy' (most accurate, slowest).
+const POSE_MODEL = 'lite';
+
+// How many people to track at once.
+const NUM_POSES = 1;
+
+// Detections per second. Pose detection runs on the page's main thread, so
+// capping it leaves time for drawing and for the Pardalote connection. The
+// MJPEG stream rarely beats ~20 fps anyway.
+const DETECT_FPS = 15;
+
+// Each landmark carries a visibility score (0–1): how likely it is to be in
+// frame and not hidden. Only landmarks (and bones) at least this visible are drawn.
+const MIN_VISIBILITY = 0.5;
+
+// MediaPipe Tasks Vision — pinned so a new release can't break the example.
+const MP_VERSION = '0.10.14';
+const MP_URL = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MP_VERSION}`;
+const MODEL_URL = `https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_${POSE_MODEL}/float16/1/pose_landmarker_${POSE_MODEL}.task`;
 
 let arduino;
 let imgEl = null;                 // raw <img> holding the live MJPEG stream
 
-// --- ml5 PoseNet --------------------------------------------------------
-let poseNet, poseReady = false, detecting = false;
-let poses = [];
+// --- MediaPipe Pose Landmarker ------------------------------------------
+let poseLandmarker = null;
+let poseConnections = [];         // [{ start, end }] landmark index pairs
+let modelError = null;
+let lastDetect = 0;
+let poses = [];                   // one array of 33 landmarks per person
 
 function setup() {
     createCanvas(640, 480);
 
-    // Load the PoseNet model up front so it's warm by the time video arrives.
-    // No video is passed here: the stream isn't a <video>, so we drive
-    // detection ourselves with singlePose() once frames start arriving.
-    poseNet = ml5.poseNet(() => { poseReady = true; });
-    poseNet.on('pose', gotPoses);
+    // Load the model up front so it's warm by the time video arrives.
+    loadPoseModel();
 
     arduino = new Arduino();
     arduino.add('cam', new Camera());
@@ -60,9 +75,39 @@ function setup() {
     arduino.on('disconnect', clearStream);
 }
 
+// import() works from a normal (non-module) script, so p5 global mode is kept.
+async function loadPoseModel() {
+    try {
+        const { PoseLandmarker, FilesetResolver } = await import(MP_URL);
+        const vision = await FilesetResolver.forVisionTasks(`${MP_URL}/wasm`);
+        const options = (delegate) => ({
+            baseOptions: { modelAssetPath: MODEL_URL, delegate },
+            runningMode: 'VIDEO',      // track frame to frame — smoother than per-image
+            numPoses: NUM_POSES,
+        });
+        try {
+            poseLandmarker = await PoseLandmarker.createFromOptions(vision, options('GPU'));
+        } catch (err) {
+            console.warn('MediaPipe GPU delegate failed, falling back to CPU:', err);
+            poseLandmarker = await PoseLandmarker.createFromOptions(vision, options('CPU'));
+        }
+        // Warm up on a blank frame. The very first detection sets up the GPU and
+        // can freeze the page for several seconds — do it now, before the board
+        // is connected, rather than on the first video frame (where the freeze
+        // could look like a dead connection).
+        const blank = document.createElement('canvas');
+        blank.width = 64; blank.height = 48;
+        poseLandmarker.detectForVideo(blank, performance.now());
+        poseConnections = PoseLandmarker.POSE_CONNECTIONS;
+    } catch (err) {
+        console.error('Could not load MediaPipe Pose Landmarker:', err);
+        modelError = err;
+    }
+}
+
 // Build a fresh cross-origin <img> for the MJPEG stream. crossOrigin MUST be
-// set BEFORE src, or the browser fetches without CORS and PoseNet's pixel read
-// throws a tainted-canvas SecurityError.
+// set BEFORE src, or the browser fetches without CORS and MediaPipe's pixel
+// read throws a tainted-canvas SecurityError.
 function attachStream(url) {
     clearStream();
     imgEl = new Image();
@@ -74,49 +119,47 @@ function clearStream() {
     poses = [];
 }
 
-// PoseNet 'pose' event — same payload as the webcam path: [{ pose, skeleton }].
-function gotPoses(results) {
-    poses = results;
+// Run the model on the current stream frame, at most DETECT_FPS times a second.
+// detectForVideo() is synchronous — results are ready as soon as it returns.
+function detectPoses() {
+    const now = performance.now();
+    if (!poseLandmarker || now - lastDetect < 1000 / DETECT_FPS) return;
+    lastDetect = now;
+    try {
+        poses = poseLandmarker.detectForVideo(imgEl, now).landmarks;
+    } catch (err) {
+        // e.g. a frame that hasn't finished decoding — just try again next time
+        console.warn('Pose detection failed:', err);
+    }
 }
 
 function draw() {
     background(0);
 
     if (imgEl && imgEl.naturalWidth > 0) {
-        const srcW = imgEl.naturalWidth, srcH = imgEl.naturalHeight;
-        const sx = width / srcW, sy = height / srcH;   // stream → canvas scale
-
-        // Kick off a detection when the previous one has resolved. singlePose
-        // runs on the raw <img>; the 'pose' event updates poses[].
-        if (poseReady && !detecting) {
-            detecting = true;
-            poseNet.singlePose(imgEl)
-                .then(() => { detecting = false; })
-                .catch(() => { detecting = false; });
-        }
+        detectPoses();
 
         push();
-        if (MIRROR) { translate(width, 0); scale(-1, 1); }
-        scale(sx, sy);
-        drawingContext.drawImage(imgEl, 0, 0);   // native size; scale() fits it to the canvas
+        if (MIRROR_VIDEO) { translate(width, 0); scale(-1, 1); }
+        drawingContext.drawImage(imgEl, 0, 0, width, height);   // stretch the frame to the canvas
 
-        for (let p of poses) {
-            fill(0, 255, 0);
-            noStroke();
-            for (let kp of p.pose.keypoints) {
-                if (kp.score < MIN_CONFIDENCE) continue;
-                circle(kp.position.x, kp.position.y, 15/sx);
-            }
-
+        // Landmarks are 0–1 across the frame, so × width / height puts them on the canvas.
+        for (let landmarks of poses) {
             noFill();
             stroke(255);
-            strokeWeight(3/sx);
-            for (let bone of p.skeleton) {
-                // skeleton pairs are [keypointA, keypointB]; skip a bone unless
-                // both ends clear the threshold, so it can't anchor to a jittery point.
-                if (bone[0].score < MIN_CONFIDENCE || bone[1].score < MIN_CONFIDENCE) continue;
-                const a = bone[0].position, b = bone[1].position;
-                line(a.x, a.y, b.x, b.y);
+            strokeWeight(3);
+            for (let { start, end } of poseConnections) {
+                const a = landmarks[start], b = landmarks[end];
+                // skip a bone unless both ends are visible, so it can't anchor to a jittery point
+                if (a.visibility < MIN_VISIBILITY || b.visibility < MIN_VISIBILITY) continue;
+                line(a.x * width, a.y * height, b.x * width, b.y * height);
+            }
+
+            fill(0, 255, 0);
+            noStroke();
+            for (let lm of landmarks) {
+                if (lm.visibility < MIN_VISIBILITY) continue;
+                circle(lm.x * width, lm.y * height, 10);
             }
         }
         pop();
@@ -126,9 +169,10 @@ function draw() {
         rect(0, 0, width, height);
         fill('#6d6a5f');
         textAlign(CENTER, CENTER); textSize(16);
-        const msg = !arduino.connected ? 'Connecting…'
-                  : !poseReady          ? 'Loading PoseNet model…'
-                  :                       'Starting camera…';
+        const msg = modelError         ? 'Pose model failed to load — see the browser console'
+                  : !arduino.connected ? 'Connecting…'
+                  : !poseLandmarker    ? 'Loading pose model…'
+                  :                      'Starting camera…';
         text(msg, width / 2, height / 2);
         textAlign(LEFT, BASELINE);
     }
