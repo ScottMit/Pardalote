@@ -18,6 +18,35 @@ Pardalote versions **two things independently**:
 
 ## [Unreleased]
 
+- **Fewer false disconnects.** The browser's heartbeat used to give up after one late
+  reply (pings every 3 s, dead after 5 s with no pong), so a slow link — a phone hotspot,
+  a weak signal — or a page that froze for a few seconds (a heavy ML model, a busy
+  computer) dropped and reconnected a perfectly healthy board. Now any message from the
+  board counts as a sign of life, and the link is only declared dead after 3 unanswered
+  pings **and** 10 s with nothing received. A page that was frozen sent no pings, so it
+  can't mistake its own stall for a dead board. A board that really goes away is detected
+  in about 12 s (was about 8 s).
+- **Camera streams pace themselves to the network.** The stream used to send frames as
+  fast as the network would take them, keeping a slow link permanently full, so a single
+  lost packet froze the video for a second or more. Now the board pauses after each frame
+  for half the time it took to send: a slow link keeps headroom, a fast one still runs
+  near the camera's limit. Most noticeable since 1.3.0, which made `FRAMESIZE_VGA` really
+  640×480 (about 2.6× the data of the 400×296 it used to send).
+- **New `arduino.cam.setFrameRate(fps)`** — a fixed frame-rate ceiling on top of the
+  pacing (`0` = none). While streaming, the Serial Monitor prints the frame rate, frame
+  size and send times every 10 s.
+- **XIAO ESP32-S3 / C3: reduced WiFi transmit power by default.** These boards transmit
+  badly at full power (slow or failed joins, lag, drops, stalled video). Pardalote now sets
+  8.5 dBm right after each `WiFi.begin()`; on a XIAO ESP32-S3 Sense this took ping from
+  68 ± 57 ms to about 8 ± 2 ms and roughly doubled camera throughput. The boot log shows
+  `WiFi transmit power: 8.5 dBm`.
+- **New `Pardalote.setTxPower(WIFI_POWER_…)`** (ESP32 only) — set the WiFi transmit power
+  before `begin()`; `WIFI_POWER_19_5dBm` restores full power on a XIAO.
+- **Docs:** troubleshooting entries for XIAO WiFi problems and for short camera freezes
+  (packet loss, most often on a phone hotspot).
+- Protocol MINOR 1 → 2 (`CMD_CAMERA_SET_FPS`, backward compatible: older firmware ignores
+  it, and the JS only sends it once `setFrameRate()` is called).
+
 ## [1.4.0] — 2026-09-29
 
 - **Logical ids are per device type and get reused — no more "invalid id" after a few

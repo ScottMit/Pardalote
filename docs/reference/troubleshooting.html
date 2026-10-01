@@ -91,6 +91,9 @@
 <li>Arduino and browser must be on the same WiFi network</li>
 <li>Try refreshing — the Arduino may still be starting up</li>
 </ul>
+<h2 id="wifi-is-slow-drops-or-wont-join-on-a-xiao-esp32-s3-or-c3">&quot;WiFi is slow, drops, or won't join on a XIAO ESP32-S3 or C3&quot;</h2>
+<p>Seeed XIAO ESP32-S3 and ESP32-C3 boards transmit badly at full power because their antenna isn't well matched. The typical signs: the board takes several tries to join (you may see <code>wifi:sta is connecting, cannot set config</code> in the Serial Monitor), the connection lags and drops, <code>ping</code> to the board jumps between a few milliseconds and over 100, and camera video stalls. The signal strength the board <em>reports</em> (RSSI) can look perfectly good, because it only measures what the board receives.</p>
+<p>Pardalote lowers the transmit power on these boards to 8.5 dBm automatically. <strong>Update the Pardalote Arduino library</strong> if the Serial Monitor doesn't show <code>WiFi transmit power: 8.5 dBm</code> at boot. In our tests on a XIAO ESP32-S3 Sense, this cut ping times from 68 ± 57 ms to about 8 ± 2 ms and roughly doubled camera throughput. If the board is far from the router, try a little more power with <a href="arduino.html#pardalotesettxpower"><code>Pardalote.setTxPower(WIFI_POWER_15dBm)</code></a> before <code>begin()</code>.</p>
 <h2 id="serial-monitor-is-blank-on-an-esp32-c5-c3-or-s3-no-w-menu-board-seems-dead">&quot;Serial Monitor is blank on an ESP32-C5, C3 or S3 (no <code>w</code> menu, board seems dead)&quot;</h2>
 <p>On chips with native USB (ESP32-<strong>C5</strong>, <strong>C3</strong>, <strong>S3</strong>), <strong>Tools → USB CDC On Boot</strong> decides whether your sketch's <code>Serial</code> is routed to the USB port or to hardware UART0. With it <strong>Disabled</strong>, <code>Serial.print</code> goes out the UART pins and never reaches the USB Serial Monitor — so the <a href="wifi.html#option-b-eeprom-serial-monitor">WiFi setup <code>w</code> menu</a> never appears and the board looks hung, even though Pardalote is booting and running fine. <strong>Set USB CDC On Boot → <code>Enabled</code></strong> and re-upload.</p>
 <p>An early <code>E (…) MSPI Timing: Failed to allocate dummy cacheline for PSRAM</code> line can still print — that's harmless ROM-bootloader noise emitted <em>before</em> the CDC setting takes effect, not a PSRAM fault. Leave <strong>PSRAM → Disabled</strong> unless you're driving a camera. (Confirmed on the FireBeetle 2 ESP32-C5.)</p>
@@ -142,6 +145,13 @@
 <pre><code>another page is already streaming from this camera. The board sends one video stream at a time, so this page&#x27;s video will stay blank until that page is closed.
 </code></pre>
 <p>Close the other window or tab (or stop its stream with <code>detach()</code>) and the waiting page starts streaming by itself — no reload needed. Snapshots aren't affected — <code>snapshot()</code> has its own server and works while another page streams.</p>
+<h2 id="camera-the-video-freezes-for-a-second-or-two-then-carries-on">&quot;Camera: the video freezes for a second or two, then carries on&quot;</h2>
+<p>Short freezes with the board still connected are usually <strong>lost network packets</strong>, most often on a <strong>phone hotspot</strong>. Each video frame travels as a series of packets. When one is lost, the ESP32 waits a fixed time (about 1–2 s, set inside the ESP32 core) before resending it, and the video pauses until it arrives. The connection itself isn't affected: controls keep working, and nothing is logged in the browser.</p>
+<ul>
+<li><strong>Use a smaller frame size.</strong> <code>FRAMESIZE_QVGA</code> or <code>FRAMESIZE_HVGA</code> sends much less data than <code>FRAMESIZE_VGA</code> or <code>FRAMESIZE_HD</code>, so there are fewer packets to lose and more room to recover. VGA and larger are best kept for a good router.</li>
+<li><strong>On a XIAO</strong>, check the Serial Monitor shows the reduced transmit power (see above). At full power its losses take twice as long to recover.</li>
+<li><strong>Watch the Serial Monitor.</strong> While streaming, the board prints <code>[Camera] 8.4 fps, 25 KB/frame, 80 ms to send, max 1500 ms (640x480)</code> every 10 s. A <code>max</code> above about 1000 ms is one of these freezes. The board already paces the stream to the network (see <a href="camera.html#setframerate"><code>setFrameRate()</code></a>), so it doesn't make the link worse. It can't prevent packets being lost in the air, though.</li>
+</ul>
 <h2 id="neopixels-dont-light-up">&quot;NeoPixels don't light up&quot;</h2>
 <ul>
 <li>Verify the pixel type: <code>NEO_GRB</code> works for most WS2812B strips, <code>NEO_RGB</code> for some others</li>

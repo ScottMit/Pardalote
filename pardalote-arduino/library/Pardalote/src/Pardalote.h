@@ -135,6 +135,15 @@ public:
     // in cleartext. Composes with every begin() form.
     void requireKey(const char* key);
 
+#ifdef PLATFORM_ESP32
+    // Optional — WiFi transmit power, e.g. setTxPower(WIFI_POWER_15dBm).
+    // Call before begin() so the join uses it (after begin() it applies at
+    // once). XIAO ESP32-S3 / C3 boards default to WIFI_POWER_8_5dBm — their
+    // antenna misbehaves at full power; setTxPower(WIFI_POWER_19_5dBm)
+    // restores full power. Other boards default to full power.
+    void setTxPower(wifi_power_t power);
+#endif
+
     // Call from loop() — services the WebSocket, runs periodic reads,
     // dispatches per-extension housekeeping.
     void run();

@@ -49,6 +49,14 @@ extern PardaloteSecrets _pardaloteSecrets;
 // nullptr disables the USB watch (only 'w' is honoured).
 typedef int (*PardaloteBootProbe)(uint8_t b);
 
+// WiFi transmit power (ESP32), in the core's wifi_power_t units (0.25 dBm),
+// applied right after every WiFi.begin() so the join itself uses it.
+// PARDALOTE_TX_POWER_DEFAULT = leave the driver's default (full power).
+// XIAO ESP32-S3 / C3 boards default to 8.5 dBm — see wifi_config.cpp.
+// Set via Pardalote.setTxPower().
+#define PARDALOTE_TX_POWER_DEFAULT  (-128)
+extern int16_t _pardaloteTxPower;
+
 // Call at the top of setup(), before WiFi.begin().
 // Loads stored networks from EEPROM and enters the Serial config menu only if
 // no networks at all are available (secrets.h or EEPROM). There is no boot

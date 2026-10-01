@@ -96,6 +96,20 @@ JPEG compression level.
 |---|---|---|
 | `quality` | number | `0` = best image / highest bandwidth, `63` = worst / lowest. Default `12` — a good streaming balance. |
 
+## setFrameRate()
+
+Sets a maximum frame rate for the stream.
+
+<div class="sig">arduino.cam.<span class="fn">setFrameRate</span>(fps)</div>
+
+| Parameter | Type | Description |
+|---|---|---|
+| `fps` | number | Maximum frames per second, `1`–`60`. `0` removes the limit. By default there's no fixed limit. |
+
+You usually don't need it: the board paces the stream to suit the network. After sending each frame, it pauses for half the time that frame took to send. On a slow or busy link, such as a phone hotspot, this leaves headroom, so a lost packet doesn't freeze the video while it's resent. On a fast network, frames send quickly and the rate rises towards what the camera can capture. Use `setFrameRate()` when you want a fixed rate, for example to save power or leave more room for other traffic.
+
+While a stream is running, the Serial Monitor prints what the board achieved every 10 seconds, for example `[Camera] 8.4 fps, 25 KB/frame, 80 ms to send (640x480)`. Call `setFrameRate()` before or after `attach()`. The setting persists across reconnects.
+
 ## snapshot()
 
 Fetches a single JPEG still over HTTP.
@@ -158,7 +172,7 @@ function draw() {
 
 <div class="sig">arduino.cam.<span class="fn">getState</span>()</div>
 
-**Returns** `{ logicalId, port, streamUrl, snapshotUrl, framesize, quality }`.
+**Returns** `{ logicalId, port, streamUrl, snapshotUrl, framesize, quality, frameRate }`. `frameRate` is `null` until `setFrameRate()` is called.
 
 ## Limitations
 

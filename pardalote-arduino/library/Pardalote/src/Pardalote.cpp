@@ -57,6 +57,13 @@ void PardaloteClass::begin(int transport) {
 #endif
 }
 
+#ifdef PLATFORM_ESP32
+void PardaloteClass::setTxPower(wifi_power_t power) {
+    _pardaloteTxPower = power;
+    if (_begun && _transport == TRANSPORT_WIFI) WiFi.setTxPower(power);
+}
+#endif
+
 // requireKey() — set BEFORE begin(). Stashes the key; the transport starters
 // read _key/_keyRequired. Works on either transport (see the CMD_AUTH note in
 // defs.h). Idempotent-ish; truncates over-long keys with a warning.

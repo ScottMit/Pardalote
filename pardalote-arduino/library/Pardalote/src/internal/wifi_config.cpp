@@ -10,6 +10,19 @@
 // into this from the user's TU at static-init time, before begin().
 PardaloteSecrets _pardaloteSecrets = { nullptr, nullptr };
 
+// XIAO ESP32-S3 and ESP32-C3 boards transmit badly at full power (a poorly
+// matched antenna): slow or failed joins, big latency spikes, drops, and
+// stalled camera streams. Reducing TX power is the widely reported fix, and
+// on the bench (XIAO ESP32-S3 Sense, 2026-09-30) 8.5 dBm took ping from
+// 68±57 ms to ~8±2 ms and roughly doubled camera throughput. Signal strength
+// the board RECEIVES is unaffected; range is somewhat shorter.
+#if defined(PLATFORM_ESP32) && (defined(ARDUINO_XIAO_ESP32S3) || \
+    defined(ARDUINO_XIAO_ESP32S3_PLUS) || defined(ARDUINO_XIAO_ESP32C3))
+int16_t _pardaloteTxPower = WIFI_POWER_8_5dBm;
+#else
+int16_t _pardaloteTxPower = PARDALOTE_TX_POWER_DEFAULT;
+#endif
+
 // On no-WiFi boards (UNO R4 Minima) the whole credential manager
 // compiles out — the serial transport needs none of it.
 #ifndef PARDALOTE_NO_WIFI
@@ -283,6 +296,11 @@ static int _wifiTry(const char* label, const char* ssid, const char* pass,
     Serial.println(ssid);
     if (pass) WiFi.begin(ssid, pass);
     else      WiFi.begin(ssid);
+#ifdef PLATFORM_ESP32
+    // After begin(): the radio must be started for the setting to take.
+    if (_pardaloteTxPower != PARDALOTE_TX_POWER_DEFAULT)
+        WiFi.setTxPower((wifi_power_t)_pardaloteTxPower);
+#endif
     int r = _waitConnectOrInterrupt(10000, probe);
     if (r == 0) Serial.println(F("Failed."));
     if (r != 1) {
@@ -297,6 +315,14 @@ bool wifiConfigConnect(WifiStore& s, PardaloteBootProbe probe) {
     if (WiFi.status() == WL_NO_MODULE) {
         Serial.println(F("WiFi module not found"));
         while (true) delay(1000);
+    }
+#endif
+
+#ifdef PLATFORM_ESP32
+    if (_pardaloteTxPower != PARDALOTE_TX_POWER_DEFAULT) {
+        Serial.print(F("WiFi transmit power: "));
+        Serial.print(_pardaloteTxPower / 4.0f, 1);
+        Serial.println(F(" dBm (Pardalote.setTxPower() to change)"));
     }
 #endif
 

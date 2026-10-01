@@ -292,7 +292,7 @@ arduino.connect('192.168.1.42', 8081);                   // custom port
 arduino.connect('192.168.1.42', { key: 'robot-arm-3' }); // board requires a key
 ```
 
-Calling `connect()` (or `connectSerial()`) again starts a fresh session: pin modes, polled reads, and write listeners from the previous board are cleared. Each registered extension is reset to its just-constructed state, so attached servos, initialised strips, IMU calibration and camera streams are released — call `attach()` / `init()` again inside the new `on('ready')` handler. Event listeners attached with `on('change', …)` etc. survive, as do user-tuned settings like `setWriteThrottle`, `setWriteThreshold`, `setWriteRepeat` and `setQuality`.
+Calling `connect()` (or `connectSerial()`) again starts a fresh session: pin modes, polled reads, and write listeners from the previous board are cleared. Each registered extension is reset to its just-constructed state, so attached servos, initialised strips, IMU calibration and camera streams are released — call `attach()` / `init()` again inside the new `on('ready')` handler. Event listeners attached with `on('change', …)` etc. survive, as do user-tuned settings like `setWriteThrottle`, `setWriteThreshold`, `setWriteRepeat`, `setQuality` and `setFrameRate`.
 
 ### Connection keys
 
@@ -351,7 +351,7 @@ Registers a handler for a connection event.
 | `'authFail'` | The board refused this client's connection key (or required one that wasn't sent) — over WiFi or USB. Auto-reconnect stops — reconnect with the right key. |
 | `'usbBusy'` | Serial only: a `connectSerial()` without a picker gesture reached a board that's live on WiFi, which won't switch silently. Auto-reconnect stops — click Connect (which raises the picker) to switch it to USB. See [switching to USB](#switching-to-usb). |
 | `'log'` | Serial transport only: one line of the sketch's `Serial.print` output. |
-| `'warn'` | Something went wrong but Pardalote carried on — a write to an unattached servo, an oversized message key, a pong timeout. `source` says who's speaking (`"Pardalote"`, `"Servo 'pan'"`, `"Group 'arm'"`). |
+| `'warn'` | Something went wrong but Pardalote carried on — a write to an unattached servo, an oversized message key, a heartbeat timeout. `source` says who's speaking (`"Pardalote"`, `"Servo 'pan'"`, `"Group 'arm'"`). |
 | `'error'` | Something failed — a send error, a camera snapshot failure. Device errors also fire `'error'` on the device instance itself. |
 
 Every emitter (the core, devices, pin handles) also has `once(event, handler)` — a one-shot listener that removes itself after firing — and `off(event, handler)` to unsubscribe (`handler` omitted: remove all).
@@ -673,6 +673,25 @@ void setup() {
 ```
 
 Over WiFi it's an accident-prevention latch against joining a neighbour's board on a shared network. Over USB — where the cable already picks the board — the key becomes a **board-identity check**: a student who grabbed the wrong physical board gets a clear "wrong key for this board" error instead of silently driving it. **Not security** — the key travels unencrypted (over the network, or in the clear on USB). Up to 32 characters.
+
+## Pardalote.setTxPower()
+
+Optional, ESP32 only. Sets the WiFi transmit power. Call it **before** `begin()` so the board also joins the network at that power.
+
+`Pardalote.setTxPower(power)`
+
+```cpp
+void setup() {
+  Pardalote.setTxPower(WIFI_POWER_15dBm);   // optional — before begin()
+  Pardalote.begin();
+}
+```
+
+`power` is one of the ESP32 core's `WIFI_POWER_*` values, from `WIFI_POWER_19_5dBm` (full power) down to `WIFI_POWER_2dBm`.
+
+**Seeed XIAO ESP32-S3 and ESP32-C3 boards default to `WIFI_POWER_8_5dBm`.** At full power their antenna misbehaves: they join slowly or not at all, the connection lags and drops, and camera video stalls. Lowering the transmit power is the widely reported fix, and it made a large difference in our tests. The Serial Monitor shows the setting at boot (`WiFi transmit power: 8.5 dBm`). If a XIAO is far from the router and the signal is weak, try `WIFI_POWER_15dBm` or `WIFI_POWER_17dBm`. `WIFI_POWER_19_5dBm` restores full power.
+
+Other ESP32 boards use full power unless you call it. See Troubleshooting.
 
 ## Pardalote.run()
 
@@ -2842,6 +2861,20 @@ JPEG compression level.
 |---|---|---|
 | `quality` | number | `0` = best image / highest bandwidth, `63` = worst / lowest. Default `12` — a good streaming balance. |
 
+## setFrameRate()
+
+Sets a maximum frame rate for the stream.
+
+`arduino.cam.setFrameRate(fps)`
+
+| Parameter | Type | Description |
+|---|---|---|
+| `fps` | number | Maximum frames per second, `1`–`60`. `0` removes the limit. By default there's no fixed limit. |
+
+You usually don't need it: the board paces the stream to suit the network. After sending each frame, it pauses for half the time that frame took to send. On a slow or busy link, such as a phone hotspot, this leaves headroom, so a lost packet doesn't freeze the video while it's resent. On a fast network, frames send quickly and the rate rises towards what the camera can capture. Use `setFrameRate()` when you want a fixed rate, for example to save power or leave more room for other traffic.
+
+While a stream is running, the Serial Monitor prints what the board achieved every 10 seconds, for example `[Camera] 8.4 fps, 25 KB/frame, 80 ms to send (640x480)`. Call `setFrameRate()` before or after `attach()`. The setting persists across reconnects.
+
 ## snapshot()
 
 Fetches a single JPEG still over HTTP.
@@ -2904,7 +2937,7 @@ function draw() {
 
 `arduino.cam.getState()`
 
-**Returns** `{ logicalId, port, streamUrl, snapshotUrl, framesize, quality }`.
+**Returns** `{ logicalId, port, streamUrl, snapshotUrl, framesize, quality, frameRate }`. `frameRate` is `null` until `setFrameRate()` is called.
 
 ## Limitations
 
@@ -3085,6 +3118,12 @@ See also: Pins and reading · Protocol · Troubleshooting
 - Arduino and browser must be on the same WiFi network
 - Try refreshing — the Arduino may still be starting up
 
+## "WiFi is slow, drops, or won't join on a XIAO ESP32-S3 or C3"
+
+Seeed XIAO ESP32-S3 and ESP32-C3 boards transmit badly at full power because their antenna isn't well matched. The typical signs: the board takes several tries to join (you may see `wifi:sta is connecting, cannot set config` in the Serial Monitor), the connection lags and drops, `ping` to the board jumps between a few milliseconds and over 100, and camera video stalls. The signal strength the board *reports* (RSSI) can look perfectly good, because it only measures what the board receives.
+
+Pardalote lowers the transmit power on these boards to 8.5 dBm automatically. **Update the Pardalote Arduino library** if the Serial Monitor doesn't show `WiFi transmit power: 8.5 dBm` at boot. In our tests on a XIAO ESP32-S3 Sense, this cut ping times from 68 ± 57 ms to about 8 ± 2 ms and roughly doubled camera throughput. If the board is far from the router, try a little more power with `Pardalote.setTxPower(WIFI_POWER_15dBm)` before `begin()`.
+
 ## "Serial Monitor is blank on an ESP32-C5, C3 or S3 (no `w` menu, board seems dead)"
 
 On chips with native USB (ESP32-**C5**, **C3**, **S3**), **Tools → USB CDC On Boot** decides whether your sketch's `Serial` is routed to the USB port or to hardware UART0. With it **Disabled**, `Serial.print` goes out the UART pins and never reaches the USB Serial Monitor — so the WiFi setup `w` menu never appears and the board looks hung, even though Pardalote is booting and running fine. **Set USB CDC On Boot → `Enabled`** and re-upload.
@@ -3162,6 +3201,14 @@ another page is already streaming from this camera. The board sends one video st
 ```
 
 Close the other window or tab (or stop its stream with `detach()`) and the waiting page starts streaming by itself — no reload needed. Snapshots aren't affected — `snapshot()` has its own server and works while another page streams.
+
+## "Camera: the video freezes for a second or two, then carries on"
+
+Short freezes with the board still connected are usually **lost network packets**, most often on a **phone hotspot**. Each video frame travels as a series of packets. When one is lost, the ESP32 waits a fixed time (about 1–2 s, set inside the ESP32 core) before resending it, and the video pauses until it arrives. The connection itself isn't affected: controls keep working, and nothing is logged in the browser.
+
+- **Use a smaller frame size.** `FRAMESIZE_QVGA` or `FRAMESIZE_HVGA` sends much less data than `FRAMESIZE_VGA` or `FRAMESIZE_HD`, so there are fewer packets to lose and more room to recover. VGA and larger are best kept for a good router.
+- **On a XIAO**, check the Serial Monitor shows the reduced transmit power (see above). At full power its losses take twice as long to recover.
+- **Watch the Serial Monitor.** While streaming, the board prints `[Camera] 8.4 fps, 25 KB/frame, 80 ms to send, max 1500 ms (640x480)` every 10 s. A `max` above about 1000 ms is one of these freezes. The board already paces the stream to the network (see `setFrameRate()`), so it doesn't make the link worse. It can't prevent packets being lost in the air, though.
 
 ## "NeoPixels don't light up"
 

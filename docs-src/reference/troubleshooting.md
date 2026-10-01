@@ -7,6 +7,12 @@ lede: Common issues and their usual fixes, roughly in the order people hit them.
 - Arduino and browser must be on the same WiFi network
 - Try refreshing — the Arduino may still be starting up
 
+## "WiFi is slow, drops, or won't join on a XIAO ESP32-S3 or C3"
+
+Seeed XIAO ESP32-S3 and ESP32-C3 boards transmit badly at full power because their antenna isn't well matched. The typical signs: the board takes several tries to join (you may see `wifi:sta is connecting, cannot set config` in the Serial Monitor), the connection lags and drops, `ping` to the board jumps between a few milliseconds and over 100, and camera video stalls. The signal strength the board *reports* (RSSI) can look perfectly good, because it only measures what the board receives.
+
+Pardalote lowers the transmit power on these boards to 8.5 dBm automatically. **Update the Pardalote Arduino library** if the Serial Monitor doesn't show `WiFi transmit power: 8.5 dBm` at boot. In our tests on a XIAO ESP32-S3 Sense, this cut ping times from 68 ± 57 ms to about 8 ± 2 ms and roughly doubled camera throughput. If the board is far from the router, try a little more power with [`Pardalote.setTxPower(WIFI_POWER_15dBm)`](arduino.html#pardalotesettxpower) before `begin()`.
+
 ## "Serial Monitor is blank on an ESP32-C5, C3 or S3 (no `w` menu, board seems dead)"
 
 On chips with native USB (ESP32-**C5**, **C3**, **S3**), **Tools → USB CDC On Boot** decides whether your sketch's `Serial` is routed to the USB port or to hardware UART0. With it **Disabled**, `Serial.print` goes out the UART pins and never reaches the USB Serial Monitor — so the [WiFi setup `w` menu](wifi.html#option-b-eeprom-serial-monitor) never appears and the board looks hung, even though Pardalote is booting and running fine. **Set USB CDC On Boot → `Enabled`** and re-upload.
@@ -84,6 +90,14 @@ another page is already streaming from this camera. The board sends one video st
 ```
 
 Close the other window or tab (or stop its stream with `detach()`) and the waiting page starts streaming by itself — no reload needed. Snapshots aren't affected — `snapshot()` has its own server and works while another page streams.
+
+## "Camera: the video freezes for a second or two, then carries on"
+
+Short freezes with the board still connected are usually **lost network packets**, most often on a **phone hotspot**. Each video frame travels as a series of packets. When one is lost, the ESP32 waits a fixed time (about 1–2 s, set inside the ESP32 core) before resending it, and the video pauses until it arrives. The connection itself isn't affected: controls keep working, and nothing is logged in the browser.
+
+- **Use a smaller frame size.** `FRAMESIZE_QVGA` or `FRAMESIZE_HVGA` sends much less data than `FRAMESIZE_VGA` or `FRAMESIZE_HD`, so there are fewer packets to lose and more room to recover. VGA and larger are best kept for a good router.
+- **On a XIAO**, check the Serial Monitor shows the reduced transmit power (see above). At full power its losses take twice as long to recover.
+- **Watch the Serial Monitor.** While streaming, the board prints `[Camera] 8.4 fps, 25 KB/frame, 80 ms to send, max 1500 ms (640x480)` every 10 s. A `max` above about 1000 ms is one of these freezes. The board already paces the stream to the network (see [`setFrameRate()`](camera.html#setframerate)), so it doesn't make the link worse. It can't prevent packets being lost in the air, though.
 
 ## "NeoPixels don't light up"
 

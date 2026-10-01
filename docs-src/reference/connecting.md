@@ -20,7 +20,7 @@ arduino.connect('192.168.1.42', 8081);                   // custom port
 arduino.connect('192.168.1.42', { key: 'robot-arm-3' }); // board requires a key
 ```
 
-Calling `connect()` (or `connectSerial()`) again starts a fresh session: pin modes, polled reads, and write listeners from the previous board are cleared. Each registered extension is reset to its just-constructed state, so attached servos, initialised strips, IMU calibration and camera streams are released — call `attach()` / `init()` again inside the new `on('ready')` handler. Event listeners attached with `on('change', …)` etc. survive, as do user-tuned settings like `setWriteThrottle`, `setWriteThreshold`, `setWriteRepeat` and `setQuality`.
+Calling `connect()` (or `connectSerial()`) again starts a fresh session: pin modes, polled reads, and write listeners from the previous board are cleared. Each registered extension is reset to its just-constructed state, so attached servos, initialised strips, IMU calibration and camera streams are released — call `attach()` / `init()` again inside the new `on('ready')` handler. Event listeners attached with `on('change', …)` etc. survive, as do user-tuned settings like `setWriteThrottle`, `setWriteThreshold`, `setWriteRepeat`, `setQuality` and `setFrameRate`.
 
 ### Connection keys
 
@@ -79,7 +79,7 @@ Registers a handler for a connection event.
 | `'authFail'` | The board refused this client's connection key (or required one that wasn't sent) — over WiFi or USB. Auto-reconnect stops — reconnect with the right key. |
 | `'usbBusy'` | Serial only: a `connectSerial()` without a picker gesture reached a board that's live on WiFi, which won't switch silently. Auto-reconnect stops — click Connect (which raises the picker) to switch it to USB. See [switching to USB](#switching-to-usb). |
 | `'log'` | Serial transport only: one line of the sketch's `Serial.print` output. |
-| `'warn'` | Something went wrong but Pardalote carried on — a write to an unattached servo, an oversized message key, a pong timeout. `source` says who's speaking (`"Pardalote"`, `"Servo 'pan'"`, `"Group 'arm'"`). |
+| `'warn'` | Something went wrong but Pardalote carried on — a write to an unattached servo, an oversized message key, a heartbeat timeout. `source` says who's speaking (`"Pardalote"`, `"Servo 'pan'"`, `"Group 'arm'"`). |
 | `'error'` | Something failed — a send error, a camera snapshot failure. Device errors also fire `'error'` on the device instance itself. |
 
 Every emitter (the core, devices, pin handles) also has `once(event, handler)` — a one-shot listener that removes itself after firing — and `off(event, handler)` to unsubscribe (`handler` omitted: remove all).

@@ -265,6 +265,27 @@
 </tr>
 </tbody>
 </table>
+<h2 id="setframerate">setFrameRate()</h2>
+<p>Sets a maximum frame rate for the stream.</p>
+<div class="sig sig-js">arduino.cam.<span class="fn">setFrameRate</span>(fps)</div>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>fps</code></td>
+<td>number</td>
+<td>Maximum frames per second, <code>1</code>–<code>60</code>. <code>0</code> removes the limit. By default there's no fixed limit.</td>
+</tr>
+</tbody>
+</table>
+<p>You usually don't need it: the board paces the stream to suit the network. After sending each frame, it pauses for half the time that frame took to send. On a slow or busy link, such as a phone hotspot, this leaves headroom, so a lost packet doesn't freeze the video while it's resent. On a fast network, frames send quickly and the rate rises towards what the camera can capture. Use <code>setFrameRate()</code> when you want a fixed rate, for example to save power or leave more room for other traffic.</p>
+<p>While a stream is running, the Serial Monitor prints what the board achieved every 10 seconds, for example <code>[Camera] 8.4 fps, 25 KB/frame, 80 ms to send (640x480)</code>. Call <code>setFrameRate()</code> before or after <code>attach()</code>. The setting persists across reconnects.</p>
 <h2 id="snapshot">snapshot()</h2>
 <p>Fetches a single JPEG still over HTTP.</p>
 <div class="sig sig-js">await arduino.cam.<span class="fn">snapshot</span>()</div>
@@ -342,7 +363,7 @@
 <p><code>snapshot()</code> builds these URLs for you. Snapshots have a web server of their own on the next port (<code>attach(82)</code> → <code>83</code>; if that's the WebSocket's <code>81</code>, the one after), because the board's stream server is busy for the whole time a stream is open — a snapshot on the stream's port would wait until the stream closed. <code>/snapshot</code> also still answers on the stream port, for older versions of the JS library, but only while no stream is running.</p>
 <h2 id="state-snapshot">State snapshot</h2>
 <div class="sig sig-js">arduino.cam.<span class="fn">getState</span>()</div>
-<p><strong>Returns</strong> <code>{ logicalId, port, streamUrl, snapshotUrl, framesize, quality }</code>.</p>
+<p><strong>Returns</strong> <code>{ logicalId, port, streamUrl, snapshotUrl, framesize, quality, frameRate }</code>. <code>frameRate</code> is <code>null</code> until <code>setFrameRate()</code> is called.</p>
 <h2 id="limitations">Limitations</h2>
 <p>Only one browser can receive the MJPEG stream at a time. This is a fundamental limitation of the ESP32 camera driver — <code>esp_camera_fb_get()</code> is single-consumer by design. A second browser connecting will see a black screen and only receives the feed once the first disconnects. This behaviour is identical to Espressif's own CameraWebServer example.</p>
 <p>See also: <a href="../examples/camera-stream.html">Camera example</a></p>

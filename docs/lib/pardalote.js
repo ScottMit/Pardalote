@@ -1220,15 +1220,23 @@ class Arduino {
         this._aliases  = {};
         this.analogMax = 1023;   // safe default; overwritten by HELLO
 
-        // Heartbeat — liveness is judged by the AGE OF THE LAST PONG.
-        // A power-cycled board sends no FIN, and send() into a half-open
-        // TCP connection doesn't throw (it just buffers), so without this
-        // check the browser would sit "connected" until the rebooted
+        // Heartbeat — a power-cycled board sends no FIN, and send() into a
+        // half-open TCP connection doesn't throw (it just buffers), so without
+        // this check the browser would sit "connected" until the rebooted
         // board's new TCP stack resets the stale connection.
+        //
+        // The link is declared dead only when BOTH hold: several pings have
+        // gone unanswered AND nothing at all has arrived for a while. Any
+        // inbound frame counts as life, not just a pong. Counting pings (not
+        // just time) means a page that was itself frozen — a heavy ML model,
+        // a busy machine, a throttled background tab — sent no pings while
+        // frozen, so it can't mistake its own stall for a dead board.
         this._pingInterval  = null;
-        this._lastPong      = 0;
+        this._lastRx        = 0;      // Date.now() of the last frame received
+        this._unanswered    = 0;      // pings sent since the last frame received
         this._pingMs        = 3000;   // send a ping every 3 s
-        this._pongTimeoutMs = 5000;   // declare the link dead if no pong for 5 s
+        this._maxUnanswered = 3;      // …declare the link dead after 3 unanswered pings
+        this._rxTimeoutMs   = 10000;  // …and 10 s with nothing received
 
         // Pin handles (see arduino.pin()): Map<number|aliasString, Pin>.
         // Permanent, like extension instances — listeners survive connect().
@@ -1456,7 +1464,7 @@ class Arduino {
         // (so a late close can't double-fire 'disconnect'), which also means the
         // onclose that normally calls _stopHeartbeat() won't fire — leaving the
         // old transport's heartbeat ticking into the next connection. On a
-        // WiFi→USB switch that stale heartbeat fires "no pong" during the board's
+        // WiFi→USB switch that stale heartbeat times out during the board's
         // reboot window and tears down the in-flight serial link (→ reconnect
         // churn). Stopping it here makes a switch clean.
         this._stopHeartbeat();
@@ -1784,6 +1792,10 @@ class Arduino {
     }
 
     _dispatch(frame) {
+        // Any frame from the board proves the link is alive (heartbeat).
+        this._lastRx     = Date.now();
+        this._unanswered = 0;
+
         // Frame monitor — sees every inbound frame (guarded: no-op unless a
         // listener is registered).
         this._emitFrame('in', frame);
@@ -1882,15 +1894,19 @@ class Arduino {
         }
     }
 
-    // Each tick: first judge liveness by how stale the last pong is,
-    // then send the next ping. Detection worst case is roughly
-    // _pongTimeoutMs + _pingMs (~8 s) after the board dies.
+    // Each tick: first judge liveness, then send the next ping. A board that
+    // dies is detected ~12 s later (3 unanswered pings, 10 s silent); a pong
+    // delayed by a slow link (up to ~9 s) or a page frozen for any length of
+    // time doesn't trip it.
     _startHeartbeat() {
         this._stopHeartbeat();
-        this._lastPong = Date.now();   // HELLO just arrived — link demonstrably alive
+        this._lastRx     = Date.now();   // HELLO just arrived — link demonstrably alive
+        this._unanswered = 0;
         this._pingInterval = setInterval(() => {
-            if (Date.now() - this._lastPong > this._pongTimeoutMs) {
-                this._warn(`connection lost — no pong for ${this._pongTimeoutMs} ms; reconnecting`);
+            const silentMs = Date.now() - this._lastRx;
+            if (this._unanswered >= this._maxUnanswered && silentMs > this._rxTimeoutMs) {
+                this._warn(`connection lost — nothing received for ${Math.round(silentMs / 1000)} s ` +
+                           `(${this._unanswered} pings unanswered); reconnecting`);
                 this._stopHeartbeat();
                 this._closeSocket();   // detach + null the socket so a late
                                        // close event can't double-fire 'disconnect'
@@ -1899,6 +1915,7 @@ class Arduino {
                 return;
             }
             try { this.socket.send(encodeFrame(CMD_PING, 0, [])); } catch (_) {}
+            this._unanswered++;
         }, this._pingMs);
     }
 
@@ -1907,9 +1924,9 @@ class Arduino {
         this._pingInterval = null;
     }
 
-    _onPong() {
-        this._lastPong = Date.now();
-    }
+    // A pong needs no handling of its own — _dispatch already counted it
+    // as life, like every other inbound frame.
+    _onPong() {}
 
     // The board announced (over serial) that it just (re)booted — e.g. a reset
     // while USB-connected. The port is still open, so rather than wait for the
@@ -1920,7 +1937,8 @@ class Arduino {
     // fire mid-recovery; the HELLO that follows the switch restarts everything.
     _onReboot() {
         if (this._transportKind !== 'serial') return;
-        this._lastPong = Date.now();
+        this._lastRx     = Date.now();
+        this._unanswered = 0;
         if (this.socket && typeof this.socket.resumeProbe === 'function') this.socket.resumeProbe();
     }
 
@@ -6949,6 +6967,7 @@ const DEVICE_CAMERA = 204;
 const CMD_CAMERA_INIT        = 0x30;
 const CMD_CAMERA_SET_RES     = 0x31;
 const CMD_CAMERA_SET_QUALITY = 0x32;
+const CMD_CAMERA_SET_FPS     = 0x67;
 
 // -------------------------------------------------------------------
 // Framesize constants — Pardalote's own wire codes. They follow the older
@@ -6985,11 +7004,12 @@ class Camera extends Extension {
 
         this.framesize = FRAMESIZE_QVGA;
         this.quality   = 12;         // 0 = best, 63 = worst (ESP32 convention)
+        this.frameRate = null;       // max stream fps; null = the board's default, 0 = no cap
     }
 
     // -------------------------------------------------------------------
     // Board switch — called by Arduino.connect() to wipe per-board state
-    // while preserving user-tuned configuration (framesize, quality).
+    // while preserving user-tuned configuration (framesize, quality, frameRate).
     // -------------------------------------------------------------------
     _reset() {
         if (this._el) {
@@ -7041,6 +7061,14 @@ class Camera extends Extension {
             CMD_CAMERA_SET_QUALITY, DEVICE_CAMERA,
             [this.logicalId, this.quality]
         ));
+        // Frame rate only once set — until then the board's default applies
+        // (and an older board that doesn't know the command never sees it).
+        if (this.frameRate !== null) {
+            this.arduino.send(encodeFrame(
+                CMD_CAMERA_SET_FPS, DEVICE_CAMERA,
+                [this.logicalId, this.frameRate]
+            ));
+        }
     }
 
     // -------------------------------------------------------------------
@@ -7085,6 +7113,23 @@ class Camera extends Extension {
         this.arduino.send(encodeFrame(
             CMD_CAMERA_SET_QUALITY, DEVICE_CAMERA,
             [this.logicalId, this.quality]
+        ));
+        return this;
+    }
+
+    // -------------------------------------------------------------------
+    // setFrameRate(fps)
+    // Cap the stream at fps frames per second (1–60); 0 removes the cap.
+    // Usually unnecessary: the board already paces the stream to the
+    // network (it pauses after each frame for half its send time), so a
+    // slow link keeps headroom and a fast one runs near the camera's limit.
+    // A cap is a fixed ceiling on top of that. Takes effect on the next frame.
+    // -------------------------------------------------------------------
+    setFrameRate(fps) {
+        this.frameRate = Math.max(0, Math.min(60, Math.round(fps)));
+        this.arduino.send(encodeFrame(
+            CMD_CAMERA_SET_FPS, DEVICE_CAMERA,
+            [this.logicalId, this.frameRate]
         ));
         return this;
     }
@@ -7149,6 +7194,7 @@ class Camera extends Extension {
             snapshotUrl: this._snapshotUrl,
             framesize:   this.framesize,
             quality:     this.quality,
+            frameRate:   this.frameRate,
         };
     }
 

@@ -128,6 +128,17 @@
 <span class="p">}</span>
 </code></pre></div>
 <p>Over WiFi it's an accident-prevention latch against joining a neighbour's board on a shared network. Over USB — where the cable already picks the board — the key becomes a <strong>board-identity check</strong>: a student who grabbed the wrong physical board gets a clear &quot;wrong key for this board&quot; error instead of silently driving it. <strong>Not security</strong> — the key travels unencrypted (over the network, or in the clear on USB). Up to 32 characters.</p>
+<h2 id="pardalotesettxpower">Pardalote.setTxPower()</h2>
+<p>Optional, ESP32 only. Sets the WiFi transmit power. Call it <strong>before</strong> <code>begin()</code> so the board also joins the network at that power.</p>
+<div class="sig sig-ino">Pardalote.<span class="fn">setTxPower</span>(power)</div>
+<div class="code-ex"><span class="lang-badge lang-arduino">Arduino</span><pre><code><span class="kt">void</span><span class="w"> </span><span class="nf">setup</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">setTxPower</span><span class="p">(</span><span class="n">WIFI_POWER_15dBm</span><span class="p">);</span><span class="w">   </span><span class="c1">// optional — before begin()</span>
+<span class="w">  </span><span class="n">Pardalote</span><span class="p">.</span><span class="n">begin</span><span class="p">();</span>
+<span class="p">}</span>
+</code></pre></div>
+<p><code>power</code> is one of the ESP32 core's <code>WIFI_POWER_*</code> values, from <code>WIFI_POWER_19_5dBm</code> (full power) down to <code>WIFI_POWER_2dBm</code>.</p>
+<p><strong>Seeed XIAO ESP32-S3 and ESP32-C3 boards default to <code>WIFI_POWER_8_5dBm</code>.</strong> At full power their antenna misbehaves: they join slowly or not at all, the connection lags and drops, and camera video stalls. Lowering the transmit power is the widely reported fix, and it made a large difference in our tests. The Serial Monitor shows the setting at boot (<code>WiFi transmit power: 8.5 dBm</code>). If a XIAO is far from the router and the signal is weak, try <code>WIFI_POWER_15dBm</code> or <code>WIFI_POWER_17dBm</code>. <code>WIFI_POWER_19_5dBm</code> restores full power.</p>
+<p>Other ESP32 boards use full power unless you call it. See <a href="troubleshooting.html#wifi-is-slow-drops-or-wont-join-on-a-xiao-esp32-s3-or-c3">Troubleshooting</a>.</p>
 <h2 id="pardaloterun">Pardalote.run()</h2>
 <p>Services the connection: handles incoming commands, runs polls and timed moves. Call every pass of <code>loop()</code> — keep the loop non-blocking so it runs often.</p>
 <div class="sig sig-ino">Pardalote.<span class="fn">run</span>()</div>

@@ -17,7 +17,8 @@
 // MAJOR product release); MINOR marks backward-compatible additions.
 // Independent of the product version below.
 #define PROTOCOL_VERSION_MAJOR 1
-#define PROTOCOL_VERSION_MINOR 1   // +CMD_*_GESTURE_STATE (Ar→JS gesture-active broadcast)
+#define PROTOCOL_VERSION_MINOR 2   // 1: +CMD_*_GESTURE_STATE (Ar→JS gesture-active broadcast)
+                                   // 2: +CMD_CAMERA_SET_FPS (JS→Ar stream frame-rate cap)
 
 // Product version — the release humans see. Canonical copies live in
 // library.properties (Arduino) and package.json (JS); this string lets
@@ -227,7 +228,7 @@
 // superseding write that cancels it — so browsers can show "gesturing" and a
 // reconnecting browser learns it via announce(). Symmetric: fires for gestures
 // authored by JS OR by the sketch, and carries EXISTENCE only, never the
-// segment structure. 0x64–0x66 are the next globally-free codes.
+// segment structure.
 #define CMD_SERVO_GESTURE_STATE    0x64  // Ar→JS: [id, active(0|1)]
 #define CMD_STEPPER_GESTURE_STATE  0x65  // Ar→JS: [id, active(0|1)]
 #define CMD_BUSSERVO_GESTURE_STATE 0x66  // Ar→JS: [id, active(0|1)]
@@ -287,7 +288,7 @@ static inline float pardaloteEase(uint8_t curve, float t) {
 #define DEVICE_IMU  203
 
 // -------------------------------------------------------------------
-// Camera Device ID and Commands (0x30–0x32)
+// Camera Device ID and Commands (0x30–0x32, + SET_FPS 0x67)
 // ESP32-S3 only — MJPEG stream and JPEG snapshot served over HTTP.
 // -------------------------------------------------------------------
 #define DEVICE_CAMERA          204
@@ -296,6 +297,8 @@ static inline float pardaloteEase(uint8_t curve, float t) {
                                      // Ar→JS: [id, port] — confirms stream is live
 #define CMD_CAMERA_SET_RES     0x31  // JS→Ar: [id, framesize]  (framesize_t enum value)
 #define CMD_CAMERA_SET_QUALITY 0x32  // JS→Ar: [id, quality]    0 = best, 63 = worst
+#define CMD_CAMERA_SET_FPS     0x67  // JS→Ar: [id, fps]        max stream frame rate, 0 = no cap
+                                     // (outside the 0x30 block, which is full; 0x68 is next free)
 
 #define CMD_IMU_ATTACH          0x28  // JS→Ar: [id, addr, sda?, scl?] + model name string in payload
                                       // Ar→JS (announce): [id, addr] + model name string in payload
@@ -473,7 +476,7 @@ static inline float pardaloteEase(uint8_t curve, float t) {
                                        // ping? present 1 = found, 0 = no response. The board pings at attach,
                                        // caches the result, and replays it in announce() (so late/reconnecting
                                        // browsers learn it too). Gives JS the parity with the serial monitor's
-                                       // "[found] / [NO RESPONSE]" line. (0x64 is the next globally-free code.)
+                                       // "[found] / [NO RESPONSE]" line.
 
 // Series (param 2 of CMD_BUSSERVO_ATTACH)
 #define BUSSERVO_SERIES_ST  0   // STS / SMS series — 0–4095 counts (STS3215 etc.)

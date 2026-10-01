@@ -22,6 +22,7 @@ WARN="-Wall -Wextra -Wno-unused-parameter"
 # The extra ESP32 board macro just picks a PARDALOTE_BOARD name (quiets the
 # "board not recognised" #warning); it doesn't affect the code under test.
 BOARDS=( "ESP32:-DESP32 -DARDUINO_ESP32_DEV"
+         "XIAO_ESP32S3:-DESP32 -DARDUINO_XIAO_ESP32S3"
          "UNO_R4_WIFI:-DARDUINO_UNOR4_WIFI"
          "UNO_R4_MINIMA:-DARDUINO_UNOR4_MINIMA" )
 

@@ -408,6 +408,8 @@ private:
     inline static volatile uint8_t _activeStreams = 0;         // streams being served right now (only the
                                                                // HTTP server task changes it; loop() reads it)
     inline static uint8_t        _quality         = 12;
+    inline static volatile uint8_t _maxFps        = 0;     // stream frame-rate cap, 0 = none (set by JS
+                                                           // setFrameRate; read by the HTTP server task)
     inline static framesize_t    _framesize       = FRAMESIZE_QVGA;
     inline static bool           _dramFallback    = false;  // true when no PSRAM: locked to QQVGA in DRAM
     inline static bool           _softJpeg        = false;  // true when the sensor has no hardware JPEG:
@@ -417,6 +419,12 @@ private:
     inline static uint8_t        _clientCount     = 0;     // WebSocket clients currently connected
     inline static bool           _shutdownPending = false;
     inline static uint32_t       _shutdownStart   = 0;     // millis() when last client left
+
+    // Adaptive pacing: after each frame, pause for this percentage of the time
+    // the frame took to send (see _streamHandler). 50 keeps a link about
+    // two-thirds full, whatever its speed.
+    static constexpr uint32_t _PACE_PERCENT = 50;
+    static constexpr uint32_t _PACE_MAX_MS  = 200;   // a stalled send isn't made worse
 
     // JPEG frame buffers are allocated for at least this size — see _initCamera().
     static constexpr framesize_t _JPEG_BUFFER_SIZE = FRAMESIZE_UXGA;
@@ -509,9 +517,38 @@ private:
         esp_err_t   res = ESP_OK;
         uint8_t     fails = 0;   // consecutive failed captures
 
+        // Frame-rate readout: every 10 s, print the fps, frame size and send
+        // time actually achieved.
+        uint32_t lastFrame   = millis();
+        uint32_t paceMs      = 0;   // pause owed after the last frame's send
+        uint32_t statStart   = lastFrame;
+        uint32_t statFrames  = 0;
+        uint32_t statBytes   = 0;
+        uint32_t statSendMs  = 0;
+        uint32_t statMaxMs   = 0;   // longest single send — a stall shows up here
+
         _activeStreams = _activeStreams + 1;   // reported on attach() — see CMD_CAMERA_INIT
         while (res == ESP_OK) {
             delay(1);  // yield to main loop so WebSocket events are processed between frames
+
+            // Pacing. Sending frames as fast as the network takes them keeps a
+            // slow link (e.g. a phone hotspot) permanently full — then one lost
+            // packet stalls the video for a second or more while TCP waits to
+            // resend it. So after each frame the stream pauses for a share of
+            // the time that frame took to send: on a slow link that leaves
+            // headroom, on a fast one frames send quickly and the rate climbs
+            // towards what the camera can capture. setFrameRate() adds a hard
+            // ceiling on top. GRAB_LATEST means the frame grabbed after the
+            // wait is a fresh one, not a stale queued one.
+            uint32_t wait = paceMs;
+            const uint8_t fps = _maxFps;
+            if (fps) {
+                const uint32_t period = 1000 / fps;
+                const uint32_t since  = millis() - lastFrame;
+                if (since < period && period - since > wait) wait = period - since;
+            }
+            if (wait) delay(wait);
+            lastFrame = millis();
 
             camera_fb_t* fb;
             uint8_t*     jpg;
@@ -536,11 +573,43 @@ private:
                 "Content-Type: image/jpeg\r\nContent-Length: %u\r\n\r\n",
                 (unsigned)jpgLen);
 
+            const uint32_t sendStart = millis();
             res = httpd_resp_send_chunk(req, boundary, strlen(boundary));
             if (res == ESP_OK) res = httpd_resp_send_chunk(req, partHdr, hlen);
             if (res == ESP_OK) res = httpd_resp_send_chunk(req, (const char*)jpg, jpgLen);
+            const uint32_t sendMs = millis() - sendStart;
+            paceMs = min(sendMs * _PACE_PERCENT / 100, _PACE_MAX_MS);
 
             _releaseJpeg(fb, jpg);
+
+            if (res == ESP_OK) {
+                statFrames++;
+                statBytes  += jpgLen;
+                statSendMs += sendMs;
+                if (sendMs > statMaxMs) statMaxMs = sendMs;
+                const uint32_t span = millis() - statStart;
+                if (span >= 10000) {
+                    Serial.print(F("[Camera] "));
+                    Serial.print(statFrames * 1000.0f / span, 1);
+                    Serial.print(F(" fps, "));
+                    Serial.print(statBytes / statFrames / 1024);
+                    Serial.print(F(" KB/frame, "));
+                    Serial.print(statSendMs / statFrames);
+                    Serial.print(F(" ms to send, max "));
+                    Serial.print(statMaxMs);
+                    Serial.print(F(" ms ("));
+                    Serial.print(resolution[_framesize].width);
+                    Serial.print('x');
+                    Serial.print(resolution[_framesize].height);
+                    if (fps) { Serial.print(F(", capped at ")); Serial.print(fps); }
+                    Serial.println(')');
+                    statStart  = millis();
+                    statFrames = 0;
+                    statBytes  = 0;
+                    statSendMs = 0;
+                    statMaxMs  = 0;
+                }
+            }
         }
         if (_activeStreams > 0) _activeStreams = _activeStreams - 1;   // may already be 0 after _stopHttpServer
         return res;
@@ -844,6 +913,12 @@ public:
                     if (s) s->set_quality(s, _quality);
                 }
                 break;
+            }
+
+            case CMD_CAMERA_SET_FPS: {
+                if (nparams < 2) return;
+                _maxFps = (uint8_t)constrain((int)paramInt(params, 1), 0, 60);
+                break;   // the stream loop picks it up on the next frame
             }
 
             default:
