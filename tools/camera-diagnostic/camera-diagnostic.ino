@@ -36,19 +36,20 @@
 // XIAO, uncomment the setTxPower line below.
 
 void setup() {
-    // Log why WiFi drops (before begin, so connect failures show too)
-    WiFi.onEvent([](WiFiEvent_t e, WiFiEventInfo_t info) {
-        Serial.printf("[WiFi] disconnected, reason=%d\n",
-                      info.wifi_sta_disconnected.reason);
-    }, ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
+  // Log why WiFi drops (before begin, so connect failures show too)
+  WiFi.onEvent([](WiFiEvent_t e, WiFiEventInfo_t info) {
+    Serial.printf("[WiFi] disconnected, reason=%d\n",
+                  info.wifi_sta_disconnected.reason);
+  },
+               ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
 
-    // Pardalote.setTxPower(WIFI_POWER_19_5dBm);   // full power (XIAO A/B test)
-    Pardalote.begin();
+  // Pardalote.setTxPower(WIFI_POWER_19_5dBm);   // full power (XIAO A/B test)
+  Pardalote.begin();
 }
 
 void loop() {
-    unsigned long s = millis();
-    Pardalote.run();
-    unsigned long d = millis() - s;
-    if (d > 200) Serial.printf("[stall] Pardalote.run() took %lu ms\n", d);
+  unsigned long s = millis();
+  Pardalote.run();
+  unsigned long d = millis() - s;
+  if (d > 200) Serial.printf("[stall] Pardalote.run() took %lu ms\n", d);
 }
