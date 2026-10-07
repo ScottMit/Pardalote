@@ -198,6 +198,13 @@ Original bench order was **ESP32 first** (known rig), then **R4 WiFi** (native U
 ## I. Camera (browser-only, ESP32-only, HTTP/WiFi) — ✅ confirmed working (Seeed XIAO ESP32S3 Sense 2026-08; ESP32 Wrover + Freenove ESP32-S3 CAM 2026-09)
 
 - [x] **I.1 Stream** — camera-stream example connects over HTTP and shows live frames on ESP32; behaves independently of the WebSocket/serial control channel (camera stays WiFi-only). *(No sketch-attach path by design.)* **✅ Confirmed on the XIAO ESP32S3 Sense (2026-08) — see the results log below.**
+- [ ] **I.2 camera-posenet on MediaPipe** (zero bench — rewritten 2026-09-30, commit `dae23c1`). The example dropped ml5 0.12.2 PoseNet for MediaPipe Pose Landmarker (tasks-vision 0.10.14, lite model, VIDEO mode, GPU→CPU fallback, `DETECT_FPS = 15`, blank-frame warm-up at load). Only checked in a browser on a still photo: 33 landmarks with `visibility`; the first cold detection froze the page **5.4 s** (longer than the old 5 s heartbeat) and the warm-up cut the first real detection to ~28 ms, then ~15 ms each. On the bench (Wrover + XIAO, WiFi, real VGA, a person in frame):
+  - [ ] Landmarks + skeleton track the person on the live MJPEG `<img>` (no tainted-canvas / decode errors in the console)
+  - [ ] Load → Connect → stream with no false heartbeat drop (warm-up happens before Connect)
+  - [ ] No 1–3 s page freezes over ~10 min (the ml5 PoseNet run on 2026-09-30 froze every few minutes)
+  - [ ] Console says whether GPU or the CPU fallback ran; note detection smoothness for each
+  - [ ] `MIRROR_VIDEO` true/false both draw landmarks on the body
+  - [ ] Optional: `POSE_MODEL = 'full'` and `NUM_POSES = 2` still keep up
 
 ---
 
@@ -439,6 +446,7 @@ ESP-EYE, M5Stack, etc. — remain structural-only.
 
 ### ✅ More camera boards confirmed (2026-09)
 - **ESP32 Wrover camera board + XIAO ESP32S3 Sense — `camera-posenet` (2026-09-15).**
+  *(ml5 PoseNet version — the example moved to MediaPipe on 2026-09-30; see §I.2.)*
   ml5 PoseNet on the MJPEG stream at VGA. Needed one fix: keypoints were drawn with
   no confidence filter, so low-score joints scattered and jittered; the example now
   skips keypoints/bones below `MIN_CONFIDENCE = 0.2`.
@@ -511,7 +519,8 @@ ESP-EYE, M5Stack, etc. — remain structural-only.
   A camera-pin guard (refusing browser pin commands on camera pins) was considered and
   **rejected**: users can misuse pins against their hardware in countless ways, and
   Pardalote doesn't try to police board-specific pin conflicts.
-- **Wrover + camera-posenet at a genuine 640×480 — no lag (2026-09-26).** With the current
+- **Wrover + camera-posenet at a genuine 640×480 — no lag (2026-09-26).** *(ml5 PoseNet
+  version — superseded by the MediaPipe rewrite, §I.2.)* With the current
   firmware (frame-size mapping, start-big buffers) the Wrover runs PoseNet at real VGA
   smoothly. The freeze-and-catch-up seen on 2026-09-24 (then really 400×296, older
   firmware) is gone; its cause was never isolated — note the camera driver's frame
