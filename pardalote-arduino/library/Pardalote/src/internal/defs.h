@@ -17,8 +17,9 @@
 // MAJOR product release); MINOR marks backward-compatible additions.
 // Independent of the product version below.
 #define PROTOCOL_VERSION_MAJOR 1
-#define PROTOCOL_VERSION_MINOR 2   // 1: +CMD_*_GESTURE_STATE (Ar→JS gesture-active broadcast)
+#define PROTOCOL_VERSION_MINOR 3   // 1: +CMD_*_GESTURE_STATE (Ar→JS gesture-active broadcast)
                                    // 2: +CMD_CAMERA_SET_FPS (JS→Ar stream frame-rate cap)
+                                   // 3: +gesture DONE outcome param (arrived / gave up)
 
 // Product version — the release humans see. Canonical copies live in
 // library.properties (Arduino) and package.json (JS); this string lets
@@ -237,6 +238,21 @@
 #define GESTURE_FLAG_ABSOLUTE   0x01  // value is an absolute target, not a relative delta
 #define GESTURE_FLAG_LOOP       0x02  // repeat the schedule (reserved)
 
+// Gesture pacing — the ONE policy every actuator follows (see PLAN-gesture-pacing.md):
+// segments start ON SCHEDULE (never wait for an actuator or another lane); each starts
+// from where the actuator actually is and aims at the authored key (relative keys
+// anchor to the INTENDED path, never the actual position); the final segment lands,
+// giving up GESTURE_LAND_TIMEOUT_MS after its scheduled end and HOLDING where it is.
+#define GESTURE_LAND_TIMEOUT_MS  2000  // grace after the expected arrival before giving up
+#define GESTURE_LAND_CATCHUP_MS  500   // landing speed aims to close the remaining gap in this
+                                       // long (never slower than the final segment's average)
+
+// Gesture DONE outcome — an OPTIONAL extra param on CMD_SERVO_DONE / CMD_STEPPER_DONE /
+// CMD_BUSSERVO_DONE: [id, position, outcome]. Sent only when a GESTURE finishes; plain
+// moves keep the two-param frame, and a missing outcome means DONE_ARRIVED.
+#define DONE_ARRIVED  0   // reached the final target
+#define DONE_GAVE_UP  1   // landing timed out — the actuator is holding where it got to
+
 // Shared easing curve ids — the ONE numbered table used by every surface
 // (this firmware, the standalone follower's PROGMEM gestures, and
 // pardalote.js). Keep the formulas identical across surfaces; see
@@ -322,8 +338,8 @@ static inline float pardaloteEase(uint8_t curve, float t) {
 // rather than the built-in Stepper library (whose step() blocks and
 // would stall Pardalote.run()).
 //
-// Requires the AccelStepper library (by Mike McCauley), installable via
-// Arduino IDE → Manage Libraries.
+// Requires the AccelStepper library (by Mike McCauley), 1.64 or newer, installable
+// via Arduino IDE → Manage Libraries.
 // -------------------------------------------------------------------
 #define DEVICE_STEPPER  205
 

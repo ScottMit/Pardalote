@@ -99,7 +99,7 @@ Reaches a position in about a set time — the speed is picked from the move dis
 
 ## gesture()
 
-Plays an authored **segment schedule** — an ordered list of moves the board runs back-to-back on its own clock. Values are in **counts**. A bus servo takes a *(position, speed)* target and runs its own move, so the board renders each segment's easing `curve` with a **streaming interpolator**: it samples the curve on a fixed clock and streams look-ahead setpoints (batched across a group into one phase-locked write), so the shape you author — overshoot included — is the shape the servo runs. Fires `done` when the last segment lands. Coordinate several lanes with a [group](groups.html#gesture).
+Plays an authored **segment schedule** — an ordered list of moves the board runs back-to-back on its own clock. Values are in **counts**. A bus servo takes a *(position, speed)* target and runs its own move, so the board renders each segment's easing `curve` with a **streaming interpolator**: it samples the curve on a fixed clock and streams look-ahead setpoints (batched across a group into one phase-locked write), so the shape you author — overshoot included — is the shape the servo runs. Fires `done` when the last segment lands. Timing follows the shared [gesture timing](gesture.html#timing--gestures-keep-to-their-schedule) rules: segments start on schedule, and the last key is landed or given up on 2 s after its expected arrival. Coordinate several lanes with a [group](groups.html#gesture).
 
 <div class="sig">arduino.shoulder.<span class="fn">gesture</span>(segments, [opts])</div>
 
@@ -262,7 +262,7 @@ Bus utilities. Servos ship as ID 1 — to renumber, put a **single** servo on th
 |---|---|---|
 | `'change'` | `{ position, velocity, load, voltage, temperature }` | A polled reading changed by at least the threshold. |
 | `'write'` | `{ position }` | A move is issued (including a gesture start — `position` is the predicted rest). |
-| `'done'` | `{ position }` | A move, timed move, or gesture settles (the servo's `Moving` flag cleared). |
+| `'done'` | `{ position, arrived }` | A move or timed move settles (the servo's `Moving` flag cleared), or a gesture lands. `arrived` is `false` only for a gesture that gave up. |
 | `'fwlimits'` | `{ min, max, enabled }` or `null` | The servo's firmware angle limits arrived — at attach, on reconnect, or after `readFirmwareLimits()`. |
 | `'presence'` | `{ servoId, present }` | The servo's answering state changed. Fires on the attach-time ping, on reconnect, and whenever `read()` feedback shows the servo appearing or disappearing (`present: false` = no answer — wrong ID, wiring, baud, or unpowered). Needs `read()` polling active to track mid-session changes. |
 | `'gesturestart'` / `'gestureend'` | `{}` | The board starts / ends playing a schedule on this servo — **any** origin (this browser, another, or the sketch). End = the last segment settles or a superseding write. |

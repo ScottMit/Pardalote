@@ -58,6 +58,7 @@ private:
     inline static uint32_t _startMs[MAX_SERVOS]    = {};
     inline static uint32_t _durMs[MAX_SERVOS]      = {};
     inline static uint32_t _lastStepMs[MAX_SERVOS] = {};
+    inline static int32_t  _intended[MAX_SERVOS]   = {};   // authored end of the current segment (relative anchor)
 
     // Min ms between interpolation writes — servos refresh PWM at ~50 Hz, so
     // writing faster is wasted loop time. Angle is always from true elapsed
@@ -81,19 +82,84 @@ private:
 
     static bool validId(int id) { return id >= 0 && id < MAX_SERVOS; }
 
+    // ---- Paced PWM output -------------------------------------------------
+    // Every servo write goes through servoOut()/servoOutUs(). On ESP32 (core
+    // 3.x) the LEDC driver's ledc_update_duty() BLOCKS until ~2 PWM periods
+    // (≈40 ms at 50 Hz) after the previous update on that channel — bench-
+    // measured 2026-10-01 on a Wrover, core 3.3.11, ESP32Servo 3.2.1. Writing
+    // every 20 ms therefore stalled the whole board loop ~40 ms per pass (a
+    // stepper sharing the loop crawled at ~25 steps/s). The driver only
+    // accepts one update per window anyway, so writing faster gained nothing.
+    // So: an unchanged pulse is never rewritten, and a change arriving inside
+    // the window is held as PENDING (latest wins) and written by loop() the
+    // moment the window opens — nothing ever blocks. Other boards write
+    // straight through (their Servo libraries don't block).
+    inline static int16_t  _outUs[MAX_SERVOS]     = { -1,-1,-1,-1,-1,-1,-1,-1 };   // last pulse written (-1 = unknown)
+    inline static int16_t  _pendingUs[MAX_SERVOS] = { -1,-1,-1,-1,-1,-1,-1,-1 };   // waiting for the window (-1 = none)
+    inline static uint32_t _outMs[MAX_SERVOS]     = {};                            // when the last write was issued
+    static const uint32_t PWM_GAP_MS = 45;   // 2 × 20 ms PWM period + margin
+
+    // Angle → pulse, same mapping as the Servo libraries' write(angle).
+    static int angleToUs(int id, int angle) {
+        return (int)map(angle, 0, 180, _minPulse[id], _maxPulse[id]);
+    }
+    static void servoOut(int id, int angle) {
+#if defined(ESP32)
+        servoOutUs(id, angleToUs(id, angle));
+#else
+        _servos[id].write(angle);
+#endif
+    }
+    static void servoOutUs(int id, int us) {
+#if defined(ESP32)
+        if (us == _outUs[id]) { _pendingUs[id] = -1; return; }   // already there (drops a stale pending)
+        if (millis() - _outMs[id] < PWM_GAP_MS) { _pendingUs[id] = (int16_t)us; return; }
+        issueUs(id, us);
+#else
+        _servos[id].writeMicroseconds(us);
+#endif
+    }
+#if defined(ESP32)
+    static void issueUs(int id, int us) {
+        _pendingUs[id] = -1;
+        _outMs[id]     = millis();
+        _outUs[id]     = (int16_t)us;
+        _servos[id].writeMicroseconds(us);
+    }
+    // Write any held pulse whose window has opened (called every loop()).
+    static void flushPending() {
+        uint32_t now = millis();
+        for (int i = 0; i < MAX_SERVOS; i++)
+            if (_attached[i] && _pendingUs[i] >= 0 && now - _outMs[i] >= PWM_GAP_MS)
+                issueUs(i, _pendingUs[i]);
+    }
+#endif
+    // Forget output state for a (re)attached or detached id. attach() itself
+    // programs the channel, so the window starts now (the first write waits
+    // out PWM_GAP_MS as pending rather than blocking).
+    static void resetOut(int id) {
+        _outUs[id] = -1; _pendingUs[id] = -1; _outMs[id] = millis();
+    }
+
     // Easing shared with every other extension — see pardaloteEase() in
     // defs.h (matches curveShape() in pardalote.js). CURVE_BACK returns >1
     // mid-flight (the overshoot), which loadSegment's write re-clamps.
 
     // Load segment `idx` as the current interpolation move. `from` is the
-    // servo's live angle (dynamic capture); the target is a delta off it
-    // (relative) or the segment value itself (absolute), clamped to limits.
+    // servo's commanded angle (dynamic capture — a PWM servo has no feedback, so
+    // the last command IS its best-known position); the target is the segment
+    // value itself (absolute) or the INTENDED path + delta (relative — chained
+    // from the previous segment's authored end, the live angle only for segment
+    // 0), clamped to limits. Segments already start on schedule (see loop()),
+    // so this matches the shared pacing policy in defs.h.
     static void loadSegment(int id, uint8_t idx, uint32_t startMs) {
         const Seg& s = _segs[id][idx];
-        int32_t base   = _angles[id];
-        int32_t target = (_segFlags[id] & GESTURE_FLAG_ABSOLUTE) ? s.value : base + s.value;
-        _fromAngle[id]  = (int16_t)base;
-        _toAngle[id]    = (int16_t)clampAngle(id, target);
+        int32_t from     = _angles[id];
+        int32_t base     = (idx == 0) ? from : _intended[id];
+        int32_t intended = (_segFlags[id] & GESTURE_FLAG_ABSOLUTE) ? s.value : base + s.value;
+        _intended[id]   = intended;
+        _fromAngle[id]  = (int16_t)from;
+        _toAngle[id]    = (int16_t)clampAngle(id, intended);
         _curveNow[id]   = s.curve;
         _startMs[id]    = startMs;
         _durMs[id]      = s.dur ? s.dur : 1;   // guard /0
@@ -108,7 +174,10 @@ private:
         bool wasGesture = _segCount[id] > 0;   // vs a plain writeTimed (_segCount == 0)
         _moving[id]   = false;
         _segCount[id] = 0;
-        broadcastDone(id, _angles[id]);
+        // A PWM servo lands on schedule by construction (no feedback, no lag), so
+        // a gesture always reports DONE_ARRIVED; a plain timed move keeps the
+        // two-param frame.
+        broadcastDone(id, _angles[id], wasGesture);
         if (wasGesture && _onDone[id]) _onDone[id](id);   // sketch whenDone() hook
     }
 
@@ -120,7 +189,15 @@ private:
     // Poll the current angle (delegating to the Servo library) and cache it.
     // (readAngle() below is the sketch accessor for the cached value.)
     static int32_t pollAngle(int id) {
+#if defined(ESP32)
+        // A paced write may still be pending — report the commanded pulse.
+        int us = _pendingUs[id] >= 0 ? _pendingUs[id] : _outUs[id];
+        int angle = !_attached[id] ? -1
+                  : us >= 0 ? (int)map(us, _minPulse[id], _maxPulse[id], 0, 180)
+                  : _servos[id].read();
+#else
         int angle = _attached[id] ? _servos[id].read() : -1;
+#endif
         if (_attached[id]) _angles[id] = (int16_t)angle;
         return angle;
     }
@@ -144,7 +221,7 @@ private:
     static void startTimed(int id, int angle, uint32_t dur, uint32_t now) {
         angle = clampAngle(id, angle);
         if (dur == 0) {
-            _servos[id].write(angle);
+            servoOut(id, angle);
             _angles[id] = (int16_t)angle;
             _moving[id] = false;
             broadcastDone(id, angle);
@@ -160,11 +237,12 @@ private:
         _curveNow[id]   = CURVE_LINEAR;
     }
 
-    static void broadcastDone(int id, int angle) {
+    static void broadcastDone(int id, int angle, bool withOutcome = false) {
         FrameBuilder fb;
         fb.begin(CMD_SERVO_DONE, DEVICE_SERVO);
         fb.addInt(id);
         fb.addInt(angle);
+        if (withOutcome) fb.addInt(DONE_ARRIVED);
         Pardalote.broadcastFrame(fb);
     }
 
@@ -244,7 +322,7 @@ public:
         if (!validId(id) || !_attached[id]) return;
         _moving[id] = false; _segCount[id] = 0;   // immediate write cancels a gesture
         int angle = clampAngle(id, (int)target);
-        _servos[id].write(angle);
+        servoOut(id, angle);
         _angles[id] = (int16_t)angle;
         echoAngle(id, angle);
     }
@@ -406,6 +484,7 @@ public:
 
                 if (_attached[id]) _servos[id].detach();
                 _servos[id].attach(pin, minP, maxP);
+                resetOut(id);
                 _moving[id]   = false;   // no stale move / gesture from a previous instance on this id
                 _segCount[id] = 0;
                 _pins[id]     = (int16_t)pin;
@@ -422,6 +501,7 @@ public:
             case CMD_SERVO_DETACH:
                 if (_attached[id]) {
                     _servos[id].detach();
+                    resetOut(id);
                     _attached[id] = false;
                     _pins[id]     = -1;
                     _limitSet[id] = false;
@@ -442,7 +522,7 @@ public:
                 if (!_attached[id] || nparams < 2) return;
                 _moving[id] = false; _segCount[id] = 0;   // an immediate write cancels a timed move / gesture
                 int angle = clampAngle(id, (int)paramInt(params, 1));
-                _servos[id].write(angle);
+                servoOut(id, angle);
                 _angles[id] = (int16_t)angle;
                 break;
             }
@@ -458,7 +538,7 @@ public:
                     long usMax = _minPulse[id] + (long)_limitMax[id] * span / 180;
                     us = constrain(us, (int)usMin, (int)usMax);
                 }
-                _servos[id].writeMicroseconds(us);
+                servoOutUs(id, us);
                 break;
             }
 
@@ -604,7 +684,7 @@ public:
             uint32_t elapsed = now - _startMs[i];
             if (elapsed >= _durMs[i]) {
                 // Land exactly on this segment's end.
-                _servos[i].write(_toAngle[i]);
+                servoOut(i, _toAngle[i]);
                 _angles[i] = _toAngle[i];
                 if (_segCount[i] > 0 && _segIndex[i] + 1 < _segCount[i]) {
                     // Chain to the next segment. Its start is the previous
@@ -618,11 +698,15 @@ public:
                 float sh  = pardaloteEase(_curveNow[i], t);          // eased position along the segment
                 long  d   = (long)_toAngle[i] - (long)_fromAngle[i];
                 int   ang = clampAngle(i, _fromAngle[i] + (int)lroundf(d * sh)); // re-clamp: BACK can overshoot
-                _servos[i].write(ang);
+                servoOut(i, ang);
                 _angles[i]     = (int16_t)ang;
                 _lastStepMs[i] = now;
             }
         }
+
+#if defined(ESP32)
+        flushPending();   // paced PWM writes whose window has opened
+#endif
 
         // Gesture-active edge: broadcast on any 0<->positive _segCount change
         // (start, natural finish, OR a superseding write that dropped it).

@@ -8,8 +8,10 @@
 // Add #include <PardaloteStepper.h> to your sketch — the extension
 // self-registers, no further setup is required.
 //
-// Requires the AccelStepper library (by Mike McCauley):
+// Requires the AccelStepper library (by Mike McCauley), version 1.64 or newer:
 //   Arduino IDE → Tools → Manage Libraries → search "AccelStepper".
+// Steps are generated through PardaloteStepperMotor (internal/paced_stepper.h),
+// a small AccelStepper subclass with error-compensated step timing.
 //
 // Supports up to MAX_STEPPERS simultaneously attached steppers driven
 // by STEP/DIR drivers (TMC2208/2209, A4988, EasyDriver, ...) or by
@@ -30,7 +32,7 @@
 #ifndef PARDALOTE_STEPPER_H
 #define PARDALOTE_STEPPER_H
 
-#include <AccelStepper.h>
+#include "internal/paced_stepper.h"
 #include "Pardalote.h"
 
 #define MAX_STEPPERS 6
@@ -49,7 +51,7 @@ private:
     //              from the same curve (see loop() + loadStepperSegment()).
     enum Mode : uint8_t { MODE_POSITION = 0, MODE_VELOCITY = 1, MODE_TIMED = 2, MODE_STOPPING = 3, MODE_EASED = 4 };
 
-    inline static AccelStepper* _steppers[MAX_STEPPERS] = {};
+    inline static PardaloteStepperMotor* _steppers[MAX_STEPPERS] = {};
     inline static bool          _attached[MAX_STEPPERS] = {};
     inline static Mode          _mode[MAX_STEPPERS]     = {};
     inline static bool          _wasRunning[MAX_STEPPERS] = {};
@@ -113,10 +115,13 @@ private:
     // Gesture segment schedule (CMD_STEPPER_GESTURE, MODE_EASED). Unlike the
     // servo's sampled interpolation, a stepper can't teleport, so each tick
     // follows the segment's eased POSITION at a feed-forward SPEED (magnitude
-    // from the curve slope; runSpeedToPosition() supplies direction and the
-    // exact landing). `from` is re-captured from currentPosition() at each
-    // segment start (dynamic capture), so step-quantisation error never
-    // accumulates across a gesture and relative bounces need no homing.
+    // from the curve slope; runSpeedToPosition() supplies direction).
+    // Pacing follows the shared policy (defs.h, GESTURE_LAND_*): segments start
+    // ON SCHEDULE — never waiting for the motor to land — and each starts from
+    // currentPosition(), so a motor that fell short covers the extra distance in
+    // the next segment. Relative keys anchor to the INTENDED path (_segIntended),
+    // so a shortfall never becomes a permanent offset. Only the final segment
+    // lands, giving up GESTURE_LAND_TIMEOUT_MS after its scheduled end.
     static const uint8_t MAX_STEPPER_SEGMENTS = 16;
     struct Seg { uint8_t curve; uint16_t dur; int32_t value; };
     inline static Seg      _segs[MAX_STEPPERS][MAX_STEPPER_SEGMENTS] = {};
@@ -127,10 +132,12 @@ private:
     inline static PardaloteGestureDone _onDone[MAX_STEPPERS] = {};   // sketch whenDone() callback
     inline static int32_t  _segFromPos[MAX_STEPPERS] = {};   // captured position at segment start
     inline static int32_t  _segTarget[MAX_STEPPERS]  = {};   // segment end position (clamped)
+    inline static int32_t  _segIntended[MAX_STEPPERS] = {};  // authored end of the current segment (relative anchor)
     inline static uint32_t _segStartMs[MAX_STEPPERS] = {};   // segment timebase (start+dur, drift-free)
     inline static uint32_t _segDurMs[MAX_STEPPERS]   = {};
 
     static bool validId(int id) { return id >= 0 && id < MAX_STEPPERS; }
+
 
     // Periodic reads — per-client registration + gating.
     // Gates on position; default threshold 1 step (positions are exact
@@ -156,7 +163,7 @@ private:
     }
 
     static bool isRunning(int id) {
-        AccelStepper* s = _steppers[id];
+        PardaloteStepperMotor* s = _steppers[id];
         if (!s) return false;
         return (_mode[id] == MODE_VELOCITY || _mode[id] == MODE_STOPPING)
                    ? (s->speed() != 0.0f)
@@ -173,7 +180,7 @@ private:
     // Moving toward this end? Speed sign is authoritative; fall back to
     // distanceToGo for a position move that hasn't taken its first step yet.
     static bool movingToward(int id, int end) {
-        AccelStepper* s = _steppers[id];
+        PardaloteStepperMotor* s = _steppers[id];
         float spd = s->speed();
         long  dtg = s->distanceToGo();
         return (end == LIMIT_MIN) ? (spd < 0 || (spd == 0 && dtg < 0))
@@ -184,8 +191,21 @@ private:
     // distanceToGo in one call (no decel ramp: momentum past a hard limit
     // is exactly what the switch protects against).
     static void hardStop(int id) {
-        AccelStepper* s = _steppers[id];
+        PardaloteStepperMotor* s = _steppers[id];
         s->setCurrentPosition(s->currentPosition());
+        _mode[id] = MODE_POSITION;
+    }
+
+    // Hand the motor to run() (MODE_POSITION) for a new accel-limited move.
+    // AccelStepper's acceleration planner (_n/_cn — private, so we can't fix it
+    // up) only tracks motion that run() itself drove. After any setSpeed()-
+    // driven mode (VELOCITY, TIMED, EASED gesture, STOPPING) it is stale, and the
+    // next moveTo() can creep the WRONG way for minutes — bench 2026-10-06: after
+    // a fast gesture, moveTo(0) crawled away from 0 at ~120 steps/s for 15+ min.
+    // So re-plan from rest: setCurrentPosition() zeroes speed and the planner
+    // (same coordinate). Mid-motion this restarts the ramp from a standstill.
+    static void enterPositionMode(int id) {
+        if (_mode[id] != MODE_POSITION) _steppers[id]->setCurrentPosition(_steppers[id]->currentPosition());
         _mode[id] = MODE_POSITION;
     }
 
@@ -195,7 +215,7 @@ private:
     // One iteration of the homing routine. Owns the motor entirely while
     // active — the generic switch/DONE logic in loop() is skipped.
     static void homingStep(int id) {
-        AccelStepper* s = _steppers[id];
+        PardaloteStepperMotor* s = _steppers[id];
         int end = _homeEnd[id];
 
         // Safety cap on SEEK + BACKOFF: if the switch never trips (unplugged,
@@ -240,7 +260,7 @@ private:
                     s->setSpeed(end == LIMIT_MIN ? _homeSpeed[id] : -_homeSpeed[id]);
                     _homing[id] = HOME_BACKOFF;
                 } else {
-                    s->runSpeed();
+                    s->runSpeedPaced();
                 }
                 break;
 
@@ -251,12 +271,12 @@ private:
                     s->moveTo(clampTarget(id, 0));                 // travel home (the origin)
                     _homing[id] = HOME_TRAVEL;
                 } else {
-                    s->runSpeed();
+                    s->runSpeedPaced();
                 }
                 break;
 
             case HOME_TRAVEL:
-                s->run();
+                s->runPaced();
                 if (s->distanceToGo() == 0) {
                     _homing[id]     = HOME_IDLE;
                     _mode[id]       = MODE_POSITION;
@@ -278,7 +298,7 @@ private:
     // itself — a group sharing one duration arrives together. AccelStepper's
     // setSpeed() is clamped to maxSpeed(), so raise the cap for this move.
     static void startTimedMove(int id, int32_t target, uint32_t durationMs) {
-        AccelStepper* s = _steppers[id];
+        PardaloteStepperMotor* s = _steppers[id];
         if (!s) return;
         cancelEased(id);           // a timed move supersedes any running gesture
         _homing[id] = HOME_IDLE;   // explicit move cancels homing
@@ -307,15 +327,19 @@ private:
     }
 
     // Load segment `idx` as the current eased move. from = live position
-    // (dynamic capture); target = from+delta (relative) or the value itself
-    // (absolute), clamped to soft limits. Raises the live speed cap to fit the
+    // (dynamic capture); target = the value itself (absolute) or the intended
+    // path + delta (relative), clamped to soft limits. Raises the live speed cap to fit the
     // curve's velocity peak inside `dur`. _maxSpeed[id] keeps the USER value.
     static void loadStepperSegment(int id, uint8_t idx, uint32_t startMs) {
-        AccelStepper* s = _steppers[id];
+        PardaloteStepperMotor* s = _steppers[id];
         const Seg& seg  = _segs[id][idx];
         int32_t from    = s->currentPosition();
-        int32_t target  = (_segFlags[id] & GESTURE_FLAG_ABSOLUTE) ? seg.value : from + seg.value;
-        target          = clampTarget(id, target);
+        // Relative keys chain from the previous segment's INTENDED end (the live
+        // position only for segment 0), so lag can't accumulate as an offset.
+        int32_t base    = (idx == 0) ? from : _segIntended[id];
+        int32_t intended = (_segFlags[id] & GESTURE_FLAG_ABSOLUTE) ? seg.value : base + seg.value;
+        _segIntended[id] = intended;
+        int32_t target  = clampTarget(id, intended);
         uint32_t dur    = seg.dur ? seg.dur : 1;
 
         _segFromPos[id] = from;
@@ -332,12 +356,12 @@ private:
         _mode[id] = MODE_EASED;
     }
 
-    // End a gesture: stop, restore the user's speed cap, drop the schedule,
-    // and announce completion via the normal DONE frame (whenDone()).
-    static void finishStepperGesture(int id) {
-        AccelStepper* s = _steppers[id];
-        s->setSpeed(0);
-        s->moveTo(s->currentPosition());      // no residual target
+    // End a gesture: stop (holding wherever the motor is), restore the user's
+    // speed cap, drop the schedule, and announce completion via the normal DONE
+    // frame plus its outcome (DONE_ARRIVED / DONE_GAVE_UP) for whenDone().
+    static void finishStepperGesture(int id, uint8_t outcome) {
+        PardaloteStepperMotor* s = _steppers[id];
+        s->setCurrentPosition(s->currentPosition());   // stop + clear the stale accel planner (see enterPositionMode)
         s->setMaxSpeed(_maxSpeed[id]);        // restore the user-configured cap
         _mode[id]       = MODE_POSITION;
         _segCount[id]   = 0;
@@ -346,6 +370,7 @@ private:
         fb.begin(CMD_STEPPER_DONE, DEVICE_STEPPER);
         fb.addInt(id);
         fb.addInt(s->currentPosition());
+        fb.addInt(outcome);
         Pardalote.broadcastFrame(fb);
         if (_onDone[id]) _onDone[id](id);     // sketch whenDone() hook (gesture-only path)
     }
@@ -424,7 +449,7 @@ public:
         cancelHoming(id);
         cancelEased(id);
         int32_t t = clampTarget(id, target);
-        _mode[id] = MODE_POSITION;
+        enterPositionMode(id);
         _steppers[id]->setMaxSpeed(_maxSpeed[id]);   // a timed move may have raised it
         _steppers[id]->moveTo(t);
         echoTarget(id);
@@ -614,22 +639,42 @@ public:
                 if (nparams < 4) return;
                 int iface = (int)paramInt(params, 1);
 
-                // Tear down any previous instance on this id.
-                if (_steppers[id]) { delete _steppers[id]; _steppers[id] = nullptr; }
-
                 int p1 = (int)paramInt(params, 2);
                 int p2 = (int)paramInt(params, 3);
                 int p3 = (nparams > 4) ? (int)paramInt(params, 4) : -1;
                 int p4 = (nparams > 5) ? (int)paramInt(params, 5) : -1;
 
+                // Skip the teardown (and the Serial print) when the state is
+                // already what was requested — mirrors the servo's attach.
+                // JS's reconnect replay and 'ready' handlers can both call
+                // attach() with identical params, and recreating the
+                // AccelStepper would silently reset the step counter to 0
+                // wherever the motor physically is.
+                if (_attached[id] && _steppers[id] && _interface[id] == iface) {
+                    bool same;
+                    if (iface == STEPPER_FULL4WIRE) {
+                        same = _pins[id][0] == p1 && _pins[id][1] == p2 &&
+                               _pins[id][2] == p3 && _pins[id][3] == p4;
+                    } else {
+                        int enPin  = p3;
+                        int invert = (nparams > 5) ? p4 : 0x04;
+                        same = _pins[id][0] == p1 && _pins[id][1] == p2 &&
+                               _enPin[id] == enPin && _invert[id] == invert;
+                    }
+                    if (same) break;
+                }
+
+                // Tear down any previous instance on this id.
+                if (_steppers[id]) { delete _steppers[id]; _steppers[id] = nullptr; }
+
                 if (iface == STEPPER_FULL4WIRE) {
-                    _steppers[id] = new AccelStepper(AccelStepper::FULL4WIRE, p1, p2, p3, p4);
+                    _steppers[id] = new PardaloteStepperMotor(AccelStepper::FULL4WIRE, p1, p2, p3, p4);
                     _enPin[id]  = -1;
                     _invert[id] = 0;
                     _pins[id][0] = p1; _pins[id][1] = p2; _pins[id][2] = p3; _pins[id][3] = p4;
                 } else {
                     // STEPPER_DRIVER (default): p1=STEP, p2=DIR.
-                    _steppers[id] = new AccelStepper(AccelStepper::DRIVER, p1, p2);
+                    _steppers[id] = new PardaloteStepperMotor(AccelStepper::DRIVER, p1, p2);
                     int enPin  = (nparams > 4) ? (int)paramInt(params, 4) : -1;
                     int invert = (nparams > 5) ? (int)paramInt(params, 5) : 0x04; // enable active-LOW
                     _enPin[id]  = (int16_t)enPin;
@@ -683,7 +728,7 @@ public:
                 cancelHoming(id);
                 cancelEased(id);
                 int32_t target = clampTarget(id, (int32_t)paramInt(params, 1));
-                _mode[id] = MODE_POSITION;
+                enterPositionMode(id);
                 _steppers[id]->setMaxSpeed(_maxSpeed[id]);   // restore cap (a timed move may have raised it)
                 _steppers[id]->moveTo(target);
                 break;
@@ -695,7 +740,7 @@ public:
                 cancelEased(id);
                 int32_t rel    = (int32_t)paramInt(params, 1);
                 int32_t target = clampTarget(id, _steppers[id]->currentPosition() + rel);
-                _mode[id] = MODE_POSITION;
+                enterPositionMode(id);
                 _steppers[id]->setMaxSpeed(_maxSpeed[id]);   // restore cap (a timed move may have raised it)
                 _steppers[id]->moveTo(target);
                 break;
@@ -824,7 +869,7 @@ public:
 
             case CMD_STEPPER_SET_HOME: {
                 if (!_attached[id]) return;
-                AccelStepper* s = _steppers[id];
+                PardaloteStepperMotor* s = _steppers[id];
                 // Re-zero the coordinate frame. The current physical position
                 // BECOMES `value` (default 0 = the origin/home). Everything
                 // that carries a coordinate — the soft limits and the switch
@@ -866,7 +911,7 @@ public:
             case CMD_STEPPER_HOME: {
                 if (!_attached[id]) return;
                 cancelEased(id);   // homing supersedes any running gesture
-                AccelStepper* s = _steppers[id];
+                PardaloteStepperMotor* s = _steppers[id];
                 // Pick the switch: MIN if configured, else MAX.
                 int end = (_swPin[id][LIMIT_MIN] >= 0) ? LIMIT_MIN
                         : (_swPin[id][LIMIT_MAX] >= 0) ? LIMIT_MAX : -1;
@@ -874,7 +919,7 @@ public:
                     // No switch — counter trusted as-is: plain accel move to
                     // home (the origin, 0).
                     _homing[id] = HOME_IDLE;
-                    _mode[id]   = MODE_POSITION;
+                    enterPositionMode(id);
                     s->setMaxSpeed(_maxSpeed[id]);
                     s->moveTo(clampTarget(id, 0));
                     break;
@@ -937,7 +982,7 @@ public:
     static void loop() {
         for (int id = 0; id < MAX_STEPPERS; id++) {
             if (!_attached[id] || !_steppers[id]) continue;
-            AccelStepper* s = _steppers[id];
+            PardaloteStepperMotor* s = _steppers[id];
 
             // Homing routine owns the motor while active — the generic
             // switch/DONE logic below is bypassed (it would emit spurious
@@ -998,11 +1043,11 @@ public:
                     if ((spd > 0 && pos >= _limitMax[id]) ||
                         (spd < 0 && pos <= _limitMin[id])) {
                         _mode[id] = MODE_POSITION;
-                        s->moveTo(pos);   // hold here
+                        s->setCurrentPosition(pos);   // hold here (moveTo would leave run() a stale planner)
                         clamped = true;
                     }
                 }
-                if (!clamped) s->runSpeed();
+                if (!clamped) s->runSpeedPaced();
             } else if (_mode[id] == MODE_STOPPING) {
                 // Decelerate a constant-speed spin to a clean halt: shed speed
                 // at the configured acceleration each tick, then stop. (Can't
@@ -1019,10 +1064,10 @@ public:
                     _mode[id] = MODE_POSITION;                    // DONE edge fires below
                 } else {
                     if (dv > 0.0f) s->setSpeed(spd > 0 ? spd - dv : spd + dv);
-                    s->runSpeed();
+                    s->runSpeedPaced();
                 }
             } else if (_mode[id] == MODE_TIMED) {
-                s->runSpeedToPosition();   // constant speed to target (arrive-together)
+                s->runSpeedToPositionPaced();   // constant speed to target (arrive-together)
             } else if (_mode[id] == MODE_EASED) {
                 // Follow the segment's eased position at a feed-forward speed.
                 uint32_t now      = millis();
@@ -1046,23 +1091,34 @@ public:
                     if (vmag < 1.0f) vmag = 1.0f;
                     s->moveTo(lroundf(p));
                     s->setSpeed(vmag);            // magnitude; runSpeedToPosition() derives direction
-                    s->runSpeedToPosition();
+                    s->runSpeedToPositionPaced();
+                } else if (_segCount[id] > 0 && _segIndex[id] + 1 < _segCount[id]) {
+                    // Segment time is up — start the next one ON SCHEDULE (its start
+                    // is prev start + prev dur, so the timeline never drifts), from
+                    // wherever the motor is. Never wait for it to land first.
+                    loadStepperSegment(id, _segIndex[id] + 1, _segStartMs[id] + _segDurMs[id]);
                 } else {
-                    // Segment time elapsed — land exactly on target, then advance.
+                    // Final segment's time is up — land on the target, or give up
+                    // GESTURE_LAND_TIMEOUT_MS after the expected arrival and hold.
                     s->moveTo(target);
-                    if (s->distanceToGo() != 0) {
-                        float vmag = fabsf((float)(target - from)) / durSec;
+                    long remaining = s->distanceToGo();
+                    if (remaining == 0) {
+                        finishStepperGesture(id, DONE_ARRIVED);
+                    } else if (elapsed - _segDurMs[id] >= GESTURE_LAND_TIMEOUT_MS) {
+                        finishStepperGesture(id, DONE_GAVE_UP);   // stops where it is (hold)
+                    } else {
+                        // Close the gap in ~GESTURE_LAND_CATCHUP_MS, never slower than the
+                        // segment's average; setSpeed() caps it at the gesture's raised max.
+                        float avg  = fabsf((float)(target - from)) / durSec;
+                        float vmag = fabsf((float)remaining) * 1000.0f / GESTURE_LAND_CATCHUP_MS;
+                        if (vmag < avg)  vmag = avg;
                         if (vmag < 1.0f) vmag = 1.0f;
                         s->setSpeed(vmag);
-                        s->runSpeedToPosition();
-                    } else if (_segCount[id] > 0 && _segIndex[id] + 1 < _segCount[id]) {
-                        loadStepperSegment(id, _segIndex[id] + 1, _segStartMs[id] + _segDurMs[id]);
-                    } else {
-                        finishStepperGesture(id);
+                        s->runSpeedToPositionPaced();
                     }
                 }
             } else {
-                s->run();
+                s->runPaced();
             }
 
             bool running = isRunning(id);
@@ -1107,7 +1163,7 @@ public:
     // Poll response — current position, remaining distance, speed, state.
     // -------------------------------------------------------------------
     static void buildRead(FrameBuilder& fb, int id) {
-        AccelStepper* s = _steppers[id];
+        PardaloteStepperMotor* s = _steppers[id];
         fb.begin(CMD_STEPPER_READ, DEVICE_STEPPER);
         fb.addInt(id);
         fb.addInt(s->currentPosition());

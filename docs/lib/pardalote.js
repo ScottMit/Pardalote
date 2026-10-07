@@ -91,6 +91,10 @@ const LIMIT_MAX = 1;
 // defs.h's shapeCurve() too, or authoring preview and board motion drift.
 // -------------------------------------------------------------------
 const GESTURE_FLAG_ABSOLUTE = 0x01;   // segment value is an absolute target, not a relative delta
+// Gesture DONE outcome — optional 3rd param of CMD_*_DONE (defs.h must agree).
+// Sent only when a gesture finishes; missing = arrived (plain moves, old firmware).
+const DONE_ARRIVED = 0;   // reached the final target
+const DONE_GAVE_UP = 1;   // landing timed out — holding where it got to
 const GESTURE_FLAG_LOOP     = 0x02;   // repeat the schedule (reserved)
 
 // Curated easing set (0x05+ reserved for elastic/bounce later).
@@ -2902,9 +2906,11 @@ class Group {
     }
 
     // whenDone({ timeout }?) — Promise for the group's most recent
-    // write()/writeTimed(). Resolves `true` when EVERY moved member reports it
-    // actually ARRIVED (each actuator's 'done' — feedback-confirmed, not a
-    // timer), or `false` on the safety timeout (dead servo / lost link).
+    // write()/writeTimed()/gesture(). Resolves `true` when EVERY moved member
+    // reports it actually ARRIVED (each actuator's 'done' — feedback-confirmed,
+    // not a timer), or `false` if any member didn't: its gesture landing gave up
+    // (held short of the target), or the safety timeout fired (dead servo /
+    // lost link).
     // Members arm their completion promise inside the move itself, so calling
     // whenDone() late is safe — already-finished members resolve immediately.
     //
@@ -2917,7 +2923,9 @@ class Group {
         const timeout = t ?? Math.max(this._lastDuration * 2, 10000);
         const waits = this._lastMoved.map(m => m._movePromise).filter(Boolean);
         if (!waits.length) return Promise.resolve(true);
-        const done = Promise.all(waits).then(() => true);
+        // A member's promise settles `false` only when its gesture gave up
+        // (DONE_GAVE_UP) — the group arrived only if every member did.
+        const done = Promise.all(waits).then(vs => vs.every(v => v !== false));
         if (!timeout) return done;
         return Promise.race([
             done,
@@ -3688,12 +3696,16 @@ class Servo extends Extension {
                 this._resolveAttached(this.isAttached);
                 break;
 
-            case CMD_SERVO_DONE:
+            case CMD_SERVO_DONE: {
+                // Optional 3rd param: gesture outcome (missing = arrived).
+                const arrived = (frame.params[2] ?? DONE_ARRIVED) === DONE_ARRIVED;
                 this.angle  = frame.params[1];
                 this.micros = this._angleToMicros(this.angle);
-                this._emit('done', { angle: this.angle });
-                this._resolveDone();
+                this._emit('done', { angle: this.angle, arrived });
+                this._resolveDone(arrived);
                 break;
+
+            }
 
             case CMD_SERVO_GESTURE_STATE: {
                 // A board segment schedule started/ended (authored by JS OR the
@@ -3710,10 +3722,11 @@ class Servo extends Extension {
 
     // Resolves when the servo's timed move completes (CMD_SERVO_DONE).
     _whenDone() { return new Promise(resolve => this._doneResolvers.push(resolve)); }
-    _resolveDone() {
+    // Settles with `arrived` (false = a gesture gave up); other drains pass nothing.
+    _resolveDone(arrived = true) {
         const resolvers = this._doneResolvers;
         this._doneResolvers = [];
-        resolvers.forEach(r => r(this.angle));
+        resolvers.forEach(r => r(arrived));
     }
 
     // Arm the whenDone() promise for a move that will emit 'done'.
@@ -3724,7 +3737,8 @@ class Servo extends Extension {
 
     // whenDone({ timeout }?) — Promise for the most recent move. Resolves
     // `true` on the servo's 'done' (or immediately if no move is pending /
-    // it already finished), `false` on the safety timeout. timeout: ms
+    // it already finished), `false` if it didn't arrive (a gesture that gave
+    // up, or the safety timeout). timeout: ms
     // (default max(duration × 2, 10000); 0 = wait forever). Also accepts a
     // bare number: whenDone(5000).
     //
@@ -3733,7 +3747,9 @@ class Servo extends Extension {
         const t = (typeof opts === 'number') ? opts : opts.timeout;
         const timeout = t ?? Math.max(this._moveDuration * 2, 10000);
         if (!this._movePromise) return Promise.resolve(true);
-        const done = this._movePromise.then(() => true);
+        // Settles `false` only on a gesture that gave up (DONE_GAVE_UP); every
+        // other completion (plain-move DONE, stop, disconnect) means done.
+        const done = this._movePromise.then(v => v !== false);
         if (!timeout) return done;
         return Promise.race([
             done,
@@ -4355,7 +4371,8 @@ class BusServo extends Extension {
     // whenDone({ timeout }?) — Promise for the most recent move. Resolves
     // `true` on CMD_BUSSERVO_DONE (the servo's own Moving flag settled — real
     // arrival, not a timer; or immediately if no move is pending / it already
-    // finished), `false` on the safety timeout. timeout: ms (default
+    // finished), `false` if it didn't arrive (a gesture that gave up, or the
+    // safety timeout). timeout: ms (default
     // max(duration × 2, 10000); 0 = wait forever). Also accepts a bare
     // number: whenDone(5000).
     //
@@ -4364,7 +4381,9 @@ class BusServo extends Extension {
         const t = (typeof opts === 'number') ? opts : opts.timeout;
         const timeout = t ?? Math.max(this._moveDuration * 2, 10000);
         if (!this._movePromise) return Promise.resolve(true);
-        const done = this._movePromise.then(() => true);
+        // Settles `false` only on a gesture that gave up (DONE_GAVE_UP); every
+        // other completion (plain-move DONE, stop, disconnect) means done.
+        const done = this._movePromise.then(v => v !== false);
         if (!timeout) return done;
         return Promise.race([
             done,
@@ -4428,12 +4447,15 @@ class BusServo extends Extension {
                 break;
             }
 
-            case CMD_BUSSERVO_DONE:
-                // Board polled the Moving flag and the servo has settled.
+            case CMD_BUSSERVO_DONE: {
+                // The servo settled (plain write) or a gesture finished. Optional
+                // 3rd param: gesture outcome (missing = arrived).
+                const arrived = (frame.params[2] ?? DONE_ARRIVED) === DONE_ARRIVED;
                 this.position = frame.params[1];
-                this._emit('done', { position: this.position });
-                this._drain(this._doneResolvers, this.position);
+                this._emit('done', { position: this.position, arrived });
+                this._drain(this._doneResolvers, arrived);
                 break;
+            }
 
             case CMD_BUSSERVO_GESTURE_STATE: {
                 const active = frame.params[1] === 1;
@@ -5302,14 +5324,18 @@ class Stepper extends Extension {
                 });
                 break;
 
-            case CMD_STEPPER_DONE:
+            case CMD_STEPPER_DONE: {
+                // Optional 3rd param: gesture outcome (missing = arrived). A
+                // gesture that gave up is holding short of its target.
+                const arrived = (frame.params[2] ?? DONE_ARRIVED) === DONE_ARRIVED;
                 this.position     = frame.params[1];
                 this.distanceToGo = 0;
                 this.isRunning    = false;
-                this.target       = this.position;   // arrived
-                this._emit('done', { position: this.position });
-                this._resolveDone();
+                this.target       = this.position;   // where it stopped
+                this._emit('done', { position: this.position, arrived });
+                this._resolveDone(arrived);
                 break;
+            }
 
             case CMD_STEPPER_GESTURE_STATE: {
                 const active = frame.params[1] === 1;
@@ -5447,10 +5473,11 @@ class Stepper extends Extension {
         return new Promise(resolve => this._doneResolvers.push(resolve));
     }
 
-    _resolveDone() {
+    // Settles with `arrived` (false = a gesture gave up); other drains pass nothing.
+    _resolveDone(arrived = true) {
         const resolvers = this._doneResolvers;
         this._doneResolvers = [];
-        resolvers.forEach(r => r(this.position));
+        resolvers.forEach(r => r(arrived));
     }
 
     // Arm the whenDone() promise for a move that will emit 'done'.
@@ -5463,7 +5490,8 @@ class Stepper extends Extension {
 
     // whenDone({ timeout }?) — Promise for the most recent move. Resolves
     // `true` on CMD_STEPPER_DONE (or immediately if no move is pending / it
-    // already finished), `false` on the safety timeout. timeout: ms (default
+    // already finished), `false` if it didn't arrive (a gesture that gave up,
+    // or the safety timeout). timeout: ms (default
     // max(duration × 2, 10000); 0 = wait forever). Also accepts a bare
     // number: whenDone(5000).
     //
@@ -5473,7 +5501,9 @@ class Stepper extends Extension {
         const t = (typeof opts === 'number') ? opts : opts.timeout;
         const timeout = t ?? Math.max(this._moveDuration * 2, 10000);
         if (!this._movePromise) return Promise.resolve(true);
-        const done = this._movePromise.then(() => true);
+        // Settles `false` only on a gesture that gave up (DONE_GAVE_UP); every
+        // other completion (plain-move DONE, stop, disconnect) means done.
+        const done = this._movePromise.then(v => v !== false);
         if (!timeout) return done;
         return Promise.race([
             done,

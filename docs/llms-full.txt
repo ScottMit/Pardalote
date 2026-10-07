@@ -157,7 +157,7 @@ Some hardware will require additional Arduino libraries. Install these via Ardui
 |---|---|
 | `Adafruit NeoPixel` | LED strips |
 | `ESP32Servo` | Servos on ESP32 |
-| `AccelStepper` (Mike McCauley) | Stepper motors |
+| `AccelStepper` (Mike McCauley) — 1.64 or newer | Stepper motors |
 | `SCServo` (Feetech/Waveshare) | Serial bus servos — install **"SCServo" by FT&WS** from the Library Manager, or a ZIP from the Waveshare wiki / Feetech SDK |
 
 No extra library is needed for the IMU extension — it reads sensor registers directly over I2C. The camera extension needs only the ESP32 Arduino core.
@@ -656,6 +656,8 @@ Starts Pardalote. Call once in `setup()`. Three forms:
 | `begin(PARDALOTE_SERIAL)` | Skips WiFi entirely and talks over the **USB cable** only — the browser connects with `connectSerial()`. |
 
 The one exception is the **UNO R4 Minima** — it has no radio, so every `begin()` form starts the serial transport.
+
+Only the first call counts. If `begin()` appears twice, for example after combining two example sketches, the extra call is ignored and the Serial Monitor shows `[Pardalote] begin() was called more than once — ignoring the extra call`. Running the startup twice would restart WiFi and destabilise the connection.
 
 In serial mode, `Serial.print` from your sketch still works — the output travels between protocol messages and appears in the browser as the `'log'` event (and in the Serial Monitor as usual when the browser isn't connected). Don't `Serial.write` raw binary; text is fine.
 
@@ -1323,7 +1325,7 @@ An immediate `write()` cancels an in-progress timed move.
 
 ## gesture()
 
-Plays an authored **segment schedule** — an ordered list of eased moves the Arduino runs back-to-back on its own clock (on-board, no WiFi streaming). Where `writeTimed()` is one eased move, a gesture is many: the primitive for *expressive* motion — anticipation, overshoot, holds, follow-through. Fires `done` (resolves `whenDone()`) when the last segment lands.
+Plays an authored **segment schedule** — an ordered list of eased moves the Arduino runs back-to-back on its own clock (on-board, no WiFi streaming). Where `writeTimed()` is one eased move, a gesture is many: the primitive for *expressive* motion — anticipation, overshoot, holds, follow-through. Fires `done` (resolves `whenDone()`) when the last segment lands. Timing follows the shared gesture timing rules: segments start on schedule, and the last key is landed or given up on 2 s after its expected arrival.
 
 `arduino.pan.gesture(segments, [opts])`
 
@@ -1351,7 +1353,7 @@ To play coordinated gestures across several actuators at once, see group.gesture
 
 ## whenDone()
 
-Promise for the most recent timed move — resolves `true` on the servo's `done` (or immediately if no move is pending), `false` on the safety timeout (default `max(duration × 2, 10000)` ms; pass `{ timeout }` or a bare number to override, `0` to wait forever). The same method exists on steppers, bus servos, and groups.
+Promise for the most recent timed move — resolves `true` on the servo's `done` (or immediately if no move is pending), `false` if it didn't arrive (a gesture that gave up, or the safety timeout — default `max(duration × 2, 10000)` ms; pass `{ timeout }` or a bare number to override, `0` to wait forever). The same method exists on steppers, bus servos, and groups.
 
 `await arduino.pan.whenDone([{ timeout }])`
 
@@ -1409,7 +1411,7 @@ else showError('pan servo not responding');
 | `'gesture'` | `{ segments, absolute, duration }` | *This* browser sends a gesture (local echo). |
 | `'gesturestart'` | `{}` | The board starts playing a schedule on this servo — **any** origin (this browser, another, or the sketch). |
 | `'gestureend'` | `{}` | …that schedule ends — completion or a superseding write. |
-| `'done'` | `{ angle }` | A timed move or gesture reaches its target. |
+| `'done'` | `{ angle, arrived }` | A timed move or gesture finishes. `arrived` is `false` only for a gesture that gave up. |
 
 Shorthand: `onChange(fn)`, `onWrite(fn)`, `onDone(fn)`, `onGestureStart(fn)`, `onGestureEnd(fn)`. The board reports whether a schedule is playing (any origin) via the `isGesturing` property; a browser that connects mid-gesture learns it on sync.
 
@@ -1444,9 +1446,9 @@ See also: Groups · Bus servo · Servo example
 # Stepper
 > Up to 6 stepper motors with accel-limited moves, continuous rotation, soft limits and live position — motion runs on the Arduino.
 
-Requires the `AccelStepper` library and `<PardaloteStepper.h>` in the sketch. Works with STEP/DIR drivers (**TMC2208**, **TMC2209**, **A4988**, **EasyDriver**) and 4-wire coil drivers (28BYJ-48 via ULN2003, bipolar via H-bridge).
+Requires the `AccelStepper` library (**version 1.64 or newer** — the Library Manager version is fine) and `<PardaloteStepper.h>` in the sketch. Works with STEP/DIR drivers (**TMC2208**, **TMC2209**, **A4988**, **EasyDriver**) and 4-wire coil drivers (28BYJ-48 via ULN2003, bipolar via H-bridge).
 
-**Motion runs on the Arduino.** You send targets and motion profiles; the board generates the step pulses via `AccelStepper::run()`. You never stream individual steps over WiFi — that's why the API mirrors AccelStepper (non-blocking) rather than the built-in `Stepper` library, whose `step()` blocks and would stall the connection mid-move.
+**Motion runs on the Arduino.** You send targets and motion profiles; the board generates the step pulses with AccelStepper, timed so the real speed matches the speed you ask for (on its own, AccelStepper rounds speeds down to whatever the sketch's loop can keep up with). You never stream individual steps over WiFi — that's why the API mirrors AccelStepper (non-blocking) rather than the built-in `Stepper` library, whose `step()` blocks and would stall the connection mid-move.
 
 Give the motor its own power supply — don't run the coils off the board's 5 V rail. Examples assume:
 
@@ -1513,7 +1515,7 @@ Accel-limited moves to an absolute or relative target.
 
 ## whenDone()
 
-Promise for the most recent move — resolves `true` when the board reports `done` (or immediately if the move already finished), `false` on the safety timeout (default `max(duration × 2, 10000)` ms; pass `{ timeout }` or a bare number to override, `0` to wait forever). Handy for sequencing. The same method exists on servos, bus servos, and groups.
+Promise for the most recent move — resolves `true` when the board reports `done` (or immediately if the move already finished), `false` if it didn't arrive (a gesture that gave up, or the safety timeout — default `max(duration × 2, 10000)` ms; pass `{ timeout }` or a bare number to override, `0` to wait forever). Handy for sequencing. The same method exists on servos, bus servos, and groups.
 
 `await arduino.x.whenDone([{ timeout }])`
 
@@ -1535,7 +1537,7 @@ Runs a **constant-speed** move sized to arrive in about `duration` ms — the bo
 
 ## gesture()
 
-Plays an authored **segment schedule** — an ordered list of eased moves the board runs back-to-back on its own clock. Where `moveToTimed()` is one constant-speed move, a gesture is a sequence of *eased* ones: the primitive for expressive motion. Each segment's velocity follows its curve (a dedicated on-board eased mode, not AccelStepper's fixed ramp), so you get anticipation, overshoot, and holds a plain ramp can't produce. Values are in **steps**. Fires `done` when the last segment lands.
+Plays an authored **segment schedule** — an ordered list of eased moves the board runs back-to-back on its own clock. Where `moveToTimed()` is one constant-speed move, a gesture is a sequence of *eased* ones: the primitive for expressive motion. Each segment's velocity follows its curve (a dedicated on-board eased mode, not AccelStepper's fixed ramp), so you get anticipation, overshoot, and holds a plain ramp can't produce. Values are in **steps**. Fires `done` when the last segment lands. Timing follows the shared gesture timing rules: segments start on schedule, and the last key is landed or given up on 2 s after its expected arrival.
 
 `arduino.x.gesture(segments, [opts])`
 
@@ -1701,7 +1703,7 @@ arduino.x.moveRevolutions(0.5);
 | Event | Payload | Fires when |
 |---|---|---|
 | `'change'` | `{ position, distanceToGo, speed, isRunning }` | The position changed by at least the threshold. |
-| `'done'` | `{ position }` | A position-mode target, timed move, or gesture finishes (or motion ends at a limit switch). |
+| `'done'` | `{ position, arrived }` | A position-mode target, timed move, or gesture finishes (or motion ends at a limit switch). `arrived` is `false` only for a gesture that gave up. |
 | `'move'` | `{ target }` | THIS page issued a move (including group moves it participates in) — a command echo, like servo `'write'`. Other browsers' moves arrive via the read stream and `'done'`/`'limit'`, not `'move'`. `runSpeed()` emits nothing (continuous rotation has no destination). |
 | `'limit'` | `{ which, position }` | A limit switch tripped and the board hard-stopped the motor. |
 | `'home:fail'` | `{ position }` | Homing gave up (seek/back-off timeout) — the switch never responded. |
@@ -1831,7 +1833,7 @@ Reaches a position in about a set time — the speed is picked from the move dis
 
 ## gesture()
 
-Plays an authored **segment schedule** — an ordered list of moves the board runs back-to-back on its own clock. Values are in **counts**. A bus servo takes a *(position, speed)* target and runs its own move, so the board renders each segment's easing `curve` with a **streaming interpolator**: it samples the curve on a fixed clock and streams look-ahead setpoints (batched across a group into one phase-locked write), so the shape you author — overshoot included — is the shape the servo runs. Fires `done` when the last segment lands. Coordinate several lanes with a group.
+Plays an authored **segment schedule** — an ordered list of moves the board runs back-to-back on its own clock. Values are in **counts**. A bus servo takes a *(position, speed)* target and runs its own move, so the board renders each segment's easing `curve` with a **streaming interpolator**: it samples the curve on a fixed clock and streams look-ahead setpoints (batched across a group into one phase-locked write), so the shape you author — overshoot included — is the shape the servo runs. Fires `done` when the last segment lands. Timing follows the shared gesture timing rules: segments start on schedule, and the last key is landed or given up on 2 s after its expected arrival. Coordinate several lanes with a group.
 
 `arduino.shoulder.gesture(segments, [opts])`
 
@@ -1994,7 +1996,7 @@ Bus utilities. Servos ship as ID 1 — to renumber, put a **single** servo on th
 |---|---|---|
 | `'change'` | `{ position, velocity, load, voltage, temperature }` | A polled reading changed by at least the threshold. |
 | `'write'` | `{ position }` | A move is issued (including a gesture start — `position` is the predicted rest). |
-| `'done'` | `{ position }` | A move, timed move, or gesture settles (the servo's `Moving` flag cleared). |
+| `'done'` | `{ position, arrived }` | A move or timed move settles (the servo's `Moving` flag cleared), or a gesture lands. `arrived` is `false` only for a gesture that gave up. |
 | `'fwlimits'` | `{ min, max, enabled }` or `null` | The servo's firmware angle limits arrived — at attach, on reconnect, or after `readFirmwareLimits()`. |
 | `'presence'` | `{ servoId, present }` | The servo's answering state changed. Fires on the attach-time ping, on reconnect, and whenever `read()` feedback shows the servo appearing or disappearing (`present: false` = no answer — wrong ID, wiring, baud, or unpowered). Needs `read()` polling active to track mid-session changes. |
 | `'gesturestart'` / `'gestureend'` | `{}` | The board starts / ends playing a schedule on this servo — **any** origin (this browser, another, or the sketch). End = the last segment settles or a superseding write. |
@@ -2285,9 +2287,20 @@ A `Gesture` is **immutable**: every `.scale()` / `.speed()` / `.crop()` returns 
 
 The transforms are applied in the browser and sent as an ordinary gesture frame — nothing new crosses the wire, and the board plays the reshaped schedule like any other. A sketch can reshape its own gestures the same way — see Board-authored gestures.
 
+## Timing — gestures keep to their schedule
+
+Every actuator type plays a gesture the same way: **timing wins**.
+
+- **Segments start on schedule.** Each segment starts when the previous one's authored time is up. Nothing waits for an actuator to arrive, or for another lane.
+- **Each segment starts from where the actuator actually is.** If a motor fell short of a key, the next segment covers the extra distance in its own time, so it catches up as it goes.
+- **Keys come from what you authored.** Absolute keys are the values you wrote. In a relative gesture, each key is the previous *intended* key plus its delta (only the first is relative to the live position), so a shortfall never becomes a lasting offset.
+- **The last key is landed.** When the final segment's time is up, the actuator keeps going until it reaches the final target. If it still hasn't arrived **2 seconds** after its expected arrival, it gives up and holds where it got to.
+
+So a gesture an actuator can keep up with plays exactly as authored. One that asks for more speed than the hardware has stays on time but cuts corners: peaks get clipped and fast back-and-forth shakes get smaller. Lanes in a multi-lane gesture stay aligned because they share one clock. A struggling or stuck actuator never holds the others up.
+
 ## Awaiting completion — `whenDone()`
 
-Every form returns something you can await. `whenDone()` resolves `true` when **every** channel reports it actually **arrived** (each actuator's feedback-confirmed `done`, not a timer), or `false` on a safety timeout if a channel never reports (dead servo, lost link).
+Every form returns something you can await. `whenDone()` resolves `true` when **every** channel reports it actually **arrived** (each actuator's feedback-confirmed `done`, not a timer). It resolves `false` if any channel didn't: its landing gave up 2 seconds after the expected arrival (it's holding short of the target), or a safety timeout fired because a channel never reported (dead servo, lost link). Each actuator's `done` event also says which: `{ …, arrived: true | false }`.
 
 `await arduino.gesture({ … }).whenDone([{ timeout }])`
 
@@ -2978,6 +2991,8 @@ Per segment:  [ curve u8 ][ dur u16, ms ][ value i32 ]        (big-endian)
 ```
 
 `flags` bit 0 selects the reference frame (relative delta vs absolute target); `value` is a signed displacement or target in the actuator's native unit (degrees, steps, counts); `curve` indexes the shared easing table (`linear`, `easeIn`, `easeOut`, `easeInOut`, `back`). A group gesture batches every type's frame into one message. This same record layout is what an on-device sequencer replays — one gesture vocabulary shared across the browser and the board — so a sketch can author gestures with the identical frames.
+
+When a schedule finishes, the actuator's normal DONE frame (`CMD_SERVO_DONE`, `CMD_STEPPER_DONE`, `CMD_BUSSERVO_DONE`) carries an extra **outcome** param: `[id, position, outcome]`, where `0` = arrived and `1` = gave up (the final landing timed out 2 s after the expected arrival, and the actuator is holding where it got to). Plain moves keep the two-param `[id, position]` frame, and a missing outcome means arrived, so older firmware and older clients interoperate. Added in protocol **v1.3**.
 
 While a schedule plays, the board emits a lightweight `CMD_*_GESTURE_STATE` (`0x64`/`0x65`/`0x66`, `[id, active]`) on the start and end of the motion — **existence, never the schedule** — so every browser can reflect an `isGesturing` state (and a reconnecting one learns it in the state sync below). It fires whoever authored the gesture, browser or sketch. Added in protocol **v1.1** (backward-compatible: older clients ignore the unknown code).
 
@@ -4450,7 +4465,7 @@ This is a **tool** — no code editing. Open `index.html` and:
 | **drag a max / min value** (gutter) | set that output's soft limit (the value axis spans min–max, in the type's unit) |
 | **right-click a max / min value** | **reset** to the type's default range — or (bus servos only) **pose limits** by sweeping the range by hand |
 | **drag the playhead** (ruler) | **drive the outputs** to that point in the sequence, live — a remote control (grabbing it during play takes over). Play resumes from wherever it rests |
-| **▶ play** | play the sequence forward from the playhead (one batched `arduino.gesture({…})`) |
+| **▶ play** | play the sequence forward from the playhead (one batched `arduino.gesture({…})`). Every output keeps to the schedule; when playback ends the **info** line says `done`, or names any output that couldn't reach its last key within 2 s and gave up, and where it stopped |
 | **■ stop** | cancel the gesture and hold where it is — the playhead stays put (the robot doesn't rewind) |
 | **\|◀◀ start** / **end ▶▶\|** | send the playhead **and the outputs** to the start / end |
 | **free** / **free all** | release an output's torque to hand-pose it — bus servos and steppers-with-EN only (greyed otherwise) |

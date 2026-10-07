@@ -117,7 +117,7 @@ An immediate `write()` cancels an in-progress timed move.
 
 ## gesture()
 
-Plays an authored **segment schedule** — an ordered list of eased moves the Arduino runs back-to-back on its own clock (on-board, no WiFi streaming). Where `writeTimed()` is one eased move, a gesture is many: the primitive for *expressive* motion — anticipation, overshoot, holds, follow-through. Fires `done` (resolves `whenDone()`) when the last segment lands.
+Plays an authored **segment schedule** — an ordered list of eased moves the Arduino runs back-to-back on its own clock (on-board, no WiFi streaming). Where `writeTimed()` is one eased move, a gesture is many: the primitive for *expressive* motion — anticipation, overshoot, holds, follow-through. Fires `done` (resolves `whenDone()`) when the last segment lands. Timing follows the shared [gesture timing](gesture.html#timing--gestures-keep-to-their-schedule) rules: segments start on schedule, and the last key is landed or given up on 2 s after its expected arrival.
 
 <div class="sig">arduino.pan.<span class="fn">gesture</span>(segments, [opts])</div>
 
@@ -145,7 +145,7 @@ To play coordinated gestures across several actuators at once, see [group.gestur
 
 ## whenDone()
 
-Promise for the most recent timed move — resolves `true` on the servo's `done` (or immediately if no move is pending), `false` on the safety timeout (default `max(duration × 2, 10000)` ms; pass `{ timeout }` or a bare number to override, `0` to wait forever). The same method exists on steppers, bus servos, and groups.
+Promise for the most recent timed move — resolves `true` on the servo's `done` (or immediately if no move is pending), `false` if it didn't arrive (a gesture that gave up, or the safety timeout — default `max(duration × 2, 10000)` ms; pass `{ timeout }` or a bare number to override, `0` to wait forever). The same method exists on steppers, bus servos, and groups.
 
 <div class="sig">await arduino.pan.<span class="fn">whenDone</span>([{ timeout }])</div>
 
@@ -203,7 +203,7 @@ else showError('pan servo not responding');
 | `'gesture'` | `{ segments, absolute, duration }` | *This* browser sends a gesture (local echo). |
 | `'gesturestart'` | `{}` | The board starts playing a schedule on this servo — **any** origin (this browser, another, or the sketch). |
 | `'gestureend'` | `{}` | …that schedule ends — completion or a superseding write. |
-| `'done'` | `{ angle }` | A timed move or gesture reaches its target. |
+| `'done'` | `{ angle, arrived }` | A timed move or gesture finishes. `arrived` is `false` only for a gesture that gave up. |
 
 Shorthand: `onChange(fn)`, `onWrite(fn)`, `onDone(fn)`, `onGestureStart(fn)`, `onGestureEnd(fn)`. The board reports whether a schedule is playing (any origin) via the `isGesturing` property; a browser that connects mid-gesture learns it on sync.
 

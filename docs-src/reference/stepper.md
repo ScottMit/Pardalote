@@ -1,9 +1,9 @@
 title: Stepper
 lede: Up to 6 stepper motors with accel-limited moves, continuous rotation, soft limits and live position — motion runs on the Arduino.
 ---
-Requires the `AccelStepper` library and `<PardaloteStepper.h>` in the sketch. Works with STEP/DIR drivers (**TMC2208**, **TMC2209**, **A4988**, **EasyDriver**) and 4-wire coil drivers (28BYJ-48 via ULN2003, bipolar via H-bridge).
+Requires the `AccelStepper` library (**version 1.64 or newer** — the Library Manager version is fine) and `<PardaloteStepper.h>` in the sketch. Works with STEP/DIR drivers (**TMC2208**, **TMC2209**, **A4988**, **EasyDriver**) and 4-wire coil drivers (28BYJ-48 via ULN2003, bipolar via H-bridge).
 
-**Motion runs on the Arduino.** You send targets and motion profiles; the board generates the step pulses via `AccelStepper::run()`. You never stream individual steps over WiFi — that's why the API mirrors AccelStepper (non-blocking) rather than the built-in `Stepper` library, whose `step()` blocks and would stall the connection mid-move.
+**Motion runs on the Arduino.** You send targets and motion profiles; the board generates the step pulses with AccelStepper, timed so the real speed matches the speed you ask for (on its own, AccelStepper rounds speeds down to whatever the sketch's loop can keep up with). You never stream individual steps over WiFi — that's why the API mirrors AccelStepper (non-blocking) rather than the built-in `Stepper` library, whose `step()` blocks and would stall the connection mid-move.
 
 Give the motor its own power supply — don't run the coils off the board's 5 V rail. Examples assume:
 
@@ -70,7 +70,7 @@ Accel-limited moves to an absolute or relative target.
 
 ## whenDone()
 
-Promise for the most recent move — resolves `true` when the board reports `done` (or immediately if the move already finished), `false` on the safety timeout (default `max(duration × 2, 10000)` ms; pass `{ timeout }` or a bare number to override, `0` to wait forever). Handy for sequencing. The same method exists on servos, bus servos, and groups.
+Promise for the most recent move — resolves `true` when the board reports `done` (or immediately if the move already finished), `false` if it didn't arrive (a gesture that gave up, or the safety timeout — default `max(duration × 2, 10000)` ms; pass `{ timeout }` or a bare number to override, `0` to wait forever). Handy for sequencing. The same method exists on servos, bus servos, and groups.
 
 <div class="sig">await arduino.x.<span class="fn">whenDone</span>([{ timeout }])</div>
 
@@ -92,7 +92,7 @@ Runs a **constant-speed** move sized to arrive in about `duration` ms — the bo
 
 ## gesture()
 
-Plays an authored **segment schedule** — an ordered list of eased moves the board runs back-to-back on its own clock. Where `moveToTimed()` is one constant-speed move, a gesture is a sequence of *eased* ones: the primitive for expressive motion. Each segment's velocity follows its curve (a dedicated on-board eased mode, not AccelStepper's fixed ramp), so you get anticipation, overshoot, and holds a plain ramp can't produce. Values are in **steps**. Fires `done` when the last segment lands.
+Plays an authored **segment schedule** — an ordered list of eased moves the board runs back-to-back on its own clock. Where `moveToTimed()` is one constant-speed move, a gesture is a sequence of *eased* ones: the primitive for expressive motion. Each segment's velocity follows its curve (a dedicated on-board eased mode, not AccelStepper's fixed ramp), so you get anticipation, overshoot, and holds a plain ramp can't produce. Values are in **steps**. Fires `done` when the last segment lands. Timing follows the shared [gesture timing](gesture.html#timing--gestures-keep-to-their-schedule) rules: segments start on schedule, and the last key is landed or given up on 2 s after its expected arrival.
 
 <div class="sig">arduino.x.<span class="fn">gesture</span>(segments, [opts])</div>
 
@@ -258,7 +258,7 @@ arduino.x.moveRevolutions(0.5);
 | Event | Payload | Fires when |
 |---|---|---|
 | `'change'` | `{ position, distanceToGo, speed, isRunning }` | The position changed by at least the threshold. |
-| `'done'` | `{ position }` | A position-mode target, timed move, or gesture finishes (or motion ends at a limit switch). |
+| `'done'` | `{ position, arrived }` | A position-mode target, timed move, or gesture finishes (or motion ends at a limit switch). `arrived` is `false` only for a gesture that gave up. |
 | `'move'` | `{ target }` | THIS page issued a move (including group moves it participates in) — a command echo, like servo `'write'`. Other browsers' moves arrive via the read stream and `'done'`/`'limit'`, not `'move'`. `runSpeed()` emits nothing (continuous rotation has no destination). |
 | `'limit'` | `{ which, position }` | A limit switch tripped and the board hard-stopped the motor. |
 | `'home:fail'` | `{ position }` | Homing gave up (seek/back-off timeout) — the switch never responded. |

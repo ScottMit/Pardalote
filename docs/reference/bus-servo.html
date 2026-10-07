@@ -214,7 +214,7 @@
 </tbody>
 </table>
 <h2 id="gesture">gesture()</h2>
-<p>Plays an authored <strong>segment schedule</strong> — an ordered list of moves the board runs back-to-back on its own clock. Values are in <strong>counts</strong>. A bus servo takes a <em>(position, speed)</em> target and runs its own move, so the board renders each segment's easing <code>curve</code> with a <strong>streaming interpolator</strong>: it samples the curve on a fixed clock and streams look-ahead setpoints (batched across a group into one phase-locked write), so the shape you author — overshoot included — is the shape the servo runs. Fires <code>done</code> when the last segment lands. Coordinate several lanes with a <a href="groups.html#gesture">group</a>.</p>
+<p>Plays an authored <strong>segment schedule</strong> — an ordered list of moves the board runs back-to-back on its own clock. Values are in <strong>counts</strong>. A bus servo takes a <em>(position, speed)</em> target and runs its own move, so the board renders each segment's easing <code>curve</code> with a <strong>streaming interpolator</strong>: it samples the curve on a fixed clock and streams look-ahead setpoints (batched across a group into one phase-locked write), so the shape you author — overshoot included — is the shape the servo runs. Fires <code>done</code> when the last segment lands. Timing follows the shared <a href="gesture.html#timing--gestures-keep-to-their-schedule">gesture timing</a> rules: segments start on schedule, and the last key is landed or given up on 2 s after its expected arrival. Coordinate several lanes with a <a href="groups.html#gesture">group</a>.</p>
 <div class="sig sig-js">arduino.shoulder.<span class="fn">gesture</span>(segments, [opts])</div>
 <p>Each segment carries a duration and a displacement expressed <strong>either</strong> relatively (<code>by</code>) <strong>or</strong> absolutely (<code>to</code>):</p>
 <table>
@@ -470,8 +470,8 @@
 </tr>
 <tr>
 <td><code>'done'</code></td>
-<td><code>{ position }</code></td>
-<td>A move, timed move, or gesture settles (the servo's <code>Moving</code> flag cleared).</td>
+<td><code>{ position, arrived }</code></td>
+<td>A move or timed move settles (the servo's <code>Moving</code> flag cleared), or a gesture lands. <code>arrived</code> is <code>false</code> only for a gesture that gave up.</td>
 </tr>
 <tr>
 <td><code>'fwlimits'</code></td>

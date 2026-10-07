@@ -85,8 +85,8 @@
     <main class="ref-main">
       <h1>Stepper</h1>
       <p class="lede">Up to 6 stepper motors with accel-limited moves, continuous rotation, soft limits and live position — motion runs on the Arduino.</p>
-<p>Requires the <code>AccelStepper</code> library and <code>&lt;PardaloteStepper.h&gt;</code> in the sketch. Works with STEP/DIR drivers (<strong>TMC2208</strong>, <strong>TMC2209</strong>, <strong>A4988</strong>, <strong>EasyDriver</strong>) and 4-wire coil drivers (28BYJ-48 via ULN2003, bipolar via H-bridge).</p>
-<p><strong>Motion runs on the Arduino.</strong> You send targets and motion profiles; the board generates the step pulses via <code>AccelStepper::run()</code>. You never stream individual steps over WiFi — that's why the API mirrors AccelStepper (non-blocking) rather than the built-in <code>Stepper</code> library, whose <code>step()</code> blocks and would stall the connection mid-move.</p>
+<p>Requires the <code>AccelStepper</code> library (<strong>version 1.64 or newer</strong> — the Library Manager version is fine) and <code>&lt;PardaloteStepper.h&gt;</code> in the sketch. Works with STEP/DIR drivers (<strong>TMC2208</strong>, <strong>TMC2209</strong>, <strong>A4988</strong>, <strong>EasyDriver</strong>) and 4-wire coil drivers (28BYJ-48 via ULN2003, bipolar via H-bridge).</p>
+<p><strong>Motion runs on the Arduino.</strong> You send targets and motion profiles; the board generates the step pulses with AccelStepper, timed so the real speed matches the speed you ask for (on its own, AccelStepper rounds speeds down to whatever the sketch's loop can keep up with). You never stream individual steps over WiFi — that's why the API mirrors AccelStepper (non-blocking) rather than the built-in <code>Stepper</code> library, whose <code>step()</code> blocks and would stall the connection mid-move.</p>
 <p>Give the motor its own power supply — don't run the coils off the board's 5 V rail. Examples assume:</p>
 <div class="code-ex"><span class="lang-badge lang-js">JS</span><div class="bar">sketch.js — register a stepper</div><pre><code><span class="nx">arduino</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">&#39;x&#39;</span><span class="p">,</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">Stepper</span><span class="p">());</span>
 </code></pre></div>
@@ -199,7 +199,7 @@
 </tbody>
 </table>
 <h2 id="whendone">whenDone()</h2>
-<p>Promise for the most recent move — resolves <code>true</code> when the board reports <code>done</code> (or immediately if the move already finished), <code>false</code> on the safety timeout (default <code>max(duration × 2, 10000)</code> ms; pass <code>{ timeout }</code> or a bare number to override, <code>0</code> to wait forever). Handy for sequencing. The same method exists on servos, bus servos, and groups.</p>
+<p>Promise for the most recent move — resolves <code>true</code> when the board reports <code>done</code> (or immediately if the move already finished), <code>false</code> if it didn't arrive (a gesture that gave up, or the safety timeout — default <code>max(duration × 2, 10000)</code> ms; pass <code>{ timeout }</code> or a bare number to override, <code>0</code> to wait forever). Handy for sequencing. The same method exists on servos, bus servos, and groups.</p>
 <div class="sig sig-js">await arduino.x.<span class="fn">whenDone</span>([{ timeout }])</div>
 <div class="code-ex"><span class="lang-badge lang-js">JS</span><div class="bar">Example — sequence moves</div><pre><code><span class="k">await</span><span class="w"> </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">moveTo</span><span class="p">(</span><span class="mf">2000</span><span class="p">).</span><span class="nx">whenDone</span><span class="p">();</span>
 <span class="k">await</span><span class="w"> </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">x</span><span class="p">.</span><span class="nx">moveTo</span><span class="p">(</span><span class="mf">0</span><span class="p">).</span><span class="nx">whenDone</span><span class="p">();</span>
@@ -229,7 +229,7 @@
 </tbody>
 </table>
 <h2 id="gesture">gesture()</h2>
-<p>Plays an authored <strong>segment schedule</strong> — an ordered list of eased moves the board runs back-to-back on its own clock. Where <code>moveToTimed()</code> is one constant-speed move, a gesture is a sequence of <em>eased</em> ones: the primitive for expressive motion. Each segment's velocity follows its curve (a dedicated on-board eased mode, not AccelStepper's fixed ramp), so you get anticipation, overshoot, and holds a plain ramp can't produce. Values are in <strong>steps</strong>. Fires <code>done</code> when the last segment lands.</p>
+<p>Plays an authored <strong>segment schedule</strong> — an ordered list of eased moves the board runs back-to-back on its own clock. Where <code>moveToTimed()</code> is one constant-speed move, a gesture is a sequence of <em>eased</em> ones: the primitive for expressive motion. Each segment's velocity follows its curve (a dedicated on-board eased mode, not AccelStepper's fixed ramp), so you get anticipation, overshoot, and holds a plain ramp can't produce. Values are in <strong>steps</strong>. Fires <code>done</code> when the last segment lands. Timing follows the shared <a href="gesture.html#timing--gestures-keep-to-their-schedule">gesture timing</a> rules: segments start on schedule, and the last key is landed or given up on 2 s after its expected arrival.</p>
 <div class="sig sig-js">arduino.x.<span class="fn">gesture</span>(segments, [opts])</div>
 <p>Each segment carries a duration, a curve, and a displacement expressed <strong>either</strong> relatively (<code>by</code>) <strong>or</strong> absolutely (<code>to</code>):</p>
 <table>
@@ -440,8 +440,8 @@
 </tr>
 <tr>
 <td><code>'done'</code></td>
-<td><code>{ position }</code></td>
-<td>A position-mode target, timed move, or gesture finishes (or motion ends at a limit switch).</td>
+<td><code>{ position, arrived }</code></td>
+<td>A position-mode target, timed move, or gesture finishes (or motion ends at a limit switch). <code>arrived</code> is <code>false</code> only for a gesture that gave up.</td>
 </tr>
 <tr>
 <td><code>'move'</code></td>

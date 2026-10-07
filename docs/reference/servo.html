@@ -262,7 +262,7 @@
 </code></pre></div>
 <p>An immediate <code>write()</code> cancels an in-progress timed move.</p>
 <h2 id="gesture">gesture()</h2>
-<p>Plays an authored <strong>segment schedule</strong> — an ordered list of eased moves the Arduino runs back-to-back on its own clock (on-board, no WiFi streaming). Where <code>writeTimed()</code> is one eased move, a gesture is many: the primitive for <em>expressive</em> motion — anticipation, overshoot, holds, follow-through. Fires <code>done</code> (resolves <code>whenDone()</code>) when the last segment lands.</p>
+<p>Plays an authored <strong>segment schedule</strong> — an ordered list of eased moves the Arduino runs back-to-back on its own clock (on-board, no WiFi streaming). Where <code>writeTimed()</code> is one eased move, a gesture is many: the primitive for <em>expressive</em> motion — anticipation, overshoot, holds, follow-through. Fires <code>done</code> (resolves <code>whenDone()</code>) when the last segment lands. Timing follows the shared <a href="gesture.html#timing--gestures-keep-to-their-schedule">gesture timing</a> rules: segments start on schedule, and the last key is landed or given up on 2 s after its expected arrival.</p>
 <div class="sig sig-js">arduino.pan.<span class="fn">gesture</span>(segments, [opts])</div>
 <p>Each segment is an object with a duration, a curve, and a displacement expressed <strong>either</strong> relatively (<code>by</code>) <strong>or</strong> absolutely (<code>to</code>):</p>
 <table>
@@ -306,7 +306,7 @@
 </code></pre></div>
 <p>To play coordinated gestures across several actuators at once, see <a href="groups.html#gesture">group.gesture()</a>.</p>
 <h2 id="whendone">whenDone()</h2>
-<p>Promise for the most recent timed move — resolves <code>true</code> on the servo's <code>done</code> (or immediately if no move is pending), <code>false</code> on the safety timeout (default <code>max(duration × 2, 10000)</code> ms; pass <code>{ timeout }</code> or a bare number to override, <code>0</code> to wait forever). The same method exists on steppers, bus servos, and groups.</p>
+<p>Promise for the most recent timed move — resolves <code>true</code> on the servo's <code>done</code> (or immediately if no move is pending), <code>false</code> if it didn't arrive (a gesture that gave up, or the safety timeout — default <code>max(duration × 2, 10000)</code> ms; pass <code>{ timeout }</code> or a bare number to override, <code>0</code> to wait forever). The same method exists on steppers, bus servos, and groups.</p>
 <div class="sig sig-js">await arduino.pan.<span class="fn">whenDone</span>([{ timeout }])</div>
 <div class="code-ex"><span class="lang-badge lang-js">JS</span><div class="bar">Example — sequence timed moves</div><pre><code><span class="k">await</span><span class="w"> </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">pan</span><span class="p">.</span><span class="nx">writeTimed</span><span class="p">(</span><span class="mf">120</span><span class="p">,</span><span class="w"> </span><span class="mf">1500</span><span class="p">).</span><span class="nx">whenDone</span><span class="p">();</span>
 <span class="k">await</span><span class="w"> </span><span class="nx">arduino</span><span class="p">.</span><span class="nx">pan</span><span class="p">.</span><span class="nx">writeTimed</span><span class="p">(</span><span class="mf">60</span><span class="p">,</span><span class="w">  </span><span class="mf">1500</span><span class="p">).</span><span class="nx">whenDone</span><span class="p">();</span>
@@ -383,8 +383,8 @@
 </tr>
 <tr>
 <td><code>'done'</code></td>
-<td><code>{ angle }</code></td>
-<td>A timed move or gesture reaches its target.</td>
+<td><code>{ angle, arrived }</code></td>
+<td>A timed move or gesture finishes. <code>arrived</code> is <code>false</code> only for a gesture that gave up.</td>
 </tr>
 </tbody>
 </table>

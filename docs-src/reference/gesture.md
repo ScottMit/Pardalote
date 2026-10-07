@@ -122,9 +122,20 @@ A `Gesture` is **immutable**: every `.scale()` / `.speed()` / `.crop()` returns 
 
 The transforms are applied in the browser and sent as an ordinary gesture frame — nothing new crosses the wire, and the board plays the reshaped schedule like any other. A sketch can reshape its own gestures the same way — see [Board-authored gestures](extensions.html#board-authored-gestures).
 
+## Timing — gestures keep to their schedule
+
+Every actuator type plays a gesture the same way: **timing wins**.
+
+- **Segments start on schedule.** Each segment starts when the previous one's authored time is up. Nothing waits for an actuator to arrive, or for another lane.
+- **Each segment starts from where the actuator actually is.** If a motor fell short of a key, the next segment covers the extra distance in its own time, so it catches up as it goes.
+- **Keys come from what you authored.** Absolute keys are the values you wrote. In a relative gesture, each key is the previous *intended* key plus its delta (only the first is relative to the live position), so a shortfall never becomes a lasting offset.
+- **The last key is landed.** When the final segment's time is up, the actuator keeps going until it reaches the final target. If it still hasn't arrived **2 seconds** after its expected arrival, it gives up and holds where it got to.
+
+So a gesture an actuator can keep up with plays exactly as authored. One that asks for more speed than the hardware has stays on time but cuts corners: peaks get clipped and fast back-and-forth shakes get smaller. Lanes in a multi-lane gesture stay aligned because they share one clock. A struggling or stuck actuator never holds the others up.
+
 ## Awaiting completion — `whenDone()`
 
-Every form returns something you can await. `whenDone()` resolves `true` when **every** channel reports it actually **arrived** (each actuator's feedback-confirmed `done`, not a timer), or `false` on a safety timeout if a channel never reports (dead servo, lost link).
+Every form returns something you can await. `whenDone()` resolves `true` when **every** channel reports it actually **arrived** (each actuator's feedback-confirmed `done`, not a timer). It resolves `false` if any channel didn't: its landing gave up 2 seconds after the expected arrival (it's holding short of the target), or a safety timeout fired because a channel never reported (dead servo, lost link). Each actuator's `done` event also says which: `{ …, arrived: true | false }`.
 
 <div class="sig">await arduino.gesture({ … }).<span class="fn">whenDone</span>([{ timeout }])</div>
 
