@@ -18,6 +18,55 @@ Pardalote versions **two things independently**:
 
 ## [Unreleased]
 
+- **The board's loop runs much faster on ESP32 (about 30× on the bench).** Two limits are gone:
+  - Every pass of `Pardalote.run()` ended with `delay(1)`, capping `loop()` at ~1,000 passes
+    a second. Dual-core ESP32s (ESP32, S3) no longer yield at all. Single-core ones (S2, C3, C5,
+    C6) yield once every 100 ms instead of every pass — enough for the watchdog.
+  - The WebSocket server is now polled at most once a millisecond rather than on every pass
+    (each poll takes ~200 µs). Incoming messages wait at most 1 ms longer.
+
+  On the bench (Wrover) `loop()` went from ~980 to ~33,000 passes a second, which is what lets
+  steppers reach ~19,000 steps/s. **Your own `loop()` code also runs that much more often:** a
+  `Serial.println()` in `loop()` prints far faster, and anything that counted loop passes as a
+  rough timer will run fast — use `millis()` for timing. Tunable with build flags:
+  `PARDALOTE_WS_POLL_US` (default 1000, `0` = every pass) and `PARDALOTE_IDLE_YIELD_MS`
+  (default 100).
+
+- **Steppers run at the speed you ask for.** AccelStepper times each step from when the
+  previous one actually fired, so every speed rounded down to whatever the sketch's loop could
+  keep up with (on the bench, 16,000 steps/s asked came out at 11,450, and accelerated moves ran
+  25% slow). Pardalote now steps through a small AccelStepper subclass that times each step from
+  when it *should* have happened, so the average speed is exact — for every kind of move and for
+  gestures. **Needs AccelStepper 1.64 or newer** (the Library Manager version).
+- **A stepper no longer wanders off after a gesture, timed move or spin.** These drive the
+  motor at a set speed, which leaves AccelStepper's acceleration planner out of date. The next
+  `moveTo()` could then creep the *wrong* way, slowing very gradually, for minutes. On the bench,
+  `moveTo(0)` after a fast gesture crawled away from 0 for over 15 minutes. Every hand-over to an
+  accelerated move now starts the plan from rest.
+- **Gestures keep to their schedule — the same way for every actuator.** Servos, steppers
+  and bus servos now play a gesture by one rule: each segment starts on schedule, from
+  wherever the actuator actually is, aiming at the key you authored. Nothing waits for a
+  slow actuator or for another lane. The last key is landed; if the actuator hasn't
+  arrived 2 seconds after its expected arrival, it gives up and holds where it got to.
+  Before, a stepper waited to land on every key (so any lag compounded and it drifted out
+  of time with other lanes), and bus servos froze the whole group whenever one fell behind
+  (and a stuck servo held the gesture forever). Relative keys now chain from the previous
+  *intended* key, so a shortfall never becomes a lasting offset.
+- **`whenDone()` tells you whether a gesture arrived.** It resolves `false` when a
+  gesture's landing gave up (as well as on its safety timeout), and the `done` event now
+  carries `arrived: true | false`. On the wire, a gesture's DONE frame gains an optional
+  outcome param (protocol **v1.3**, backward-compatible).
+- **PWM servos no longer stall the board on ESP32.** On arduino-esp32 core 3.x, each PWM
+  update blocks for up to ~40 ms if it comes within two PWM periods of the last one. A
+  servo gesture writing every 20 ms held up the whole board loop, so anything sharing it
+  — most visibly a stepper in the same gesture — crawled. Servo writes are now paced: an
+  unchanged pulse is never rewritten, and a change that arrives too soon is held and sent
+  the moment the PWM can take it, so nothing blocks.
+- **Re-attaching a stepper with the same pins keeps its position.** Every reconnect used
+  to recreate the stepper on the board, silently resetting its step count to 0 wherever
+  the motor actually was. A repeat attach with identical pins is now ignored, as it
+  already was for servos.
+
 - **A second `Pardalote.begin()` is ignored, with a warning.** Pasting two example
   sketches together easily leaves two `begin()` calls; the second used to rerun the whole
   startup (another `WiFi.begin()`, a second WebSocket server start) and destabilise the

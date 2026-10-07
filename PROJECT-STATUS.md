@@ -51,6 +51,60 @@ structurally verified unless a bench entry says otherwise.
 
 ## What's built this session
 
+- **Stepper speed: bundled + error-compensated AccelStepper, loop-rate tests (2026-10-05).**
+  Bench (Wrover, A4983 at 1/16, `tools/stepper-speed-test/`): bare AccelStepper sketch does
+  ~19,600 steps/s; Pardalote topped out at ~740 because steps land only on loop passes:
+  - `delay(1)` every ESP32 pass → ~980 passes/s. TEMP switch `PARDALOTE_ESP32_LOOP_YIELD 0`
+    in `Pardalote.cpp` → ~5,400 passes/s, no watchdog reset seen (Wrover, short run).
+  - `_ws.loop()` costs ~200 µs/pass. TEMP switch `PARDALOTE_WS_POLL_US 1000` (poll ≤1/ms) →
+    31–36k passes/s; Scott: connection and stop felt fine.
+  - Remaining shortfall (72–91% of asked, ramps 1.25× slow) = AccelStepper's
+    `_lastStepTime = time` rounding to whole passes. **Fixed** with `src/internal/paced_stepper.h`:
+    `PardaloteStepperMotor : public AccelStepper` adds `runPaced()/runSpeedPaced()/
+    runSpeedToPositionPaced()` (time from when the step was due; resync if >1 interval late — no
+    burst), using the protected API AccelStepper 1.64 added for subclasses (`stepForward/
+    stepBackward`, `_stepInterval`, `_direction`, `computeNewSpeed`). **Requires AccelStepper ≥ 1.64**
+    (= Library Manager version; 1.65/1.66 exist only on airspayce). Scott REJECTED bundling a
+    modified copy (drift, licence housekeeping). Verified by `tools/stub-compile/accel_timing_sim.cpp`
+    (real installed AccelStepper + subclass, fake clock, in run.sh; `-DSIM_CONTROL` = unmodified
+    control that reproduces the bench shortfall).
+  - Bench 1 of the subclass (2026-10-05): 16k → 13,493, 8k → 6,978, ramp 2.94 s (ideal 2.61).
+    Cause: resync-if->1-interval-late fired on every ~200 µs WebSocket poll (once per ms),
+    dropping ~1 step/ms per 8,000 steps/s. Fixed: resync only if > max(interval,
+    `PACED_RESYNC_US` 2000) late. Simulation now models the WS stall (reproduced the bench
+    numbers before the fix; exact after) and guards catch-up size (6 back-to-back steps after a
+    200 µs stall at 16k). **BENCH-CONFIRMED 2026-10-05:** constant 1k–16k all within ~1%
+    (16k → 16,143); ramp legs 2,594–2,619 ms vs ideal 2,613 (bare AccelStepper 2,596), peak 19,210.
+    Pardalote stepper ceiling ~740 → ~19,000 steps/s.
+  - Scott chose ONE consistent backend (works on R4 + 4-wire motors) over FastAccelStepper
+    (no R4, no C5 without a patch, step/dir only, RMT shared with NeoPixel).
+  - **Loop changes made permanent (2026-10-05):** WebSocket polled ≤ once per
+    `PARDALOTE_WS_POLL_US` (1000); `delay(1)` gone on dual-core, single-core
+    (`CONFIG_FREERTOS_UNICORE`: S2/C3/C5/C6 — checked in core 3.3.11 sdkconfig) yields 1 ms every
+    `PARDALOTE_IDLE_YIELD_MS` (100). TEMP trace removed everywhere. CHANGELOG warns user `loop()`
+    code now runs ~30× more often. **Still to bench:** a single-core soak (C5) for watchdog
+    resets, and a longer Wrover soak.
+
+- **Gesture pacing policy + ESP32 servo-write stall + stepper attach (2026-10-01 → 10-05).**
+  Full plan, decisions and bench checklist: **PLAN-gesture-pacing.md** (delete once benched).
+  - *Root cause of the Gesture Builder "stepper lags, then rushes at the end"* (bench-traced
+    2026-10-01, Wrover, core 3.3.11): `ledc_update_duty()` blocks until ~40 ms after the
+    previous PWM update on that channel. PWM-servo gesture writes every 20 ms → each loop
+    pass ~40 ms → the stepper (1 step / pass) crawled for the whole padded gesture.
+    **Fixed:** `PardaloteServo.h` `servoOut()/servoOutUs()` pace ESP32 writes (skip
+    unchanged, hold changes inside a 45 ms window, `flushPending()` in loop). Bench-
+    confirmed: servo write 39 ms → 41 µs, loop back to ~1 kHz.
+  - *Stepper re-attach reset the step count to 0* — attach now ignores identical repeats
+    (mirrors servo). Bench-confirmed: no re-attach on reconnect.
+  - *Shared pacing policy (implemented 2026-10-05, BENCH PENDING):* all actuators start
+    segments on schedule from the live position, relative keys anchor to the intended
+    path, the final key lands or gives up 2 s after expected arrival (holds), DONE gains an
+    optional outcome param (protocol v1.3), JS `whenDone()` → `false` on gave-up. The
+    bus-servo cohort barrier / pace-gate is REMOVED (supersedes the 2026-09-20 barrier
+    design below).
+  - *Resolved 2026-10-05:* the stepper's in-segment speed loss, the TEMP trace and the ESP32
+    `delay(1)` cap — see the stepper-speed entry above.
+
 - **Gesture Builder — unassigned rows, blank pins (2026-09-29).** New rows (+, and new lanes
   from pasted code) are type **`unassigned`** (0–100 % axis; `pct` flag, pasted lanes keep RAW
   values + stretched axis and are NOT rescaled when a type is picked). Connection fields are
