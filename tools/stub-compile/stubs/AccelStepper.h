@@ -27,4 +27,12 @@ public:
     void  setPinsInverted(bool = false, bool = false, bool = false) {}
     void  setPinsInverted(bool, bool, bool, bool, bool) {}
     bool  isRunning() { return false; }
+    virtual ~AccelStepper() {}
+protected:   // what AccelStepper 1.64+ exposes to subclasses (used by internal/paced_stepper.h)
+    typedef enum { DIRECTION_CCW = 0, DIRECTION_CW = 1 } Direction;
+    virtual unsigned long computeNewSpeed() { return 0; }
+    long  stepForward() { return 0; }
+    long  stepBackward() { return 0; }
+    boolean       _direction = DIRECTION_CW;
+    unsigned long _stepInterval = 0;
 };

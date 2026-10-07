@@ -23,7 +23,7 @@ For examples and reference docs, see the [Pardalote Website](https://scottmit.gi
 - `WebSocketsServer` (by Markus Sattler)
 - `Adafruit NeoPixel` (if using LED strips)
 - `ESP32Servo` (if using servos on ESP32)
-- `AccelStepper` (by Mike McCauley, if using stepper motors)
+- `AccelStepper` (by Mike McCauley, 1.64 or newer, if using stepper motors)
 - `SCServo` (Feetech/Waveshare, if using serial bus servos — install **"SCServo" by FT&WS** from the Library Manager, or a ZIP from the Waveshare wiki / Feetech SDK)
 
 No extra library is needed for the IMU extension — it reads sensor registers directly over I2C.
@@ -765,7 +765,7 @@ arduino.pan.getState();        // snapshot of all servo state
 
 ## Stepper
 
-Up to **6 steppers** simultaneously. Requires the AccelStepper library. Works with STEP/DIR drivers (**TMC2208**, **TMC2209**, **A4988**, **EasyDriver**) and 4-wire coil drivers (28BYJ-48 via ULN2003, bipolar via H-bridge).
+Up to **6 steppers** simultaneously. Requires the AccelStepper library (1.64 or newer). Works with STEP/DIR drivers (**TMC2208**, **TMC2209**, **A4988**, **EasyDriver**) and 4-wire coil drivers (28BYJ-48 via ULN2003, bipolar via H-bridge).
 
 **Motion runs on the Arduino.** You send targets and motion profiles; the board generates the step pulses via `AccelStepper::run()`. You never stream individual steps over WiFi — that's why the API mirrors AccelStepper (non-blocking) rather than the built-in `Stepper` library, whose `step()` blocks and would stall the connection mid-move.
 

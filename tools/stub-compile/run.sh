@@ -86,4 +86,32 @@ if command -v node >/dev/null 2>&1 && [ -f "$BUNDLE" ]; then
     fi
 fi
 
+# --- Step timing: PardaloteStepperMotor on the REAL AccelStepper, fake clock ---
+# Error-compensated stepping (internal/paced_stepper.h): achieved rate must match
+# requested rate when steps can only land on a ~30 µs loop pass, ramps must hit
+# their ideal time, and a stalled loop must not trigger a catch-up burst. Needs the
+# AccelStepper source (1.64+): $ACCELSTEPPER_SRC, else the default sketchbook path.
+ACCEL_SRC="${ACCELSTEPPER_SRC:-$HOME/Documents/Arduino/libraries/AccelStepper/src}"
+echo
+echo "=============================================================="
+echo " Step timing simulation (paced AccelStepper, 30 us loop)"
+echo "=============================================================="
+if [ ! -f "$ACCEL_SRC/AccelStepper.cpp" ]; then
+    echo "  skip  AccelStepper source not found (set ACCELSTEPPER_SRC)"
+elif "$CXX" -std=gnu++17 -O1 -DARDUINO=100 -I "$ACCEL_SRC" -I "$STUBS" -I "$SRC/internal" \
+       "$HERE/accel_timing_sim.cpp" "$ACCEL_SRC/AccelStepper.cpp" \
+       -o /tmp/pardalote_accelsim 2>/tmp/pardalote_accelsim_err; then
+    if /tmp/pardalote_accelsim >/tmp/pardalote_accelsim_out; then
+        echo "  ok    achieved step rates match requested ($(grep -c '^  ok ' /tmp/pardalote_accelsim_out) checks)"
+    else
+        echo "  FAIL  step timing:"
+        sed 's/^/        /' /tmp/pardalote_accelsim_out
+        fail=1
+    fi
+else
+    echo "  FAIL  accel_timing_sim.cpp did not compile:"
+    sed 's/^/        /' /tmp/pardalote_accelsim_err
+    fail=1
+fi
+
 exit $fail

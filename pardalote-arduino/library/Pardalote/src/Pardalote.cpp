@@ -220,12 +220,30 @@ void PardaloteClass::_beginSerial() {
 // -------------------------------------------------------------------
 // run() — called from loop()
 // -------------------------------------------------------------------
+// Loop-rate tuning (override with build flags). See run() for why.
+#ifndef PARDALOTE_WS_POLL_US
+#define PARDALOTE_WS_POLL_US    1000   // poll the WebSocket server at most this often (µs); 0 = every pass
+#endif
+#ifndef PARDALOTE_IDLE_YIELD_MS
+#define PARDALOTE_IDLE_YIELD_MS 100    // single-core ESP32: let the idle task run this often (ms)
+#endif
+
 void PardaloteClass::run() {
     if (_transport == TRANSPORT_SERIAL) {
         _serialT.loop(millis());
     } else {
 #ifndef PARDALOTE_NO_WIFI
-        _ws.loop();
+        // Poll the WebSocket server at most once per PARDALOTE_WS_POLL_US, not on
+        // every pass: _ws.loop() costs ~200 µs, which would be most of a loop pass
+        // and caps how often extensions run (a stepper steps at most once per
+        // pass). Incoming messages wait ≤ 1 ms longer — unnoticeable. Bench
+        // 2026-10-05: loop ~5,400 → ~33,000 passes/s. 0 = poll every pass.
+        uint32_t nowUs = micros();
+        static uint32_t lastWsPollUs = 0;
+        if (PARDALOTE_WS_POLL_US == 0 || nowUs - lastWsPollUs >= PARDALOTE_WS_POLL_US) {
+            lastWsPollUs = nowUs;
+            _ws.loop();
+        }
         _platformLoop();
         // Watch USB for a takeover probe (begin() default). A gesture-backed
         // takeover here calls _switchToSerial(), flipping _transport — the
@@ -235,8 +253,17 @@ void PardaloteClass::run() {
     }
     loopAll();
 
-#ifdef PLATFORM_ESP32
-    delay(1);   // yield to FreeRTOS idle task — prevents TG0WDT watchdog reset
+#if defined(PLATFORM_ESP32) && CONFIG_FREERTOS_UNICORE
+    // Single-core ESP32s (S2, C3, C5, C6…): loop() shares the one core with the
+    // FreeRTOS idle task, which the task watchdog checks — give it a tick now and
+    // then or the board resets (TG0WDT). Only every PARDALOTE_IDLE_YIELD_MS: a
+    // delay(1) on EVERY pass capped loop() at ~1 kHz (steppers at ~740 steps/s).
+    // Dual-core chips run loop() on the other core and need no yield at all.
+    static uint32_t lastIdleYieldMs = 0;
+    if (millis() - lastIdleYieldMs >= PARDALOTE_IDLE_YIELD_MS) {
+        delay(1);
+        lastIdleYieldMs = millis();
+    }
 #endif
 
     if (!anyConnected()) return;

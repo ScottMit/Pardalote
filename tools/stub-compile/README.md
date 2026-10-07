@@ -54,3 +54,12 @@ to the stub (match the real library's signature) and re-run.
 - Stubs approximate signatures, not semantics. A wrong-but-compatible overload
   can hide a real API mismatch that the Arduino toolchain would catch.
 - Not a substitute for the on-hardware bench (see `BENCH-TESTS.md`).
+
+**Step timing.** `accel_timing_sim.cpp` runs Pardalote's `PardaloteStepperMotor`
+(`src/internal/paced_stepper.h`) on top of the REAL installed AccelStepper (1.64+) with a fake
+microsecond clock, and checks that achieved step rates match requested ones on a ~30 µs loop.
+run.sh does this automatically when it finds the AccelStepper source (`$ACCELSTEPPER_SRC`, else
+`~/Documents/Arduino/libraries/AccelStepper/src`); `-DSIM_CONTROL` runs AccelStepper's own timing
+for comparison (it fails, reproducing the bench shortfall). The `stubs/AccelStepper.h` stub also
+declares the protected members the subclass uses.
+

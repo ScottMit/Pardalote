@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stepper speed test — Pardalote</title>
+    <link rel="stylesheet" type="text/css" href="style.css">
+    <style>
+        .row input[type=text] { width: 260px; }
+        table { border-collapse: collapse; margin: .6rem 0; font-size: .9rem; }
+        th, td { border: 1px solid #d8d4c8; padding: 4px 8px; text-align: right; }
+        th { background: #efece4; }
+        td.l, th.l { text-align: left; }
+        .ok { color: #2e8b57; } .slow { color: #c0392b; font-weight: 700; }
+        .note { color: #6d6a5f; font-size: .9rem; margin: .4rem 0; max-width: 46rem; }
+    </style>
+</head>
+<body>
+<main>
+    <div id="top">
+        <div class="brand">Pardalote</div>
+        <div class="heading">Stepper speed test</div>
+        <div class="note">Upload <b>tools/stepper-speed-test/stepper-speed-test.ino</b> to the board, open its Serial
+            Monitor (115200) for exact board-side timings, then connect below over <b>WiFi</b> (USB shares the Serial port).
+            Speeds are in steps/s at your driver's microstepping.</div>
+        <div id="status">status: starting…</div>
+    </div>
+
+    <div class="row"><span class="lbl">Stepper</span>
+        STEP <input type="number" id="stepPin" value="14">
+        DIR <input type="number" id="dirPin" value="12">
+        EN <input type="number" id="enPin" value="-1">
+        <button id="attach">attach</button>
+    </div>
+
+    <div class="row"><span class="lbl">1. Constant</span>
+        speeds <input type="text" id="speeds" value="1000, 2000, 4000, 6000, 8000, 12000, 16000">
+        hold ms <input type="number" id="hold" value="2000">
+        <button id="runConst" class="primary">run</button>
+    </div>
+
+    <div class="row"><span class="lbl">2. Ramp</span>
+        distance <input type="number" id="rDist" value="25600">
+        max speed <input type="number" id="rMax" value="20000">
+        accel <input type="number" id="rAcc" value="15000">
+        legs <input type="number" id="rLegs" value="4">
+        <button id="runRamp" class="primary">run</button>
+    </div>
+
+    <div class="row"><span class="lbl">3. Gesture</span>
+        distance <input type="number" id="gDist" value="12800">
+        duration ms <input type="number" id="gDur" value="2000">
+        legs <input type="number" id="gLegs" value="4">
+        <button id="runGest" class="primary">run</button>
+    </div>
+
+    <div class="row"><span class="lbl">4. Soak</span>
+        minutes <input type="number" id="soakMin" value="60">
+        servo pin <input type="number" id="servoPin" value="13">
+        <button id="runSoak" class="primary">run</button>
+    </div>
+
+    <div class="row"><span class="lbl"></span>
+        <button id="stop">stop</button>
+        <button id="copy">copy results</button>
+        <button id="clear">clear</button>
+    </div>
+
+    <div class="note">
+        <b>1</b> spins at each speed (no ramp) and measures the real rate from position reads.
+        <b>2</b> runs accelerate–cruise–decelerate moves between 0 and <i>distance</i> and compares each leg's time with the
+        ideal profile — the same test as the bare AccelStepper sketch (25,600 steps at 20,000 / 15,000 took 2,596 ms there).
+        <b>3</b> plays a one-segment linear gesture of <i>distance</i> in <i>duration</i> and reports whether it arrived.
+        <b>4</b> repeats 1–3 plus one deliberately impossible gesture (which should give up) for <i>minutes</i>, with a PWM
+        servo sweeping on <i>servo pin</i> (−1 = none). Only problems are added to the table; the line below keeps the tally.
+        It rides out disconnects and counts them.
+        Browser times include a little network latency; the Serial Monitor shows the board's own timings.
+    </div>
+
+    <div id="info" class="note"><b>connect, then attach the stepper</b></div>
+
+    <table id="results">
+        <thead><tr><th class="l">test</th><th>asked</th><th>expected ms</th><th>measured ms</th>
+            <th>achieved steps/s</th><th class="l">result</th></tr></thead>
+        <tbody></tbody>
+    </table>
+</main>
+<script src="../../lib/pardalote.js"></script>
+<script src="connect.js"></script>
+<script src="sketch.js"></script>
+</body>
+</html>

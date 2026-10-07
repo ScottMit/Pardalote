@@ -6,7 +6,7 @@
 // Including <PardaloteStepper.h> is enough to add stepper support.
 // The extension self-registers; no further setup is required.
 //
-// Requires the AccelStepper library (by Mike McCauley):
+// Requires the AccelStepper library (by Mike McCauley), version 1.64 or newer:
 //   Arduino IDE → Tools → Manage Libraries → search "AccelStepper".
 //
 // Wiring (STEP/DIR driver — TMC2208/2209, A4988, EasyDriver):

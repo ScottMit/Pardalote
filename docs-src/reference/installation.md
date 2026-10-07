@@ -35,7 +35,7 @@ Some hardware will require additional Arduino libraries. Install these via Ardui
 |---|---|
 | `Adafruit NeoPixel` | LED strips |
 | `ESP32Servo` | Servos on ESP32 |
-| `AccelStepper` (Mike McCauley) | Stepper motors |
+| `AccelStepper` (Mike McCauley) — 1.64 or newer | Stepper motors |
 | `SCServo` (Feetech/Waveshare) | Serial bus servos — install **"SCServo" by FT&WS** from the Library Manager, or a ZIP from the Waveshare wiki / Feetech SDK |
 
 No extra library is needed for the IMU extension — it reads sensor registers directly over I2C. The camera extension needs only the ESP32 Arduino core.
