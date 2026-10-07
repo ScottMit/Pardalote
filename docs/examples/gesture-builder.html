@@ -142,7 +142,7 @@ type). Fill in the last field and it switches <strong>on</strong>.</li>
 </tr>
 <tr>
 <td><strong>▶ play</strong></td>
-<td>play the sequence forward from the playhead (one batched <code>arduino.gesture({…})</code>)</td>
+<td>play the sequence forward from the playhead (one batched <code>arduino.gesture({…})</code>). Every output keeps to the schedule; when playback ends the <strong>info</strong> line says <code>done</code>, or names any output that couldn't reach its last key within 2 s and gave up, and where it stopped</td>
 </tr>
 <tr>
 <td><strong>■ stop</strong></td>
@@ -176,9 +176,10 @@ row by name (keeping its output type / pins / limits), a lane you add becomes a 
 row (its values kept as written — pick its output after), and a lane you remove drops that row. If the code can't be read, the
 timeline is left untouched and the panel reverts.</p>
 <ul>
-<li><strong>JavaScript</strong> — a <strong><code>gesture</code></strong> object (one segment array per output, keyed by your
-<code>arduino.add(name, …)</code> names). The example includes that object, connects, attaches, and
-plays it with <code>arduino.gesture(gesture, { absolute: true })</code>.</li>
+<li><strong>JavaScript</strong> — just the gesture <strong>object</strong> <code>{ … }</code> (one segment array per output, keyed by
+your <code>arduino.add(name, …)</code> names), so you can paste it wherever your code wants it — e.g.
+<code>const nod = { … };</code>. The example stores it as <code>const gesture = { … };</code>, connects, attaches,
+and plays it with <code>arduino.gesture(gesture, { absolute: true })</code>.</li>
 <li><strong>C++</strong> (board-side) — the gesture as <code>static const PardaloteSeg …Segs[]</code> schedules in flash;
 the example is a full sketch (<code>setup()</code>/<code>loop()</code>, <code>attach()</code>) that includes those arrays and
 plays them with <code>Pardalote.gesture().add(…).play()</code> (or <code>Pardalote&lt;Type&gt;.gesture(id, segs, count)</code> for one output).</li>

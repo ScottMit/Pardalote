@@ -126,6 +126,9 @@ let limitPose = null;  // { row, min, max } while capturing soft limits from han
 let lastPointer = null;
 let playing = false, playStart = 0, playDur = 0, playBase = 0;
 let playedServos = [], gestureSeen = false;   // v1.1 gesture-active tracking (isGesturing)
+// Each played output's latest 'done' during playback — its `arrived` flag says whether the
+// gesture landed or gave up (2 s after its expected arrival). See watchOutcomes().
+let playOutcomes = {}, outcomeHandlers = [];
 // Remote-control model: the playhead IS the current position. It's where the robot
 // sits, where play resumes from, and dragging it drives the motors live. (No separate
 // "start marker" and no pause — grabbing the playhead takes manual control.)
@@ -257,14 +260,14 @@ const noLanesMsg = (what) => rows.some(rw => !isBound(rw) && rw.points.length)
 // Edit or paste it and click away to rebuild the timeline (applyDefEdit). No comments/exec so
 // it round-trips cleanly.
 function generateJsDef(lanes = laneList()) {
-    if (!lanes.length) return 'const gesture = {\n};';
-    const L = ['const gesture = {'];
+    if (!lanes.length) return '{\n}';
+    const L = ['{'];   // just the object — paste it wherever your code wants it
     lanes.forEach((a, i) => {
         L.push(`  ${a.id}: [`);
         buildSegments(a.rw, 0).forEach(s => L.push(`    { to: ${s.to}, dur: ${s.dur}, curve: '${s.curve}' },`));
         L.push(`  ]${i < lanes.length - 1 ? ',' : ''}`);
     });
-    L.push('};');
+    L.push('}');
     return L.join('\n');
 }
 // Usage (read-only): a full, SELF-CONTAINED runnable program — it includes the gesture data
@@ -280,7 +283,7 @@ function generateJsUse() {
     L.push('const arduino = new Arduino();');
     lanes.forEach(a => L.push(`arduino.add('${a.id}', new ${TYPE(a.rw).cls}());`));
     L.push('');
-    L.push(generateJsDef(lanes));   // the gesture data, inline (same block as the definition panel)
+    L.push('const gesture = ' + generateJsDef(lanes) + ';');   // the gesture data, inline (the definition panel's object)
     L.push('');
     L.push("arduino.on('ready', () => {");
     lanes.forEach(a => {
@@ -1239,6 +1242,7 @@ window.addEventListener('resize', () => resizeSvg());
 function startPlayback(fromTime) {
     if (!ready) { setStatus('connect the board first'); return; }
     const lanes = {};   // keyed by the registered actuator name (servoName(r))
+    const playedRows = [];
     let maxDur = 0, active = 0, unbound = 0;
     rows.forEach((rw, r) => {
         if (!rw.points.length) return;        // skip empty rows
@@ -1250,6 +1254,7 @@ function startPlayback(fromTime) {
         if (!segs) return;                    // no keyframes at/after the playhead
         if (TYPE(rw).hold) TYPE(rw).hold(s); rw.freed = false;   // playing holds the output
         lanes[servoName(r)] = segs;
+        playedRows.push(r);
         maxDur = Math.max(maxDur, segs.reduce((a, b) => a + b.dur, 0));
         active++;
     });
@@ -1260,11 +1265,35 @@ function startPlayback(fromTime) {
     }
     updateFreeButtons();
     scrubGroup = null;   // playing takes over from any manual scrub — drop the held group
+    watchOutcomes(playedRows);                    // before sending, so no 'done' can slip past
     arduino.gesture(lanes, { absolute: true });   // one batched frame, channels start & arrive together
     playedServos = Object.keys(lanes).map(k => arduino[k]); gestureSeen = false;   // watch the board's isGesturing
     playing = true; playBase = fromTime; playStart = performance.now(); playDur = Math.max(1, maxDur);
     updateTransport();
     setStatus(`playing ${active} output${active === 1 ? '' : 's'} · ${playDur} ms` + (unbound ? ` · ${unbound} not set up, skipped` : ''));
+}
+// Listen for each played output's 'done' for the whole playback, keeping the LATEST per row:
+// a late 'done' from an earlier move (e.g. the last scrub write) can arrive first, so the
+// gesture's own 'done' must be able to overwrite it. Old listeners are dropped each play.
+function watchOutcomes(rowIdx) {
+    outcomeHandlers.forEach(([s, h]) => s.off('done', h));
+    outcomeHandlers = []; playOutcomes = {};
+    rowIdx.forEach(r => {
+        const s = act(r); if (!s) return;
+        const h = (e) => { playOutcomes[r] = e; };
+        s.on('done', h);
+        outcomeHandlers.push([s, h]);
+    });
+}
+// "done", or which outputs gave up and where they stopped (in each output's own unit).
+function playbackResult() {
+    const gaveUp = Object.keys(playOutcomes).map(Number)
+        .filter(r => playOutcomes[r].arrived === false && rows[r])
+        .map(r => {
+            const e = playOutcomes[r], v = e.position ?? e.angle;
+            return `${rowName(rows[r], r)} gave up at ${Math.round(v)} ${TYPE(rows[r]).unit}`;
+        });
+    return gaveUp.length ? `done — ${gaveUp.join(', ')}` : 'done';
 }
 // ▶ play — run the sequence forward from wherever the playhead is now.
 function play() { if (playing) return; startPlayback(headTime); }
@@ -1592,7 +1621,7 @@ function tick() {
             // Leave the playhead at the END where playback finished — the robot stays at
             // its final pose (it doesn't auto-return to the start), so the playhead reflects
             // that. Use |◀◀ start to send both the playhead and the motors back, then play.
-            playing = false; setStatus('done');
+            playing = false; setStatus(playbackResult());   // "done", or who gave up and where
             headTime = clamp(playBase + playDur, 0, TMAX);
             positionPlayhead(headTime); updateTransport(); persist();
         }

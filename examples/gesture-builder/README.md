@@ -63,7 +63,7 @@ This is a **tool** — no code editing. Open `index.html` and:
 | **drag a max / min value** (gutter) | set that output's soft limit (the value axis spans min–max, in the type's unit) |
 | **right-click a max / min value** | **reset** to the type's default range — or (bus servos only) **pose limits** by sweeping the range by hand |
 | **drag the playhead** (ruler) | **drive the outputs** to that point in the sequence, live — a remote control (grabbing it during play takes over). Play resumes from wherever it rests |
-| **▶ play** | play the sequence forward from the playhead (one batched `arduino.gesture({…})`) |
+| **▶ play** | play the sequence forward from the playhead (one batched `arduino.gesture({…})`). Every output keeps to the schedule; when playback ends the **info** line says `done`, or names any output that couldn't reach its last key within 2 s and gave up, and where it stopped |
 | **■ stop** | cancel the gesture and hold where it is — the playhead stays put (the robot doesn't rewind) |
 | **\|◀◀ start** / **end ▶▶\|** | send the playhead **and the outputs** to the start / end |
 | **free** / **free all** | release an output's torque to hand-pose it — bus servos and steppers-with-EN only (greyed otherwise) |
@@ -89,9 +89,10 @@ row by name (keeping its output type / pins / limits), a lane you add becomes a 
 row (its values kept as written — pick its output after), and a lane you remove drops that row. If the code can't be read, the
 timeline is left untouched and the panel reverts.
 
-- **JavaScript** — a **`gesture`** object (one segment array per output, keyed by your
-  `arduino.add(name, …)` names). The example includes that object, connects, attaches, and
-  plays it with `arduino.gesture(gesture, { absolute: true })`.
+- **JavaScript** — just the gesture **object** `{ … }` (one segment array per output, keyed by
+  your `arduino.add(name, …)` names), so you can paste it wherever your code wants it — e.g.
+  `const nod = { … };`. The example stores it as `const gesture = { … };`, connects, attaches,
+  and plays it with `arduino.gesture(gesture, { absolute: true })`.
 - **C++** (board-side) — the gesture as `static const PardaloteSeg …Segs[]` schedules in flash;
   the example is a full sketch (`setup()`/`loop()`, `attach()`) that includes those arrays and
   plays them with `Pardalote.gesture().add(…).play()` (or `Pardalote<Type>.gesture(id, segs, count)` for one output).
